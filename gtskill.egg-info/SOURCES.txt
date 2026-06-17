@@ -1,0 +1,8 @@
+README.md
+pyproject.toml
+gtskill.egg-info/PKG-INFO
+gtskill.egg-info/SOURCES.txt
+gtskill.egg-info/dependency_links.txt
+gtskill.egg-info/entry_points.txt
+gtskill.egg-info/requires.txt
+gtskill.egg-info/top_level.txt

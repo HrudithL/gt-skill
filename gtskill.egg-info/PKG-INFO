@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: gtskill
+Version: 0.1.0
+Summary: Evaluate a Great Tables skill with chatlas + Anthropic, judged by an LLM.
+Requires-Python: >=3.12
+Requires-Dist: chatlas>=0.9
+Requires-Dist: anthropic>=0.40
+Requires-Dist: mcp>=1.3
+Requires-Dist: great_tables>=0.20
+Requires-Dist: nokap>=0.1.0
+Requires-Dist: pandas>=2.0
+Requires-Dist: python-dotenv>=1.0
+Requires-Dist: pydantic>=2.0
