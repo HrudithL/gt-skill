@@ -1,5 +1,6 @@
 README.md
 pyproject.toml
+run.py
 gtskill.egg-info/PKG-INFO
 gtskill.egg-info/SOURCES.txt
 gtskill.egg-info/dependency_links.txt

@@ -1,10 +1,23 @@
-"""Run the Great Tables skill against an Anthropic model, then judge the result.
+"""Run the great_tables skill via the Claude Agent SDK, then have the SDK
+judge the result.
 
-Usage:
-    python run.py "Build a top-10 sales summary table from this CSV: sales.csv"
+Architecture (mirrors https://github.com/has2k1/skillshot):
 
-Produces a `runs/<timestamp>/` directory containing the trace, the generated
-code, the rendered PNG, metrics, and the judge's JSON evaluation.
+  * Each run gets a directory under ``runs/<timestamp>/`` that doubles as the
+    Claude Code workspace.
+  * ``skill/`` is symlinked into ``<run_dir>/.claude/skills/great-tables/`` so
+    the Claude Agent SDK auto-discovers it as a real skill (the agent sees a
+    ``Skill(great-tables)`` capability and loads SKILL.md on demand).
+  * If ``--dataset`` is given, the matching CSV from ``data/`` is copied into
+    the workspace.
+  * ``mcp-repl`` is wired in as an external stdio MCP server, exposing a
+    persistent Python REPL (``mcp__repl__repl``) to the agent.
+  * The agent is told to leave ``solution.py`` and ``table.png`` in the
+    workspace when it's done. No JSON-extraction wrangling — we just look for
+    those two files afterwards.
+  * The judge is a second SDK run in the same workspace with just ``Read`` and
+    ``Write``; it reads ``prompt.txt`` / ``solution.py`` / ``table.png`` and
+    writes ``judgment.json``.
 """
 from __future__ import annotations
 
@@ -12,7 +25,6 @@ import argparse
 import asyncio
 import json
 import os
-import re
 import shutil
 import sys
 import time
@@ -21,76 +33,34 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
 
-from chatlas import ChatAnthropic, content_image_file, token_usage
-from chatlas.types import ContentToolRequest, ContentToolResult
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ResultMessage,
+    TextBlock,
+    ThinkingBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
+    query,
+)
 
+
+# ---------- Paths & config ----------------------------------------------------
 
 ROOT = Path(__file__).resolve().parent
-SKILL_PATH = ROOT / "skill" / "SKILL.md"
+SKILL_DIR = ROOT / "skill"
+DATA_DIR = ROOT / "data"
 
-# `mcp-repl` is a standalone binary (https://github.com/posit-dev/mcp-repl). It
-# discovers `.venv/bin/python` by walking up from cwd, so launching from the
-# project root picks up the venv where great_tables + nokap are installed.
 MCP_REPL_BIN = os.environ.get("MCP_REPL_BIN", "mcp-repl")
 MCP_REPL_SANDBOX = os.environ.get("MCP_REPL_SANDBOX", "danger-full-access")
 
-
-# ---------- Skill loading ----------
-
-def load_skill(path: Path = SKILL_PATH) -> tuple[dict[str, str], str]:
-    """Split a SKILL.md file into (frontmatter dict, body markdown)."""
-    raw = path.read_text(encoding="utf-8")
-    meta: dict[str, str] = {}
-    body = raw
-    m = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)$", raw, re.DOTALL)
-    if m:
-        for line in m.group(1).splitlines():
-            if ":" in line:
-                k, _, v = line.partition(":")
-                meta[k.strip()] = v.strip()
-        body = m.group(2)
-    return meta, body.strip()
+DEFAULT_AGENT_MODEL = os.environ.get("GTSKILL_AGENT_MODEL", "claude-haiku-4-5")
+DEFAULT_JUDGE_MODEL = os.environ.get("GTSKILL_JUDGE_MODEL", "claude-haiku-4-5")
 
 
-# ---------- Judge schema ----------
-
-class CriterionScore(BaseModel):
-    score: int = Field(ge=1, le=5, description="1 (terrible) to 5 (excellent)")
-    rationale: str
-
-
-class Judgment(BaseModel):
-    correctness: CriterionScore = Field(
-        description="Did the generated table actually answer the user's prompt?"
-    )
-    aesthetics: CriterionScore = Field(
-        description="Visual quality of the rendered PNG (layout, alignment, formatting, hierarchy)."
-    )
-    code_readability: CriterionScore = Field(
-        description="Is the generated Python code idiomatic, clean, and easy to follow?"
-    )
-    overall: int = Field(ge=1, le=5)
-    summary: str
-
-
-JUDGE_SYSTEM = """\
-You evaluate the output of a "Great Tables" agent. You receive:
-  1. The original user prompt.
-  2. The Python code the agent produced.
-  3. A PNG screenshot of the rendered table.
-
-Score three subjective criteria from 1 (terrible) to 5 (excellent):
-  - correctness:      Does the table actually fulfill the user's request?
-  - aesthetics:       Is the rendered PNG visually polished?
-  - code_readability: Is the code idiomatic great_tables usage and clean?
-
-Also give an `overall` 1-5 and a short `summary`. Be honest and concise.
-"""
-
-
-# ---------- Helpers ----------
+# ---------- Workspace staging -------------------------------------------------
 
 def make_run_dir() -> Path:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -99,363 +69,400 @@ def make_run_dir() -> Path:
     return p
 
 
-def extract_json_object(text: str) -> dict[str, Any] | None:
-    """Try plain json.loads first, then pull out the first {...} block."""
-    text = text.strip()
-    try:
-        return json.loads(text)
-    except Exception:
-        pass
-    # Strip common ```json fences
-    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if fenced:
-        try:
-            return json.loads(fenced.group(1))
-        except Exception:
-            pass
-    # Greedy first { ... last } slice
-    start = text.find("{")
-    end = text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        try:
-            return json.loads(text[start : end + 1])
-        except Exception:
-            return None
-    return None
+def stage_workspace(run_dir: Path, dataset: str | None) -> Path | None:
+    """Wire ``.claude/skills/great-tables`` + drop the dataset CSV in.
 
-
-def make_trace_logger(trace_path: Path):
-    """Return (on_request, on_result) callbacks that append to a JSONL file.
-
-    Each tool_request records its start wall-clock time; each tool_result
-    records its duration (paired on the request id).
+    Returns the staged dataset path (relative-friendly), or None.
     """
+    claude_dir = run_dir / ".claude"
+    skills_dir = claude_dir / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
 
-    started: dict[str, float] = {}
-    run_start = time.perf_counter()
+    link = skills_dir / "great-tables"
+    if link.is_symlink() or link.exists():
+        link.unlink()
+    link.symlink_to(SKILL_DIR.resolve())
 
-    def _write(record: dict[str, Any]) -> None:
-        with trace_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(record, default=str) + "\n")
+    settings = {
+        "defaultMode": "dontAsk",
+        "permissions": {
+            "allow": [
+                "Skill(great-tables)",
+                "mcp__repl",
+                "Read",
+                "Write",
+                "Edit",
+                "Bash",
+                "Glob",
+                "Grep",
+            ],
+            "deny": [],
+        },
+    }
+    (claude_dir / "settings.json").write_text(json.dumps(settings, indent=2))
 
-    def _elapsed() -> float:
-        return round(time.perf_counter() - run_start, 3)
-
-    def on_request(req: ContentToolRequest) -> None:
-        rid = getattr(req, "id", None)
-        now = time.perf_counter()
-        if rid:
-            started[rid] = now
-        _write({
-            "type": "tool_request",
-            "elapsed": _elapsed(),
-            "id": rid,
-            "name": getattr(req, "name", None),
-            "arguments": getattr(req, "arguments", None),
-        })
-
-    def on_result(res: ContentToolResult) -> None:
-        rid = getattr(res, "id", None)
-        duration = None
-        if rid and rid in started:
-            duration = round(time.perf_counter() - started.pop(rid), 3)
-        value = getattr(res, "value", None)
-        if value is not None and not isinstance(value, str):
-            value = repr(value)
-        _write({
-            "type": "tool_result",
-            "elapsed": _elapsed(),
-            "duration_seconds": duration,
-            "id": rid,
-            "name": getattr(res, "name", None),
-            "value": value,
-            "error": str(getattr(res, "error", None)) if getattr(res, "error", None) else None,
-        })
-
-    return on_request, on_result
+    if not dataset:
+        return None
+    src = DATA_DIR / f"{dataset}.csv"
+    if not src.is_file():
+        avail = sorted(p.stem for p in DATA_DIR.glob("*.csv"))
+        raise SystemExit(
+            f"Unknown dataset {dataset!r}. Available: {', '.join(avail)}"
+        )
+    dst = run_dir / src.name
+    shutil.copyfile(src, dst)
+    return dst
 
 
-# ---------- Transcript / per-turn trace ----------
+# ---------- Tracing -----------------------------------------------------------
 
-def _content_text(c: Any) -> str | None:
-    for attr in ("text", "content", "value"):
-        v = getattr(c, attr, None)
-        if isinstance(v, str):
-            return v
-    return None
+def _serialize(obj: Any) -> Any:
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()  # type: ignore[no-any-return]
+    if hasattr(obj, "__dict__"):
+        return {k: v for k, v in vars(obj).items() if not k.startswith("_")}
+    return str(obj)
 
 
-def write_transcript_and_turn_trace(
-    chat, transcript_path: Path, trace_path: Path
-) -> None:
-    """Walk chat.get_turns() and write:
-
-    - `transcript_path` (markdown): human-readable conversation including
-      thinking, assistant text, tool calls, and tool results.
-    - Append per-turn `{type: "turn", ...}` records to `trace_path` with
-      token counts (chatlas reports them per assistant turn).
-    """
-    lines: list[str] = []
-    for i, turn in enumerate(chat.get_turns(include_system_prompt=False)):
-        role = getattr(turn, "role", "?")
-        tokens = getattr(turn, "tokens", None)
-
-        with trace_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps({
-                "type": "turn",
-                "index": i,
-                "role": role,
-                "tokens": tokens,
-            }, default=str) + "\n")
-
-        lines.append(f"## [{i}] {role}")
-        if tokens:
-            lines.append(f"_tokens: {tokens}_")
-        lines.append("")
-
-        for c in getattr(turn, "contents", []) or []:
-            cls = type(c).__name__
-            if cls == "ContentThinking":
-                txt = _content_text(c) or ""
-                if txt.strip():
-                    lines.append("**thinking:**")
-                    lines.append("> " + txt.replace("\n", "\n> "))
-                    lines.append("")
-            elif cls == "ContentText":
-                txt = _content_text(c) or ""
-                if txt.strip():
-                    lines.append(txt)
-                    lines.append("")
-            elif cls == "ContentToolRequest":
-                name = getattr(c, "name", "?")
-                args = getattr(c, "arguments", None)
-                lines.append(f"**tool call:** `{name}`")
-                lines.append("```json")
-                lines.append(json.dumps(args, indent=2, default=str))
-                lines.append("```")
-                lines.append("")
-            elif cls == "ContentToolResult":
-                name = getattr(c, "name", "?")
-                value = getattr(c, "value", None)
-                if value is not None and not isinstance(value, str):
-                    value = repr(value)
-                err = getattr(c, "error", None)
-                lines.append(f"**tool result:** `{name}`" + (" (error)" if err else ""))
-                lines.append("```")
-                lines.append((str(err) if err else (value or ""))[:4000])
-                lines.append("```")
-                lines.append("")
+def _tool_result_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for c in content:
+            if isinstance(c, dict):
+                parts.append(c.get("text", "") or c.get("type", ""))
             else:
-                txt = _content_text(c)
-                if txt:
-                    lines.append(f"_({cls})_ {txt}")
-                    lines.append("")
-
-        lines.append("---")
-        lines.append("")
-
-    transcript_path.write_text("\n".join(lines), encoding="utf-8")
+                parts.append(str(c))
+        return "\n".join(p for p in parts if p)
+    return str(content)
 
 
+def log_message(msg: Any, trace_path: Path, transcript_lines: list[str]) -> None:
+    """Append a structured trace record and pretty-print a transcript line."""
 
-def sum_tokens(chat) -> dict[str, int]:
-    """Pull aggregated input/output token counts from chatlas."""
-    totals = {"input": 0, "output": 0, "total": 0}
+    record: dict[str, Any] = {"type": type(msg).__name__, "ts": time.time()}
 
-    # Preferred: session-wide usage table.
-    try:
-        for u in token_usage() or []:
-            inp = int(getattr(u, "input", 0) or u.get("input", 0) or 0) if not isinstance(u, dict) else int(u.get("input", 0) or 0)
-            out = int(getattr(u, "output", 0) or u.get("output", 0) or 0) if not isinstance(u, dict) else int(u.get("output", 0) or 0)
-            totals["input"] += inp
-            totals["output"] += out
-    except Exception:
-        pass
+    if isinstance(msg, AssistantMessage):
+        text_parts: list[str] = []
+        thinking_parts: list[str] = []
+        calls: list[dict[str, Any]] = []
+        for b in msg.content:
+            if isinstance(b, ThinkingBlock):
+                thought = getattr(b, "thinking", "") or getattr(b, "text", "")
+                if thought:
+                    thinking_parts.append(thought)
+                    transcript_lines.append(
+                        "\n**thinking:**\n> " + thought.replace("\n", "\n> ") + "\n"
+                    )
+            elif isinstance(b, TextBlock):
+                text_parts.append(b.text)
+                transcript_lines.append(b.text)
+            elif isinstance(b, ToolUseBlock):
+                calls.append({"name": b.name, "input": b.input, "id": b.id})
+                transcript_lines.append(
+                    f"\n**tool call:** `{b.name}`\n```json\n"
+                    + json.dumps(b.input, indent=2, default=str)
+                    + "\n```\n"
+                )
+        if thinking_parts:
+            record["thinking"] = "\n".join(thinking_parts)
+        if text_parts:
+            record["text"] = "\n".join(text_parts)
+        if calls:
+            record["tool_calls"] = calls
 
-    # Fallback: sum per-turn counts on this chat.
-    if totals["input"] == 0 and totals["output"] == 0:
-        try:
-            for t in chat.get_tokens():
-                role = t.get("role")
-                n = int(t.get("tokens", 0) or 0)
-                if role == "user":
-                    totals["input"] += n
-                elif role == "assistant":
-                    totals["output"] += n
-        except Exception:
-            pass
+    elif isinstance(msg, UserMessage):
+        results: list[dict[str, Any]] = []
+        for b in getattr(msg, "content", []) or []:
+            if isinstance(b, ToolResultBlock):
+                content = _tool_result_text(b.content)
+                results.append(
+                    {
+                        "tool_use_id": b.tool_use_id,
+                        "is_error": bool(getattr(b, "is_error", False)),
+                        "content": content[:8000],
+                    }
+                )
+                transcript_lines.append(
+                    f"\n**tool result** (id={b.tool_use_id}):\n```\n"
+                    + content[:4000]
+                    + "\n```\n"
+                )
+        if results:
+            record["tool_results"] = results
 
-    totals["total"] = totals["input"] + totals["output"]
-    return totals
+    elif isinstance(msg, ResultMessage):
+        record["result"] = {
+            "num_turns": msg.num_turns,
+            "duration_ms": getattr(msg, "duration_ms", None),
+            "total_cost_usd": msg.total_cost_usd,
+            "usage": getattr(msg, "usage", None),
+            "is_error": msg.is_error,
+        }
+    else:
+        record["raw"] = _serialize(msg)
+
+    with trace_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, default=_serialize) + "\n")
 
 
-# ---------- Agent run ----------
-
-async def run_agent(user_prompt: str, run_dir: Path, model: str) -> dict[str, Any]:
-    meta, skill_body = load_skill()
-    skill_name = (meta.get("name") or "great_tables").replace("-", "_")
-    skill_description = meta.get(
-        "description",
-        "Reference guidance for building polished tables with great_tables.",
+def _sum_tokens(usage: Any) -> int:
+    if not isinstance(usage, dict):
+        return 0
+    return int(
+        (usage.get("input_tokens") or 0)
+        + (usage.get("output_tokens") or 0)
+        + (usage.get("cache_creation_input_tokens") or 0)
+        + (usage.get("cache_read_input_tokens") or 0)
     )
+
+
+# ---------- SDK options builder ----------------------------------------------
+
+def build_options(run_dir: Path, model: str, *, agent: bool) -> ClaudeAgentOptions:
+    mcp_servers: dict[str, Any] = {}
+    allowed = ["Read", "Glob", "Grep", "Write"]
+    disallowed: list[str] = []
+    if agent:
+        mcp_servers["repl"] = {
+            "type": "stdio",
+            "command": MCP_REPL_BIN,
+            "args": [
+                "--interpreter", "python",
+                "--sandbox", MCP_REPL_SANDBOX,
+            ],
+        }
+        allowed = [
+            "Read", "Write", "Glob", "Grep",
+            "Skill",
+            "mcp__repl__repl",
+            "mcp__repl__repl_reset",
+        ]
+        # Force code execution through mcp-repl (persistent Python session)
+        # instead of one-shot Bash invocations. Without this the model picks
+        # `python solution.py` via Bash and never exercises the REPL.
+        
+
+    return ClaudeAgentOptions(
+        cwd=str(run_dir),
+        model=model,
+        max_turns=40 if agent else 10,
+        permission_mode="bypassPermissions",
+        setting_sources=["project"],   # load .claude/settings.json from cwd
+        mcp_servers=mcp_servers,
+        allowed_tools=allowed,
+        env={"CLAUDECODE": "", "MPLBACKEND": "Agg"},
+    )
+
+
+# ---------- Actor ------------------------------------------------------------
+
+AGENT_INSTRUCTIONS = """\
+You are an autonomous coding agent. Your job is to fulfill the user's
+request: produce a polished, correct, publication-quality artifact saved to
+disk.
+
+You are running in the current working directory. When you are done, these two
+files MUST exist there:
+
+  - solution.py : the complete final Python script that produces the artifact
+  - table.png   : the rendered artifact as a PNG
+
+Verify your work before declaring done \u2014 make sure it renders, the numbers
+are right, and it actually looks good. When both files exist, reply with a
+short confirmation and stop.
+"""
+
+
+async def run_agent(
+    user_prompt: str,
+    run_dir: Path,
+    model: str,
+    dataset_path: Path | None,
+) -> dict[str, Any]:
     trace_path = run_dir / "trace.jsonl"
+    transcript_lines: list[str] = []
 
-    system_prompt = (
-        "You are an autonomous coding agent. Your job is to fulfill the user's "
-        "table-building request: produce a polished, correct, publication-quality "
-        "table and render it as a PNG image saved to disk.\n\n"
-        f"Work in: {run_dir}\n\n"
-        "Use the tools available to you. Verify your work before declaring done — "
-        "make sure the table renders, the numbers are right, and it actually looks good. "
-        "Iterate until you are satisfied.\n\n"
-        "Final response format: when (and only when) you are completely done, reply "
-        "with a single JSON object and nothing else — no prose, no markdown fences:\n"
-        '  {"code": "<the complete final python script>", '
-        '"png_path": "<absolute path to the rendered PNG>"}'
+    dataset_block = ""
+    if dataset_path is not None:
+        dataset_block = (
+            f"\n\nData source: a CSV file is available at {dataset_path.name} "
+            "(in the working directory). Load it with pandas."
+        )
+
+    full_prompt = (
+        AGENT_INSTRUCTIONS
+        + "\n\n---\n\nUSER REQUEST:\n"
+        + user_prompt
+        + dataset_block
     )
-    (run_dir / "system_prompt.txt").write_text(system_prompt, encoding="utf-8")
-    (run_dir / "prompt.txt").write_text(user_prompt, encoding="utf-8")
+    (run_dir / "prompt.txt").write_text(full_prompt, encoding="utf-8")
 
-    chat = ChatAnthropic(model=model, system_prompt=system_prompt)
+    options = build_options(run_dir, model, agent=True)
 
-    on_req, on_res = make_trace_logger(trace_path)
-    chat.on_tool_request(on_req)
-    chat.on_tool_result(on_res)
-
-    # Expose the skill as a tool the model can choose to call on demand.
-    skill_invoked = {"count": 0}
-
-    def skill_tool() -> str:
-        skill_invoked["count"] += 1
-        return skill_body
-
-    skill_tool.__name__ = skill_name
-    skill_tool.__doc__ = skill_description
-    chat.register_tool(skill_tool)
-
-    await chat.register_mcp_tools_stdio_async(
-        command=MCP_REPL_BIN,
-        args=[
-            "--interpreter", "python",
-            "--sandbox", MCP_REPL_SANDBOX,
-        ],
-    )
-
+    result: ResultMessage | None = None
+    error: str | None = None
     t0 = time.perf_counter()
     try:
-        resp = await chat.chat_async(user_prompt, echo="none", stream=False)
-        final_text = str(resp)
-    finally:
-        wall = time.perf_counter() - t0
-        try:
-            await chat.cleanup_mcp_tools()
-        except Exception:
-            pass
+        async for msg in query(prompt=full_prompt, options=options):
+            log_message(msg, trace_path, transcript_lines)
+            if isinstance(msg, ResultMessage):
+                result = msg
+    except Exception as exc:  # noqa: BLE001 — SDK raises bare Exception
+        error = repr(exc)
+    wall = time.perf_counter() - t0
 
-    # Persist raw final text
-    (run_dir / "final_text.txt").write_text(final_text, encoding="utf-8")
+    (run_dir / "transcript.md").write_text(
+        "\n".join(transcript_lines), encoding="utf-8"
+    )
 
-    # Build a readable transcript and append per-turn token counts to the trace.
-    write_transcript_and_turn_trace(chat, run_dir / "transcript.md", trace_path)
+    code_path = run_dir / "solution.py"
+    png_path = run_dir / "table.png"
 
-    parsed = extract_json_object(final_text) or {}
-    code = parsed.get("code", "")
-    png_path = parsed.get("png_path", "")
-
-    if code:
-        (run_dir / "generated.py").write_text(code, encoding="utf-8")
-
-    local_png = run_dir / "table.png"
-    if png_path and Path(png_path).is_file():
-        if Path(png_path).resolve() != local_png.resolve():
-            shutil.copyfile(png_path, local_png)
-    elif png_path and (run_dir / png_path).is_file():
-        shutil.copyfile(run_dir / png_path, local_png)
-
-    tokens = sum_tokens(chat)
-    skill_tokens = chat.token_count(skill_body)
-
+    skill_text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     metrics = {
         "model": model,
         "wall_clock_seconds": round(wall, 3),
-        "tokens": tokens["total"],
-        "skill_tokens": skill_tokens,
+        "tokens": _sum_tokens(getattr(result, "usage", None)),
+        # Cheap approximation; the SDK doesn't expose a tokenizer.
+        "skill_tokens": max(1, len(skill_text) // 4),
+        "num_turns": result.num_turns if result else 0,
+        "total_cost_usd": result.total_cost_usd if result else 0.0,
+        "is_error": bool(error) or (result.is_error if result else True),
     }
-    (run_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
-
-    return {
-        "code": code,
-        "png_path": str(local_png) if local_png.is_file() else "",
-        "metrics": metrics,
-        "final_text": final_text,
-    }
-
-
-# ---------- Judge run ----------
-
-def run_judge(
-    user_prompt: str,
-    agent_result: dict[str, Any],
-    run_dir: Path,
-    model: str,
-) -> dict[str, Any]:
-    chat = ChatAnthropic(model=model, system_prompt=JUDGE_SYSTEM)
-
-    parts: list[Any] = []
-    parts.append(
-        "USER PROMPT:\n" + user_prompt
-        + "\n\nGENERATED CODE:\n```python\n" + (agent_result["code"] or "(none)")
-        + "\n```\n\nPROGRAMMATIC METRICS (context only, do not score):\n"
-        + json.dumps(agent_result["metrics"], indent=2)
+    if error:
+        metrics["error"] = error
+    (run_dir / "metrics.json").write_text(
+        json.dumps(metrics, indent=2), encoding="utf-8"
     )
 
-    png = agent_result.get("png_path")
-    if png and Path(png).is_file():
-        parts.append("\nRendered table (PNG attached):")
-        parts.append(content_image_file(png))
-    else:
-        parts.append("\n(No PNG was produced — penalise correctness and aesthetics accordingly.)")
-
-    judgment: Judgment = chat.chat_structured(*parts, data_model=Judgment, echo="none")
-    out = judgment.model_dump()
-    (run_dir / "judgment.json").write_text(json.dumps(out, indent=2), encoding="utf-8")
-    return out
+    return {
+        "code_path": str(code_path) if code_path.is_file() else "",
+        "png_path": str(png_path) if png_path.is_file() else "",
+        "metrics": metrics,
+    }
 
 
-# ---------- Entry point ----------
+# ---------- Judge ------------------------------------------------------------
+
+JUDGE_INSTRUCTIONS = """\
+You are a strict, fair judge. You are evaluating the output of an autonomous
+agent that was asked to build a polished table.
+
+The working directory contains:
+  - prompt.txt   : the original user prompt — read it first
+  - solution.py  : the agent's generated Python (may be missing)
+  - table.png    : the rendered table as a PNG (may be missing — read it with
+                   the Read tool so you can actually see it)
+
+Score three criteria from 1 (terrible) to 5 (excellent):
+  - correctness:      Does the table actually fulfill the user's request?
+  - aesthetics:       Is the rendered PNG visually polished (alignment,
+                      hierarchy, formatting, no clutter)?
+  - code_readability: Is the code idiomatic great_tables usage and clean?
+
+Then use the Write tool to create judgment.json in the working directory with
+EXACTLY this shape (no extra keys, no prose outside JSON):
+
+{
+  "correctness":      {"score": <1-5>, "rationale": "<one or two sentences>"},
+  "aesthetics":       {"score": <1-5>, "rationale": "<one or two sentences>"},
+  "code_readability": {"score": <1-5>, "rationale": "<one or two sentences>"},
+  "overall":          <1-5>,
+  "summary":          "<short overall summary>"
+}
+
+If a required file is missing, score that dimension as 1 and say so in the
+rationale. After writing judgment.json, reply with one short confirmation line
+and stop.
+"""
+
+
+async def run_judge(run_dir: Path, model: str) -> dict[str, Any]:
+    trace_path = run_dir / "judge_trace.jsonl"
+    transcript_lines: list[str] = []
+
+    options = build_options(run_dir, model, agent=False)
+
+    t0 = time.perf_counter()
+    error: str | None = None
+    try:
+        async for msg in query(prompt=JUDGE_INSTRUCTIONS, options=options):
+            log_message(msg, trace_path, transcript_lines)
+    except Exception as exc:  # noqa: BLE001
+        error = repr(exc)
+    wall = round(time.perf_counter() - t0, 3)
+
+    (run_dir / "judge_transcript.md").write_text(
+        "\n".join(transcript_lines), encoding="utf-8"
+    )
+
+    judgment_path = run_dir / "judgment.json"
+    if judgment_path.is_file():
+        try:
+            return json.loads(judgment_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "error": f"judgment.json present but unparseable: {exc!r}",
+                "judge_wall_seconds": wall,
+            }
+    return {
+        "error": f"no judgment.json produced",
+        "judge_wall_seconds": wall,
+        "judge_error": error,
+    }
+
+
+# ---------- Entry point ------------------------------------------------------
 
 def main() -> None:
     load_dotenv()
 
-    parser = argparse.ArgumentParser(description="Run + judge the Great Tables skill.")
-    parser.add_argument("prompt", help="User prompt describing the table to build.")
-    parser.add_argument(
-        "--agent-model",
-        default=os.environ.get("GTSKILL_AGENT_MODEL", "claude-haiku-4-5"),
+    parser = argparse.ArgumentParser(
+        description="Run + judge the great-tables skill via the Claude Agent SDK."
     )
+    parser.add_argument("prompt", nargs="?", help="User prompt describing the table.")
     parser.add_argument(
-        "--judge-model",
-        default=os.environ.get("GTSKILL_JUDGE_MODEL", "claude-haiku-4-5"),
+        "--dataset",
+        default=None,
+        help="Name of a CSV in data/ (without .csv). See --list-datasets.",
     )
+    parser.add_argument("--list-datasets", action="store_true")
+    parser.add_argument("--agent-model", default=DEFAULT_AGENT_MODEL)
+    parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL)
     args = parser.parse_args()
 
+    if args.list_datasets:
+        for p in sorted(DATA_DIR.glob("*.csv")):
+            print(p.stem)
+        return
+    if not args.prompt:
+        sys.exit("prompt is required (or use --list-datasets).")
     if not os.environ.get("ANTHROPIC_API_KEY"):
         sys.exit("ANTHROPIC_API_KEY is not set (put it in a .env file).")
 
     run_dir = make_run_dir()
     print(f"Run directory: {run_dir}", file=sys.stderr)
+    dataset_path = stage_workspace(run_dir, args.dataset)
 
-    agent_result = asyncio.run(run_agent(args.prompt, run_dir, args.agent_model))
+    agent_result = asyncio.run(
+        run_agent(args.prompt, run_dir, args.agent_model, dataset_path)
+    )
     print(json.dumps(agent_result["metrics"], indent=2))
 
-    judgment = run_judge(args.prompt, agent_result, run_dir, args.judge_model)
+    judgment = asyncio.run(run_judge(run_dir, args.judge_model))
 
     summary = {
         "run_dir": str(run_dir),
         "metrics": agent_result["metrics"],
+        "code_path": agent_result["code_path"],
+        "png_path": agent_result["png_path"],
         "judgment": judgment,
     }
-    (run_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (run_dir / "summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
     print(json.dumps(summary, indent=2))
 
 
