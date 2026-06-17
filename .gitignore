@@ -2,6 +2,5 @@
 __pycache__/
 *.pyc
 .venv/
-runs/
 .DS_Store
 data/

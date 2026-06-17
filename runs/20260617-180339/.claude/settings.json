@@ -1,0 +1,16 @@
+{
+  "defaultMode": "dontAsk",
+  "permissions": {
+    "allow": [
+      "Skill(great-tables)",
+      "mcp__repl",
+      "Read",
+      "Write",
+      "Edit",
+      "Bash",
+      "Glob",
+      "Grep"
+    ],
+    "deny": []
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "model": "claude-sonnet-4-5",
+  "wall_clock_seconds": 71.918,
+  "tokens": 291645,
+  "skill_tokens": 357,
+  "num_turns": 14,
+  "total_cost_usd": 0.28008364999999996,
+  "is_error": false
+}

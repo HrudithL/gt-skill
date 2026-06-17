@@ -1,0 +1,3 @@
+build a visual to show off the s&p 500 over the last 5 years in a high level overview table
+
+Data source: a CSV file is available at /Users/hrudithl/Documents/posit-dev/gtskill/runs/20260617-120713/sp500.csv (dataset name: `sp500`). Load it with pandas to build the table.

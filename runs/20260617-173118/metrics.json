@@ -1,0 +1,9 @@
+{
+  "model": "claude-haiku-4-5",
+  "wall_clock_seconds": 33.382,
+  "tokens": 283728,
+  "skill_tokens": 357,
+  "num_turns": 12,
+  "total_cost_usd": 0.06910565,
+  "is_error": false
+}
