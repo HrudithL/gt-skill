@@ -263,6 +263,9 @@ You are an autonomous coding agent. Your job is to fulfill the user's
 request: produce a polished, correct, publication-quality artifact saved to
 disk.
 
+Use the 'great-tables' skill to build a table from the data. This is your 
+guideline along with tips on how to approach building a high quality table. 
+
 You are running in the current working directory. When you are done, these two
 files MUST exist there:
 

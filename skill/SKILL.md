@@ -1,6 +1,6 @@
 ---
 name: great-tables
-description: Use whenever the user asks for a table, summary table, comparison table, leaderboard, scorecard, ranking, or any other tabular visual rendered as an image. Builds polished, publication-quality tables from a pandas DataFrame with the great_tables Python package and saves them to PNG.
+description: MUST BE USED whenever the user asks for any kind of table, summary, overview, scorecard, leaderboard, ranking, or comparison rendered to an image or PNG. This is the only correct way to build publication-quality tables in this project — do not write tables with matplotlib, pandas styling, or HTML. Loads the great_tables Python package conventions for `GT(df).tab_header(...).fmt_*(...).cols_label(...)` and saving via `gt.gtsave("table.png")`.
 ---
 
 # Great Tables skill
