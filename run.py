@@ -20,6 +20,8 @@ from dotenv import load_dotenv
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    PermissionResultAllow,
+    PermissionResultDeny,
     ResultMessage,
     SystemMessage,
     TextBlock,
@@ -32,6 +34,57 @@ from claude_agent_sdk import (
 
 ROOT = Path(__file__).parent.resolve()
 SKILL_NAME = "great-tables"
+SKILL_DIR = ROOT / ".claude" / "skills" / SKILL_NAME
+
+
+def _path_within(path: str | os.PathLike, root: Path) -> bool:
+    """Lexical containment check — does NOT follow symlinks.
+
+    A symlink inside `root` pointing outside still counts as inside.
+    `..` segments are normalized away first, so they cannot escape.
+    """
+    if not path:
+        return False
+    abs_path = Path(os.path.abspath(os.fspath(path)))
+    try:
+        abs_path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _make_can_use_tool(run_dir: Path):
+    file_path_keys = {
+        "Read": "file_path",
+        "Edit": "file_path",
+        "Write": "file_path",
+        "NotebookEdit": "notebook_path",
+    }
+    write_tools = {"Edit", "Write", "NotebookEdit"}
+
+    async def can_use_tool(tool_name, tool_input, context):
+        key = file_path_keys.get(tool_name)
+        if key is None:
+            return PermissionResultAllow()
+
+        path = tool_input.get(key, "")
+        in_run = _path_within(path, run_dir)
+        in_skill = _path_within(path, SKILL_DIR)
+
+        if tool_name in write_tools:
+            if in_run:
+                return PermissionResultAllow()
+            return PermissionResultDeny(
+                message=f"{tool_name} denied: {path!r} is outside the run directory."
+            )
+
+        if in_run or in_skill:
+            return PermissionResultAllow()
+        return PermissionResultDeny(
+            message=f"Read denied: {path!r} is outside the run directory and skill directory."
+        )
+
+    return can_use_tool
 
 
 def block_to_dict(block):
@@ -137,6 +190,10 @@ async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
     if not data_link.is_symlink() and not data_link.exists():
         data_link.symlink_to(data_path)
 
+    claude_link = run_dir / ".claude"
+    if not claude_link.is_symlink() and not claude_link.exists():
+        claude_link.symlink_to(ROOT / ".claude")
+
     full_prompt = (
         f"{user_prompt}\n\n"
         f"Reference data file (read it from this path inside the working "
@@ -163,9 +220,10 @@ async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
         skills=[SKILL_NAME],
         setting_sources=["project"],
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-        cwd=str(ROOT),
-        add_dirs=[str(run_dir), str(data_path.parent)],
-        permission_mode="bypassPermissions",
+        cwd=str(run_dir),
+        permission_mode="default",
+        can_use_tool=_make_can_use_tool(run_dir),
+        sandbox={"enabled": True, "autoAllowBashIfSandboxed": True},
         model=os.environ.get("GTSKILL_AGENT_MODEL") or None,
     )
 
