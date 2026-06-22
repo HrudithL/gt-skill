@@ -86,6 +86,41 @@ gt = (
 
 ## Typography & Spacing
 
+### Bold and Color Text Emphasis
+
+Use **bold text** and **colored text** deliberately to draw the reader's eye to what matters most. This is one of the most powerful tools for making a table scannable — but overuse destroys its impact.
+
+**When to use bold text (`style.text(weight="bold")`):**
+- Total/summary rows — the final "Total" or "Average" row should stand out
+- Key metrics — if the table's story centers on one number (e.g., overall return, final score), bold it
+- Column headers or labels that need extra emphasis
+
+**When to use colored text (`style.text(color=...)`):**
+- Positive/negative indicators — green for gains, red for losses (pair with bold for critical values)
+- Threshold alerts — values above or below a meaningful threshold
+- Category identification — when color maps to a category and reinforces a grouping
+
+**When NOT to use:**
+- Don't bold every cell — if everything is bold, nothing is bold
+- Don't color text randomly — every colored cell should answer "why is this highlighted?"
+- Don't combine bold + color + fill on the same cell unless it's a critical outlier
+- Don't use more than 2-3 text colors in a single table
+
+**Example — highlight extreme returns:**
+```python
+gt = (
+    gt
+    .tab_style(
+        style=style.text(weight="bold", color="#d32f2f"),
+        locations=loc.body(columns="return", rows=large_loss_rows)
+    )
+    .tab_style(
+        style=style.text(weight="bold", color="#2e7d32"),
+        locations=loc.body(columns="return", rows=large_gain_rows)
+    )
+)
+```
+
 ### Font Choices
 
 - Default system fonts work well for most tables
