@@ -204,19 +204,7 @@ async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
     )
 
     options = ClaudeAgentOptions(
-        system_prompt={
-            "type": "preset",
-            "preset": "claude_code",
-            # This is essential to get the agent to use the skill tool and call the great tables skill
-            # Without it, only smarter models consider using the skill at all
-            "append": (
-                "Before starting work, check the available skills listing. "
-                "If any skill's description matches the user's task, you MUST "
-                "invoke the `Skill` tool to load it before writing code or "
-                "running commands. Do not rely on prior knowledge when a "
-                "matching skill is available."
-            ),
-        },
+        system_prompt={"type": "preset", "preset": "claude_code"},
         skills=[SKILL_NAME],
         setting_sources=["project"],
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
