@@ -98,7 +98,7 @@ Include units in column labels when the unit is **not already conveyed by format
 - **Column names in `fmt_*`**: Use the *original DataFrame column names*, not the labels set by `cols_label()`. Labels are display-only.
 - **Row indices in `loc.body()`**: Use integer indices (0-based position in the displayed table), NOT DataFrame index values.
 - **`tab_spanner` column order**: Columns under a spanner are gathered together by default (`gather=True`). If you don't want reordering, set `gather=False`.
-- **`data_color` domain**: Always set `domain=` explicitly when using `data_color()` to avoid inconsistent coloring across tables. Use `na_color=` for missing values.
+- **`data_color` domain**: Always set `domain=` explicitly when using `data_color()`. The domain must cover the **full range of your actual data** — compute `min()` and `max()` of the column first. For diverging palettes (e.g., `"RdYlGn"`), use a **symmetric domain** centered on zero (e.g., `domain=[-40, 40]`). A too-narrow domain makes extreme values invisible; a too-wide domain compresses the color gradient. Use `na_color=` for missing values.
 - **Method chaining**: Build the entire table in one chained expression. Avoid mutating the GT object in a loop (use `tab_style` with row lists instead of one call per row).
 - **`fmt_percent` input scale**: Values should already be in decimal form (0.15 = 15%). If your data is already 0–100, use `scale_values=False`.
 - **Imports**: Always import `style` and `loc` from `great_tables` if using `tab_style` or `data_color`. Common: `from great_tables import GT, md, html, style, loc`.
