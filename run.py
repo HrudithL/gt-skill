@@ -133,10 +133,14 @@ def log_message(d: dict) -> None:
 
 
 async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
+    data_link = run_dir / data_path.name
+    if not data_link.is_symlink() and not data_link.exists():
+        data_link.symlink_to(data_path)
+
     full_prompt = (
         f"{user_prompt}\n\n"
-        f"Reference data file (read it from this absolute path, do NOT copy it "
-        f"into the working directory): {data_path}\n\n"
+        f"Reference data file (read it from this path inside the working "
+        f"directory, do NOT copy it elsewhere): ./{data_link.name}\n\n"
         f"Working directory: {run_dir}\n"
         f"Final code goes to `table.py` and the rendered image to `table.png`, "
         f"both inside the working directory."
