@@ -5,11 +5,13 @@ Discovers prompt files from prompts/{easy,medium,hard}/, runs each through
 run.py's core `run()` function, and writes all output into a timestamped
 test-runs/ directory with a summary.json report.
 
+Each prompt is a JSON file with {"prompt": "...", "data": "data/file.csv"}.
+
 Usage examples:
-    python test_runner.py --data data/gtcars.csv
-    python test_runner.py --data data/gtcars.csv --difficulty easy
-    python test_runner.py --data data/gtcars.csv --difficulty hard --repeat 3
-    python test_runner.py --data data/gtcars.csv --model claude-sonnet-4-20250514
+    python test_runner.py
+    python test_runner.py --difficulty easy
+    python test_runner.py --difficulty hard --repeat 3
+    python test_runner.py --model claude-sonnet-4-20250514
 """
 
 from __future__ import annotations
@@ -33,7 +35,7 @@ DIFFICULTIES = ["easy", "medium", "hard"]
 
 
 def discover_prompts(difficulty: str | None) -> list[dict]:
-    """Return a list of {name, difficulty, path, prompt} dicts for matching prompts."""
+    """Return a list of {name, difficulty, path, prompt, data} dicts for matching prompts."""
     if difficulty and difficulty != "all":
         dirs = [PROMPTS_DIR / difficulty]
     else:
@@ -43,13 +45,19 @@ def discover_prompts(difficulty: str | None) -> list[dict]:
     for d in dirs:
         if not d.is_dir():
             continue
-        for f in sorted(d.glob("*.txt")):
+        for f in sorted(d.glob("*.json")):
+            content = json.loads(f.read_text())
+            data_path = ROOT / content["data"]
+            if not data_path.is_file():
+                print(f"warning: data file not found for {f.name}: {data_path}", file=sys.stderr)
+                continue
             prompts.append(
                 {
                     "name": f.stem,
                     "difficulty": d.name,
                     "path": str(f),
-                    "prompt": f.read_text().strip(),
+                    "prompt": content["prompt"],
+                    "data": str(data_path.resolve()),
                 }
             )
     return prompts
@@ -110,18 +118,17 @@ async def run_single_prompt(
 
 async def run_all(
     prompts: list[dict],
-    data_path: Path,
     test_run_dir: Path,
     repeat: int,
 ) -> list[dict]:
     """Run all prompts sequentially and collect results."""
     results = []
     total = len(prompts) * repeat
-    current = 0
 
     for prompt_info in prompts:
+        data_path = Path(prompt_info["data"])
         for rep in range(1, repeat + 1):
-            current += 1
+            current = len(results) + 1
             prompt_name = prompt_info["name"]
 
             if repeat > 1:
@@ -136,6 +143,7 @@ async def run_all(
                 f"{'=' * 60}"
             )
             print(f"  prompt: {prompt_info['prompt'][:120]}...")
+            print(f"  data:   {data_path}")
             print(f"  run_dir: {run_subdir}\n")
 
             metrics = await run_single_prompt(
@@ -146,6 +154,7 @@ async def run_all(
                 "name": prompt_name,
                 "difficulty": prompt_info["difficulty"],
                 "prompt": prompt_info["prompt"],
+                "data": prompt_info["data"],
                 "repeat": rep,
                 "run_dir": str(run_subdir),
                 **metrics,
@@ -180,7 +189,6 @@ def write_summary(test_run_dir: Path, results: list[dict], config: dict) -> None
         "timestamp": config["timestamp"],
         "config": {
             "difficulty": config["difficulty"],
-            "data_file": config["data_file"],
             "model": config.get("model"),
             "repeat": config["repeat"],
         },
@@ -212,11 +220,6 @@ def main() -> int:
         description="Run great-tables skill prompts and collect results.",
     )
     parser.add_argument(
-        "--data",
-        required=True,
-        help="Path to the data file (e.g. data/gtcars.csv).",
-    )
-    parser.add_argument(
         "--difficulty",
         choices=["easy", "medium", "hard", "all"],
         default="all",
@@ -235,11 +238,6 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    data_path = Path(args.data).expanduser().resolve()
-    if not data_path.is_file():
-        print(f"error: data file not found: {data_path}", file=sys.stderr)
-        return 2
-
     if args.model:
         os.environ["GTSKILL_AGENT_MODEL"] = args.model
 
@@ -255,19 +253,17 @@ def main() -> int:
     config = {
         "timestamp": timestamp,
         "difficulty": args.difficulty,
-        "data_file": str(data_path),
         "model": args.model,
         "repeat": args.repeat,
     }
 
-    print(f"Test run: {test_run_dir}")
-    print(f"Data:     {data_path}")
+    print(f"Test run:   {test_run_dir}")
     print(f"Difficulty: {args.difficulty}")
-    print(f"Model:    {args.model or '(default)'}")
-    print(f"Repeat:   {args.repeat}")
-    print(f"Prompts:  {len(prompts)} found")
+    print(f"Model:      {args.model or '(default)'}")
+    print(f"Repeat:     {args.repeat}")
+    print(f"Prompts:    {len(prompts)} found")
 
-    results = anyio.run(run_all, prompts, data_path, test_run_dir, args.repeat)
+    results = anyio.run(run_all, prompts, test_run_dir, args.repeat)
 
     write_summary(test_run_dir, results, config)
 

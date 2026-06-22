@@ -1,0 +1,4 @@
+{
+  "prompt": "Create a table comparing the average temperature, wind speed, and ozone levels for each month in the air quality data.",
+  "data": "data/airquality.csv"
+}

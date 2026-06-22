@@ -1,1 +1,0 @@
-Design a table with all of the following features: a heatmap color scale applied to at least one numeric column, column spanners with styled labels, a summary footer row with aggregate statistics, custom cell padding and font sizes, a dark-themed header with light text, source notes, and at least two footnotes referencing specific cells or columns.

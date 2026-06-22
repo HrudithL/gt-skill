@@ -1,1 +1,0 @@
-Create a simple, clean table displaying the data. Use default styling with readable column headers.
