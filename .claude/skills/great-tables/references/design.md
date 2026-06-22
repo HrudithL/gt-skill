@@ -48,6 +48,12 @@ Use two-hue palettes centered on a neutral midpoint:
 - `"RdBu"` — red vs blue (temperature anomalies, sentiment)
 - `"PuOr"` — purple vs orange (balanced, colorblind-safe)
 
+**Critical: domain range must cover your actual data.** Set `domain=` to span the full range of values in your data (or a symmetric range around zero for diverging palettes). If your data ranges from -30% to +40%, use `domain=[-40, 40]` — not `domain=[-20, 30]` which clips extreme values to the same color as boundary values, making them invisible.
+
+**Always set `truncate=False`** (the default) so out-of-range values still get the most extreme color in the palette rather than disappearing. Values outside the domain should be **more** visually prominent, not less.
+
+**Prefer symmetric domains** for diverging data (e.g., `[-30, 30]` not `[-20, 30]`) so the neutral midpoint aligns with zero.
+
 ### For Categorical Data
 
 Use qualitative palettes (no implied order):
