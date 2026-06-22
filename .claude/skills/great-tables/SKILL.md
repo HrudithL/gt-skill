@@ -78,7 +78,18 @@ Keep tables **concise by default**. A long table is not a better table — it is
 - **`tab_spanner`** — Use to group related columns under a shared label (e.g., "Performance" over hp/torque/mpg columns).
 - **`cols_hide`** — Remove columns used only for grouping or internal IDs from the display.
 - **`cols_label`** — Always relabel programmatic column names (e.g., `avg_revenue` → `"Avg. Revenue"`).
+- **`tab_stubhead`** — When using `rowname_col`, add a stub heading with `tab_stubhead(label="Year")` to label the row name column. Skip only when the row names are self-evident (e.g., sequential numbers).
 - **`tab_source_note`** — Add when data has a clear source or needs citation.
+
+## Units in Column Labels
+
+Include units in column labels when the unit is **not already conveyed by formatting**. This is a judgment call:
+
+- **Skip units when `fmt_*` already shows them**: Currency columns formatted with `fmt_currency` already display `$`, so the label should be `"Revenue"` not `"Revenue ($)"`. Same for `fmt_percent` (already shows `%`).
+- **Include units when formatting does not show them**: A column of distances formatted with `fmt_number` should be labeled `"Distance (km)"` not just `"Distance"`. A speed column should be `"Speed (m/s)"`.
+- **Include units for scientific/measurement data**: Always include units for physical quantities — `"Temperature (°C)"`, `"Pressure (atm)"`, `"Weight (kg)"`.
+- **Use the `{{unit}}` notation** in `cols_label` for proper unit rendering: `cols_label(speed="Speed ({{m/s}})")`.
+- **Be consistent**: If one column in a group shows units, all columns in that group should show units.
 
 ## Gotchas
 
