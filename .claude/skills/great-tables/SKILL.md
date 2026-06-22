@@ -9,11 +9,13 @@ Build publication-ready display tables in Python using the `great_tables` packag
 
 ## Workflow
 
-1. **Inspect the data** — Read a sample (head + dtypes + shape) to understand columns, types, nulls, scale, and units.
-2. **Plan the table** — Decide: which columns to show/hide, how to format each one, whether to use spanners, row groups, a header/subtitle, source notes, or data coloring. Consider what story the table tells.
-3. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`).
-4. **Run and verify** — Execute the script, confirm the PNG was produced and looks correct. If errors occur, fix and re-run.
-5. **Commit** — Write the final script to `table.py` and rendered image to `table.png` in the working directory.
+1. **Validate the request** — Before doing anything, check whether the provided data can fulfill the user's request. If the dataset does not contain relevant columns or rows for what the user is asking, **stop and tell the user** that the request cannot be fulfilled with the given data. Explain what is missing. Write a minimal `table.py` that produces a blank/empty table and save a blank `table.png`. Do not fabricate data or force an irrelevant table.
+2. **Understand the data** — Go beyond column names. Read [references/data.md](references/data.md) for guidance on interpreting data. Examine distributions, ranges, units, and relationships. Understand what makes the data valuable and what story it can tell before deciding how to present it.
+3. **Inspect the data** — Read a sample (head + dtypes + shape) to understand columns, types, nulls, scale, and units.
+4. **Plan the table** — Decide: which columns to show/hide, how to format each one, whether to use spanners, row groups, a header/subtitle, source notes, or data coloring. Consider what story the table tells.
+5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`).
+6. **Run and verify** — Execute the script, confirm the PNG was produced and looks correct. If errors occur, fix and re-run.
+7. **Commit** — Write the final script to `table.py` and rendered image to `table.png` in the working directory.
 
 ## Core Pattern
 
@@ -107,5 +109,6 @@ Include units in column labels when the unit is **not already conveyed by format
 
 ## When to Load References
 
+- Read [references/data.md](references/data.md) **before building any table** to guide your data understanding process — how to interpret distributions, identify key metrics, and decide what story the data tells.
 - Read [references/api.md](references/api.md) when you need exact method signatures, parameter names, or less-common methods (e.g., `opt_*`, `cols_width`, `cols_align`, `tab_stubhead`).
 - Read [references/design.md](references/design.md) when you need guidance on visual design choices — color palettes, when to use data coloring, typography, or layout patterns for specific table types (financial, scientific, comparison).
