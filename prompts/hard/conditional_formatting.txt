@@ -1,0 +1,1 @@
+Create a publication-quality table with conditional color formatting on numeric values (red for low, green for high), column spanners grouping related columns, footnotes explaining key metrics, a custom title and subtitle, and a polished theme with custom fonts and borders.
