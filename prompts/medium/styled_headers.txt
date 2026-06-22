@@ -1,1 +1,0 @@
-Build a table with column spanners that group related columns together. Apply a professional color scheme to the header and use a compact layout. Include a title and subtitle.

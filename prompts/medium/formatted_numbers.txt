@@ -1,1 +1,0 @@
-Create a table with numeric columns formatted to 2 decimal places, bold column headers, and alternating row background colors for readability. Add a title.

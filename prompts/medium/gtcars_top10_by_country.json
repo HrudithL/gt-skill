@@ -1,0 +1,4 @@
+{
+  "prompt": "Build a table showing the top 10 most expensive gt cars, grouped by country of origin, including their drivetrain and transmission details.",
+  "data": "data/gtcars.csv"
+}

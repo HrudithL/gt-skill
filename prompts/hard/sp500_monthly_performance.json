@@ -1,0 +1,4 @@
+{
+  "prompt": "Make a table of the S&P 500 data showing monthly performance summary for 2010 through 2015, with each month's opening price, closing price, percent change, average daily volume, and the highest single-day gain and loss within that month.",
+  "data": "data/sp500.csv"
+}
