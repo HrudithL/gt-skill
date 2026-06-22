@@ -61,6 +61,16 @@ Match `fmt_*` to data semantics, not just numeric type:
 | True/False | `fmt_tf` | |
 | Markdown content | `fmt_markdown` | |
 
+## Table Length
+
+Keep tables **concise by default**. A long table is not a better table — it is harder to read and dilutes the story.
+
+- **Target 5–15 rows** for most tables. This is enough to show trends, comparisons, and key data points.
+- **Never show every row** from a large dataset unless the user explicitly asks for it. Aggregate, filter to top-N, or sample instead.
+- When the data has many rows, choose the most meaningful subset: most recent years, top performers, notable outliers, or a representative sample.
+- If you must show more than 20 rows, use `groupname_col` to create visual sections, and consider whether the user's request truly requires all that data.
+- **Ask yourself**: "Does every row in this table earn its place?" If a row doesn't add new information or context, cut it.
+
 ## Table Structure Decisions
 
 - **`rowname_col`** — Use when a column has unique row identifiers (names, IDs, dates). Creates a stub with a vertical divider.
