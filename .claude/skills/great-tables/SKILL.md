@@ -1,6 +1,6 @@
 ---
 name: great-tables
-description: Produce a polished, publication-ready table image (PNG) from a CSV or other tabular data file using the Python `great_tables` package.
+description: Use when building any `great_tables` table from a data file — provides API reference, design patterns, and the render-to-PNG workflow. Load before writing code so the script follows the documented patterns and saves the PNG correctly.
 ---
 
 # Great Tables Skill
