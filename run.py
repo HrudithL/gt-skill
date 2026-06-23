@@ -215,8 +215,16 @@ async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
         model=os.environ.get("GTSKILL_AGENT_MODEL") or None,
     )
 
+    async def prompt_stream():
+        yield {
+            "type": "user",
+            "message": {"role": "user", "content": full_prompt},
+            "parent_tool_use_id": None,
+            "session_id": "default",
+        }
+
     transcript: list[dict] = []
-    async for msg in query(prompt=full_prompt, options=options):
+    async for msg in query(prompt=prompt_stream(), options=options):
         d = message_to_dict(msg)
         transcript.append(d)
         log_message(d)
