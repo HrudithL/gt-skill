@@ -656,7 +656,7 @@ Row groups are set via `groupname_col=` in the GT constructor. The order of grou
 )
 ```
 
-For PNG: requires Chrome/Chromium + chromedriver (or Firefox + geckodriver). If not available, save as `.html` instead.
+For PNG: requires Chrome/Chromium + chromedriver (or Firefox + geckodriver). If `gt.save("table.png")` fails, fix the environment (install chromedriver / `webdriver-manager`) and re-run — do not save HTML or generate a substitute image with PIL/imgkit/wkhtmltoimage. The deliverable is the actual `great_tables` PNG render.
 
 ## Helpers
 
