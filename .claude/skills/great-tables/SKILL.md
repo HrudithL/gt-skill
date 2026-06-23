@@ -188,7 +188,7 @@ Include units in column labels when the unit is **not already conveyed by format
 - **`fmt_percent` input scale**: Values should already be in decimal form (0.15 = 15%). If your data is already 0–100, use `scale_values=False`.
 - **Imports**: Always import `style` and `loc` from `great_tables` if using `tab_style` or `data_color`. Common: `from great_tables import GT, md, html, style, loc`.
 - **`cols_label` syntax**: Use keyword arguments (`cols_label(col_name="Label")`) or a dict (`cols_label(cases={"col_name": "Label"})`). The dict form is required when column names have special characters.
-- **PNG rendering**: `gt.save()` requires `selenium` or the `webdriver-manager` package for PNG output. If unavailable, fall back to `gt.save("table.html")` and note the limitation.
+- **PNG rendering**: Always save with `gt.save("table.png")`. Do not save HTML, hand-roll a PIL/imgkit/wkhtmltoimage renderer, or otherwise substitute another output format — those produce a fake table, not the `great_tables` rendering. If `gt.save()` fails (missing chromedriver, sandboxed environment), surface the error so the environment can be fixed; do not silently fall back to a different format.
 
 ---
 
