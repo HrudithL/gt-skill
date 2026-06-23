@@ -1,6 +1,6 @@
 ---
 name: great-tables
-description: Produce a polished, publication-ready table image (PNG) from a CSV or other tabular data file using the Python `great_tables` package. Invoke this skill for ANY request that asks to make, build, render, show, display, or visualize a table from data — including financial, scientific, summary, or comparison tables. Do not write `great_tables` code without loading this skill first.
+description: Produce a polished, publication-ready table image (PNG) from a CSV or other tabular data file using the Python `great_tables` package.
 ---
 
 # Great Tables Skill
