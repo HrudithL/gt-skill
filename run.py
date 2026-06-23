@@ -200,13 +200,17 @@ async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
         f"directory, do NOT copy it elsewhere): ./{data_link.name}\n\n"
         f"Working directory: {run_dir}\n"
         f"Final code goes to `table.py` and the rendered image to `table.png`, "
-        f"both inside the working directory."
+        f"both inside the working directory. After writing `table.py`, run it "
+        f"and confirm `table.png` was created — the task is not complete until "
+        f"the PNG exists on disk."
     )
 
     options = ClaudeAgentOptions(
         system_prompt={"type": "preset", "preset": "claude_code"},
         skills=[SKILL_NAME],
         setting_sources=["project"],
+        # Allowed_tools in ClaudeAgentOptions doesn't shrink the CLIs inventory (this is why the transcript shows all tools), it gets translated into permission rules that are checked when the model tries to call a tool
+        # There is a chance that in the system prompt for the agent it may see all available skills and the allowlist just limits running the tools (dependent on the SDK itself), luckily this doesnt happen rn, but could in future possibly
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         cwd=str(run_dir),
         permission_mode="default",
