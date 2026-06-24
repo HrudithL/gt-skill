@@ -1,0 +1,4 @@
+{
+  "prompt": "Make a table of the islands and their sizes.",
+  "data": "data/islands.csv"
+}
