@@ -10,16 +10,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
 
 import anyio
 from dotenv import load_dotenv
+from nokap import Chrome
 
 from claude_agent_sdk import (
     AssistantMessage,
     ClaudeAgentOptions,
+    PermissionResultAllow,
+    PermissionResultDeny,
     ResultMessage,
     SystemMessage,
     TextBlock,
@@ -32,6 +36,95 @@ from claude_agent_sdk import (
 
 ROOT = Path(__file__).parent.resolve()
 SKILL_NAME = "great-tables"
+SKILL_DIR = ROOT / ".claude" / "skills" / SKILL_NAME
+
+# Harness-specific rendering instructions appended to the claude_code system
+# prompt. Kept here (not in the skill) because they describe THIS environment's
+# Chrome plumbing, not great_tables itself: the skill must stay portable.
+_RENDER_INSTRUCTIONS = """\
+## Rendering tables to PNG (this environment)
+
+A long-lived headless Chrome browser is already running for you. To
+attach to it, every `table.py` you write MUST follow these two rules:
+
+1. The first import in `table.py` must be `import gtskill_chrome`. This
+   module is already in the working directory; importing it rewires
+   `nokap` to talk to the running browser over loopback CDP. Without it,
+   `gt.gtsave()` will try to spawn its own Chrome and die inside the
+   sandbox.
+2. End the script with `gt.gtsave("table.png")`. Do NOT use the
+   deprecated `gt.save()` — it relies on Selenium/chromedriver and is
+   not wired up in this environment.
+
+Run scripts with plain `python table.py`. The harness puts the
+project's virtualenv (which has `great_tables`, `nokap`, `pandas`,
+`polars`, `PIL`, etc. installed) on PATH ahead of any system Python,
+so `python` and `python3` already resolve to the right interpreter.
+Do NOT `pip install` anything — the sandbox blocks network access and
+everything you need is already available.
+
+You are expected to iterate: run `python table.py`, read `table.png`
+back with the Read tool, judge the result against the user's request,
+edit `table.py`, and re-run. Each rerun reuses the same browser, so
+iteration is cheap.
+
+If `gt.gtsave()` ever fails, STOP and surface the full error verbatim
+so the environment can be fixed. Do NOT fall back to PIL/Pillow,
+imgkit, wkhtmltoimage, weasyprint, playwright, puppeteer,
+`chrome --screenshot`, `.write_raw_html()` / `.as_raw_html()` piped
+into another screenshot tool, or any other html-to-image route. The
+deliverable is a real great_tables render and nothing else qualifies.
+"""
+
+
+def _path_within(path: str | os.PathLike, root: Path) -> bool:
+    """Lexical containment check — does NOT follow symlinks.
+
+    A symlink inside `root` pointing outside still counts as inside.
+    `..` segments are normalized away first, so they cannot escape.
+    """
+    if not path:
+        return False
+    abs_path = Path(os.path.abspath(os.fspath(path)))
+    try:
+        abs_path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _make_can_use_tool(run_dir: Path):
+    file_path_keys = {
+        "Read": "file_path",
+        "Edit": "file_path",
+        "Write": "file_path",
+        "NotebookEdit": "notebook_path",
+    }
+    write_tools = {"Edit", "Write", "NotebookEdit"}
+
+    async def can_use_tool(tool_name, tool_input, context):
+        key = file_path_keys.get(tool_name)
+        if key is None:
+            return PermissionResultAllow()
+
+        path = tool_input.get(key, "")
+        in_run = _path_within(path, run_dir)
+        in_skill = _path_within(path, SKILL_DIR)
+
+        if tool_name in write_tools:
+            if in_run:
+                return PermissionResultAllow()
+            return PermissionResultDeny(
+                message=f"{tool_name} denied: {path!r} is outside the run directory."
+            )
+
+        if in_run or in_skill:
+            return PermissionResultAllow()
+        return PermissionResultDeny(
+            message=f"Read denied: {path!r} is outside the run directory and skill directory."
+        )
+
+    return can_use_tool
 
 
 def block_to_dict(block):
@@ -132,41 +225,93 @@ def log_message(d: dict) -> None:
         )
 
 
-async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
+async def run(
+    user_prompt: str, data_path: Path, run_dir: Path, chrome_ws: str
+) -> None:
+    data_link = run_dir / data_path.name
+    if not data_link.is_symlink() and not data_link.exists():
+        data_link.symlink_to(data_path)
+
+    claude_link = run_dir / ".claude"
+    if not claude_link.is_symlink() and not claude_link.exists():
+        claude_link.symlink_to(ROOT / ".claude")
+
+    # Symlink the nokap monkey-patch shim into the run dir so the agent's
+    # `table.py` can `import gtskill_chrome` and reuse the sidecar browser.
+    shim_link = run_dir / "gtskill_chrome.py"
+    if not shim_link.is_symlink() and not shim_link.exists():
+        shim_link.symlink_to(ROOT / "gtskill_chrome.py")
+
     full_prompt = (
         f"{user_prompt}\n\n"
-        f"Reference data file (read it from this absolute path, do NOT copy it "
-        f"into the working directory): {data_path}\n\n"
+        f"Reference data file (read it from this path inside the working "
+        f"directory, do NOT copy it elsewhere): ./{data_link.name}\n\n"
         f"Working directory: {run_dir}\n"
         f"Final code goes to `table.py` and the rendered image to `table.png`, "
-        f"both inside the working directory."
+        f"both inside the working directory. After writing `table.py`, run it "
+        f"and confirm `table.png` was created — the task is not complete until "
+        f"the PNG exists on disk. You can iterate: run `python table.py`, "
+        f"view `table.png`, refine the script, and re-run until you're "
+        f"satisfied with the result."
     )
 
     options = ClaudeAgentOptions(
         system_prompt={
             "type": "preset",
             "preset": "claude_code",
-            # This is essential to get the agent to use the skill tool and call the great tables skill
-            # Without it, only smarter models consider using the skill at all
-            "append": (
-                "Before starting work, check the available skills listing. "
-                "If any skill's description matches the user's task, you MUST "
-                "invoke the `Skill` tool to load it before writing code or "
-                "running commands. Do not rely on prior knowledge when a "
-                "matching skill is available."
-            ),
+            "append": _RENDER_INSTRUCTIONS,
         },
         skills=[SKILL_NAME],
         setting_sources=["project"],
+        # Allowed_tools in ClaudeAgentOptions doesn't shrink the CLIs inventory (this is why the transcript shows all tools), it gets translated into permission rules that are checked when the model tries to call a tool
+        # There is a chance that in the system prompt for the agent it may see all available skills and the allowlist just limits running the tools (dependent on the SDK itself), luckily this doesnt happen rn, but could in future possibly
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-        cwd=str(ROOT),
-        add_dirs=[str(run_dir), str(data_path.parent)],
-        permission_mode="bypassPermissions",
+        cwd=str(run_dir),
+        # Sidecar Chrome runs in the parent process (outside sandbox-exec)
+        # and the agent's Python connects to it over loopback CDP. The shim
+        # `gtskill_chrome.py` (symlinked into run_dir) picks up the WS URL
+        # from GTSKILL_CHROME_WS and monkey-patches `nokap._api._browser` so
+        # `gt.gtsave("table.png")` attaches to it instead of trying to spawn
+        # a new Chrome (which would die inside the sandbox).
+        #
+        # Forcing TMPDIR=<run_dir> keeps `nokap.from_html`'s temp HTML files
+        # inside the cwd that the sandbox already grants write access to, so
+        # we don't need to punch a hole for /var/folders.
+        #
+        # Prepending the project venv to PATH makes plain `python` resolve to
+        # the interpreter that actually has great_tables/nokap/pandas
+        # installed. Without this the agent's `python` falls through to the
+        # macOS system interpreter, the first `import great_tables` fails,
+        # and the agent burns a lot of turns trying to `pip install` things
+        # the sandbox won't allow (or worse, falls back to PIL).
+        env={
+            "GTSKILL_CHROME_WS": chrome_ws,
+            "TMPDIR": str(run_dir),
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
+            "VIRTUAL_ENV": str(ROOT / ".venv"),
+        },
+        permission_mode="default",
+        can_use_tool=_make_can_use_tool(run_dir),
+        sandbox={
+            "enabled": True,
+            "autoAllowBashIfSandboxed": True,
+            # Agent's Python opens a TCP connection to 127.0.0.1:<port> on the
+            # sidecar Chrome. Keep loopback access enabled.
+            "network": {"allowLocalBinding": True},
+        },
         model=os.environ.get("GTSKILL_AGENT_MODEL") or None,
     )
 
+    async def prompt_stream():
+        yield {
+            "type": "user",
+            "message": {"role": "user", "content": full_prompt},
+            "parent_tool_use_id": None,
+            "session_id": "default",
+        }
+
     transcript: list[dict] = []
-    async for msg in query(prompt=full_prompt, options=options):
+    async for msg in query(prompt=prompt_stream(), options=options):
         d = message_to_dict(msg)
         transcript.append(d)
         log_message(d)
@@ -203,7 +348,25 @@ def main() -> int:
     print(f"data:    {data_path}")
     print(f"prompt:  {args.prompt}\n")
 
-    anyio.run(run, args.prompt, data_path, run_dir)
+    # Launch one headless Chrome in the parent process (outside the agent's
+    # macOS sandbox). The agent will attach to it over CDP via `nokap`/`gtsave`.
+    # `--user-data-dir` keeps this Chrome isolated from any normal Chrome the
+    # user may already have open.
+    chrome_profile = run_dir / ".chrome-profile"
+    chrome_profile.mkdir(exist_ok=True)
+    chrome = Chrome(extra_args=[f"--user-data-dir={chrome_profile}"])
+    print(f"chrome:  {chrome.ws_url}\n")
+
+    try:
+        anyio.run(run, args.prompt, data_path, run_dir, chrome.ws_url)
+    finally:
+        chrome.close()
+        # The Chrome user-data-dir holds the sidecar's cache, cookies,
+        # GPU shader cache, Crashpad database, and singleton lock. None
+        # of it is referenced again once Chrome has exited, so clean it
+        # up to keep run dirs tidy. ignore_errors covers the (harmless)
+        # case where Chrome is still flushing files on a slow shutdown.
+        shutil.rmtree(chrome_profile, ignore_errors=True)
 
     print(f"\nartifacts in {run_dir}:")
     for f in sorted(run_dir.iterdir()):
