@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 import time
 from datetime import datetime
@@ -26,6 +27,7 @@ from pathlib import Path
 
 import anyio
 from dotenv import load_dotenv
+from nokap import Chrome
 
 from run import run as run_agent
 
@@ -96,13 +98,13 @@ def extract_result_metrics(run_dir: Path) -> dict:
 
 
 async def run_single_prompt(
-    prompt_text: str, data_path: Path, run_dir: Path
+    prompt_text: str, data_path: Path, run_dir: Path, chrome_ws: str
 ) -> dict:
     """Run a single prompt through the agent and return metrics."""
     run_dir.mkdir(parents=True, exist_ok=True)
     start = time.time()
     try:
-        await run_agent(prompt_text, data_path, run_dir)
+        await run_agent(prompt_text, data_path, run_dir, chrome_ws)
         elapsed = time.time() - start
         metrics = extract_result_metrics(run_dir)
         metrics["wall_time_s"] = round(elapsed, 2)
@@ -120,6 +122,7 @@ async def run_all(
     prompts: list[dict],
     test_run_dir: Path,
     repeat: int,
+    chrome_ws: str,
 ) -> list[dict]:
     """Run all prompts sequentially and collect results."""
     results = []
@@ -147,7 +150,7 @@ async def run_all(
             print(f"  run_dir: {run_subdir}\n")
 
             metrics = await run_single_prompt(
-                prompt_info["prompt"], data_path, run_subdir
+                prompt_info["prompt"], data_path, run_subdir, chrome_ws
             )
 
             result_entry = {
@@ -263,7 +266,21 @@ def main() -> int:
     print(f"Repeat:     {args.repeat}")
     print(f"Prompts:    {len(prompts)} found")
 
-    results = anyio.run(run_all, prompts, test_run_dir, args.repeat)
+    # Launch one headless Chrome for the entire test run. All prompts share
+    # this sidecar over CDP (same model as run.py's main()), which is much
+    # cheaper than spawning a Chrome per prompt.
+    chrome_profile = test_run_dir / ".chrome-profile"
+    chrome_profile.mkdir(exist_ok=True)
+    chrome = Chrome(extra_args=[f"--user-data-dir={chrome_profile}"])
+    print(f"Chrome:     {chrome.ws_url}")
+
+    try:
+        results = anyio.run(
+            run_all, prompts, test_run_dir, args.repeat, chrome.ws_url
+        )
+    finally:
+        chrome.close()
+        shutil.rmtree(chrome_profile, ignore_errors=True)
 
     write_summary(test_run_dir, results, config)
 
