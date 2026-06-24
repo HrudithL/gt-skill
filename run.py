@@ -16,6 +16,7 @@ from pathlib import Path
 
 import anyio
 from dotenv import load_dotenv
+from nokap import Chrome
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -185,7 +186,9 @@ def log_message(d: dict) -> None:
         )
 
 
-async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
+async def run(
+    user_prompt: str, data_path: Path, run_dir: Path, chrome_ws: str
+) -> None:
     data_link = run_dir / data_path.name
     if not data_link.is_symlink() and not data_link.exists():
         data_link.symlink_to(data_path)
@@ -193,6 +196,12 @@ async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
     claude_link = run_dir / ".claude"
     if not claude_link.is_symlink() and not claude_link.exists():
         claude_link.symlink_to(ROOT / ".claude")
+
+    # Symlink the nokap monkey-patch shim into the run dir so the agent's
+    # `table.py` can `import gtskill_chrome` and reuse the sidecar browser.
+    shim_link = run_dir / "gtskill_chrome.py"
+    if not shim_link.is_symlink() and not shim_link.exists():
+        shim_link.symlink_to(ROOT / "gtskill_chrome.py")
 
     full_prompt = (
         f"{user_prompt}\n\n"
@@ -202,7 +211,9 @@ async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
         f"Final code goes to `table.py` and the rendered image to `table.png`, "
         f"both inside the working directory. After writing `table.py`, run it "
         f"and confirm `table.png` was created — the task is not complete until "
-        f"the PNG exists on disk."
+        f"the PNG exists on disk. You can iterate: run `python table.py`, "
+        f"view `table.png`, refine the script, and re-run until you're "
+        f"satisfied with the result."
     )
 
     options = ClaudeAgentOptions(
@@ -213,9 +224,29 @@ async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
         # There is a chance that in the system prompt for the agent it may see all available skills and the allowlist just limits running the tools (dependent on the SDK itself), luckily this doesnt happen rn, but could in future possibly
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         cwd=str(run_dir),
+        # Sidecar Chrome runs in the parent process (outside sandbox-exec)
+        # and the agent's Python connects to it over loopback CDP. The shim
+        # `gtskill_chrome.py` (symlinked into run_dir) picks up the WS URL
+        # from GTSKILL_CHROME_WS and monkey-patches `nokap._api._browser` so
+        # `gt.gtsave("table.png")` attaches to it instead of trying to spawn
+        # a new Chrome (which would die inside the sandbox).
+        #
+        # Forcing TMPDIR=<run_dir> keeps `nokap.from_html`'s temp HTML files
+        # inside the cwd that the sandbox already grants write access to, so
+        # we don't need to punch a hole for /var/folders.
+        env={
+            "GTSKILL_CHROME_WS": chrome_ws,
+            "TMPDIR": str(run_dir),
+        },
         permission_mode="default",
         can_use_tool=_make_can_use_tool(run_dir),
-        sandbox={"enabled": True, "autoAllowBashIfSandboxed": True},
+        sandbox={
+            "enabled": True,
+            "autoAllowBashIfSandboxed": True,
+            # Agent's Python opens a TCP connection to 127.0.0.1:<port> on the
+            # sidecar Chrome. Keep loopback access enabled.
+            "network": {"allowLocalBinding": True},
+        },
         model=os.environ.get("GTSKILL_AGENT_MODEL") or None,
     )
 
@@ -265,7 +296,19 @@ def main() -> int:
     print(f"data:    {data_path}")
     print(f"prompt:  {args.prompt}\n")
 
-    anyio.run(run, args.prompt, data_path, run_dir)
+    # Launch one headless Chrome in the parent process (outside the agent's
+    # macOS sandbox). The agent will attach to it over CDP via `nokap`/`gtsave`.
+    # `--user-data-dir` keeps this Chrome isolated from any normal Chrome the
+    # user may already have open.
+    chrome_profile = run_dir / ".chrome-profile"
+    chrome_profile.mkdir(exist_ok=True)
+    chrome = Chrome(extra_args=[f"--user-data-dir={chrome_profile}"])
+    print(f"chrome:  {chrome.ws_url}\n")
+
+    try:
+        anyio.run(run, args.prompt, data_path, run_dir, chrome.ws_url)
+    finally:
+        chrome.close()
 
     print(f"\nartifacts in {run_dir}:")
     for f in sorted(run_dir.iterdir()):
