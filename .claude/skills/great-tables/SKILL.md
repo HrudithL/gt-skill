@@ -14,8 +14,8 @@ Build publication-ready display tables in Python using the `great_tables` packag
 3. **Inspect the data** — Read a sample (head + dtypes + shape) to understand columns, types, nulls, scale, and units.
 4. **Plan the table** — Decide: which columns to show/hide, how to format each one, whether to use spanners, row groups, a header/subtitle, source notes, or data coloring. Consider what story the table tells.
 5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`).
-6. **Render with `gt.gtsave("table.png")`** — Every table script **must** start with `import gtskill_chrome` (sets up the rendering backend; see "Rendering the PNG" below) and **must** end with `gt.gtsave("table.png")`. Do not substitute `gt.save()` (deprecated), do not save HTML, do not render with PIL/imgkit/wkhtmltoimage/Playwright/Selenium.
-7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, judge the result, and refine the script. Repeat until the table is correct and looks polished. Each rerun reuses the same long-lived browser, so iteration is cheap. Fix the root cause of any error — never swap in a fallback renderer.
+6. **Render** — Every table script **must** end with `gt.gtsave("table.png")`. Do not substitute `gt.save()` (deprecated), do not save HTML, do not render with PIL/imgkit/wkhtmltoimage/Playwright/Selenium.
+7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, judge the result, and refine the script. Repeat until the table is correct and looks polished. Fix the root cause of any error — never swap in a fallback renderer.
 8. **Commit** — When satisfied, leave the final `table.py` and `table.png` in the working directory.
 
 ## Understanding the Data
@@ -179,7 +179,7 @@ Include units in column labels when the unit is **not already conveyed by format
 
 ## Gotchas
 
-- **Save method**: Every table **must** be rendered with `gt.gtsave("table.png")`, and `table.py` **must** begin with `import gtskill_chrome` (it monkey-patches `nokap` to attach to the sidecar Chrome — without it, `gt.gtsave` will try to spawn its own browser and die inside the sandbox). Do **not** use `gt.save()` — it is deprecated (removed mid-2027) and relies on Selenium/chromedriver which is no longer wired up here.
+- **Save method**: Every table **must** be rendered with `gt.gtsave("table.png")`. Do **not** use `gt.save()` — it is deprecated (removed mid-2027) and relies on Selenium/chromedriver.
 - **Absolute paths**: When the working directory might differ from where the script runs, use absolute paths for both input data and output PNG.
 - **Column names in `fmt_*`**: Use the *original DataFrame column names*, not the labels set by `cols_label()`. Labels are display-only.
 - **Row indices in `loc.body()`**: Use integer indices (0-based position in the displayed table), NOT DataFrame index values.
@@ -189,8 +189,8 @@ Include units in column labels when the unit is **not already conveyed by format
 - **`fmt_percent` input scale**: Values should already be in decimal form (0.15 = 15%). If your data is already 0–100, use `scale_values=False`.
 - **Imports**: Always import `style` and `loc` from `great_tables` if using `tab_style` or `data_color`. Common: `from great_tables import GT, md, html, style, loc`.
 - **`cols_label` syntax**: Use keyword arguments (`cols_label(col_name="Label")`) or a dict (`cols_label(cases={"col_name": "Label"})`). The dict form is required when column names have special characters.
-- **PNG rendering**: The deliverable is a real `great_tables` PNG produced by `gt.gtsave("table.png")`. The harness launches a long-lived headless Chrome in the parent process (outside the sandbox) and exposes its DevTools WebSocket URL through the env var `GTSKILL_CHROME_WS`. The `gtskill_chrome` shim (already in the working directory) reads that variable on import and rewires `nokap` to attach to the sidecar over loopback CDP. As long as `table.py` starts with `import gtskill_chrome`, `gt.gtsave("table.png")` works end-to-end and can be re-run as many times as you like — each call reuses the same browser. If rendering ever fails, **stop and surface the error verbatim** so the environment can be fixed. Do **NOT**:
-    - fall back to `gt.save()` (deprecated, Selenium-based, not wired up here),
+- **No fallback renderers**: The deliverable is a real `great_tables` PNG produced by `gt.gtsave("table.png")`. If rendering ever fails, **stop and surface the error verbatim**. Do **NOT**:
+    - fall back to the deprecated `gt.save()`,
     - call `.write_raw_html()` / `.as_raw_html()` and feed it into a different screenshot tool,
     - hand-render the table with PIL / Pillow / `ImageDraw`,
     - shell out to `imgkit`, `wkhtmltoimage`, `weasyprint`, `playwright`, `puppeteer`, headless `chrome --screenshot`, or any other html-to-image tool,
@@ -654,28 +654,19 @@ Row groups are set via `groupname_col=` in the GT constructor. The order of grou
 ## Saving
 
 ```python
-import gtskill_chrome  # MUST be at the top of table.py — wires gtsave to the sidecar Chrome
-# ... build `gt` ...
 gt.gtsave(
     "table.png",
-    # Optional kwargs forwarded to nokap.webshot():
-    # selector="table",   # CSS selector to capture (defaults to the whole page)
-    # zoom=2,             # pixel density multiplier for raster output
-    # expand=10,          # padding around the selector in pixels
+    # Optional kwargs forwarded to the renderer:
+    # selector="table",         # CSS selector to capture (defaults to the whole page)
+    # zoom=2,                   # pixel density multiplier for raster output
+    # expand=10,                # padding around the selector in pixels
     # vwidth=992, vheight=744,  # initial viewport
 )
 ```
 
-**The only acceptable save call in this skill is `gt.gtsave("table.png")`.**
+`gtsave()` is the current `great_tables >= 0.22.0` API. It renders the table to an image (or PDF, depending on the file extension) via a headless Chromium browser.
 
-How rendering works here:
-- `run.py` launches one headless Chrome in the parent process (outside the macOS sandbox) and exports its DevTools WebSocket URL as `GTSKILL_CHROME_WS`.
-- The `gtskill_chrome` module (symlinked into the working directory) reads that variable on import and monkey-patches `nokap._api._browser` to attach to the sidecar.
-- `gt.gtsave(...)` then routes through `nokap.from_html(...)` → the sidecar Chrome → a PNG on disk. The browser is long-lived, so every rerun of `python table.py` is fast and reuses the same process.
-
-Notes:
-- **Always** put `import gtskill_chrome` at the top of `table.py`. Without it, `gt.gtsave()` tries to spawn its own Chrome and dies inside the sandbox.
-- Do **not** use `gt.save()`. It is deprecated (removed mid-2027), uses Selenium/chromedriver, and is not wired up in this environment.
+- Do **not** use `gt.save()` — it is deprecated (removed mid-2027) and uses Selenium/chromedriver.
 - If `gt.gtsave()` ever fails, **stop and surface the full error**. Do not silently swap in a PIL/imgkit/wkhtmltoimage/Playwright/HTML fallback. The deliverable is the actual `great_tables` PNG render and nothing else qualifies.
 
 ## Helpers
