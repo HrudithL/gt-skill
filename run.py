@@ -37,6 +37,37 @@ ROOT = Path(__file__).parent.resolve()
 SKILL_NAME = "great-tables"
 SKILL_DIR = ROOT / ".claude" / "skills" / SKILL_NAME
 
+# Harness-specific rendering instructions appended to the claude_code system
+# prompt. Kept here (not in the skill) because they describe THIS environment's
+# Chrome plumbing, not great_tables itself: the skill must stay portable.
+_RENDER_INSTRUCTIONS = """\
+## Rendering tables to PNG (this environment)
+
+A long-lived headless Chrome browser is already running for you. To
+attach to it, every `table.py` you write MUST follow these two rules:
+
+1. The first import in `table.py` must be `import gtskill_chrome`. This
+   module is already in the working directory; importing it rewires
+   `nokap` to talk to the running browser over loopback CDP. Without it,
+   `gt.gtsave()` will try to spawn its own Chrome and die inside the
+   sandbox.
+2. End the script with `gt.gtsave("table.png")`. Do NOT use the
+   deprecated `gt.save()` — it relies on Selenium/chromedriver and is
+   not wired up in this environment.
+
+You are expected to iterate: run `python table.py`, read `table.png`
+back with the Read tool, judge the result against the user's request,
+edit `table.py`, and re-run. Each rerun reuses the same browser, so
+iteration is cheap.
+
+If `gt.gtsave()` ever fails, STOP and surface the full error verbatim
+so the environment can be fixed. Do NOT fall back to PIL/Pillow,
+imgkit, wkhtmltoimage, weasyprint, playwright, puppeteer,
+`chrome --screenshot`, `.write_raw_html()` / `.as_raw_html()` piped
+into another screenshot tool, or any other html-to-image route. The
+deliverable is a real great_tables render and nothing else qualifies.
+"""
+
 
 def _path_within(path: str | os.PathLike, root: Path) -> bool:
     """Lexical containment check — does NOT follow symlinks.
@@ -217,7 +248,11 @@ async def run(
     )
 
     options = ClaudeAgentOptions(
-        system_prompt={"type": "preset", "preset": "claude_code"},
+        system_prompt={
+            "type": "preset",
+            "preset": "claude_code",
+            "append": _RENDER_INSTRUCTIONS,
+        },
         skills=[SKILL_NAME],
         setting_sources=["project"],
         # Allowed_tools in ClaudeAgentOptions doesn't shrink the CLIs inventory (this is why the transcript shows all tools), it gets translated into permission rules that are checked when the model tries to call a tool
