@@ -1,0 +1,4 @@
+{
+  "prompt": "Create a table showing population growth trends for the top 15 fastest-growing Ontario towns, comparing their density changes across all census years from 1996 to 2021, with the percentage changes between each period.",
+  "data": "data/towny.csv"
+}
