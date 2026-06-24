@@ -146,6 +146,8 @@ async def run(user_prompt: str, data_path: Path, run_dir: Path) -> None:
         system_prompt={
             "type": "preset",
             "preset": "claude_code",
+            # This is essential to get the agent to use the skill tool and call the great tables skill
+            # Without it, only smarter models consider using the skill at all
             "append": (
                 "Before starting work, check the available skills listing. "
                 "If any skill's description matches the user's task, you MUST "
