@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -54,6 +55,13 @@ attach to it, every `table.py` you write MUST follow these two rules:
 2. End the script with `gt.gtsave("table.png")`. Do NOT use the
    deprecated `gt.save()` — it relies on Selenium/chromedriver and is
    not wired up in this environment.
+
+Run scripts with plain `python table.py`. The harness puts the
+project's virtualenv (which has `great_tables`, `nokap`, `pandas`,
+`polars`, `PIL`, etc. installed) on PATH ahead of any system Python,
+so `python` and `python3` already resolve to the right interpreter.
+Do NOT `pip install` anything — the sandbox blocks network access and
+everything you need is already available.
 
 You are expected to iterate: run `python table.py`, read `table.png`
 back with the Read tool, judge the result against the user's request,
@@ -269,9 +277,18 @@ async def run(
         # Forcing TMPDIR=<run_dir> keeps `nokap.from_html`'s temp HTML files
         # inside the cwd that the sandbox already grants write access to, so
         # we don't need to punch a hole for /var/folders.
+        #
+        # Prepending the project venv to PATH makes plain `python` resolve to
+        # the interpreter that actually has great_tables/nokap/pandas
+        # installed. Without this the agent's `python` falls through to the
+        # macOS system interpreter, the first `import great_tables` fails,
+        # and the agent burns a lot of turns trying to `pip install` things
+        # the sandbox won't allow (or worse, falls back to PIL).
         env={
             "GTSKILL_CHROME_WS": chrome_ws,
             "TMPDIR": str(run_dir),
+            "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
+            "VIRTUAL_ENV": str(ROOT / ".venv"),
         },
         permission_mode="default",
         can_use_tool=_make_can_use_tool(run_dir),
@@ -344,6 +361,12 @@ def main() -> int:
         anyio.run(run, args.prompt, data_path, run_dir, chrome.ws_url)
     finally:
         chrome.close()
+        # The Chrome user-data-dir holds the sidecar's cache, cookies,
+        # GPU shader cache, Crashpad database, and singleton lock. None
+        # of it is referenced again once Chrome has exited, so clean it
+        # up to keep run dirs tidy. ignore_errors covers the (harmless)
+        # case where Chrome is still flushing files on a slow shutdown.
+        shutil.rmtree(chrome_profile, ignore_errors=True)
 
     print(f"\nartifacts in {run_dir}:")
     for f in sorted(run_dir.iterdir()):
