@@ -698,12 +698,12 @@ Visual design principles and patterns for building polished, publication-ready t
 
 ### Color Budget
 
-Every table has a small budget for color. Distinguish two tiers and stay inside both:
+Every table has a small budget for visual emphasis. "Treatment" here means any deliberate visual choice — cell fills, text color, bold/italic, font sizing, borders, row striping. Distinguish two tiers and stay inside both:
 
-- **Loud treatments** (attention-drawing) — **1–3 per table maximum.** These actively pull the eye: `data_color` on a column, full-cell fills, strong text colors (red/green for signed values), highlighted outlier rows or cells. Each loud treatment should answer a specific question the reader has.
-- **Quiet treatments** (aesthetic polish) — **2–4 per table maximum.** These make the table feel professional without competing for attention: alternating row stripes, lightly tinted column-label backgrounds, colored separator borders, light-grey fills on structural rows (totals, group headers, stub). Use these to break up a blank white canvas, not to communicate.
+- **Loud treatments** (attention-drawing) — **1–3 per table maximum.** These actively pull the eye to specific data: `data_color` on a column, full-cell fills, strong text colors (red/green for signed values), bold + colored text on outliers, highlighted rows. Each loud treatment should answer a specific question the reader has.
+- **Quiet treatments** (aesthetic polish) — **2–4 per table maximum.** These make the table feel professional without competing for attention: alternating row stripes, lightly tinted column-label backgrounds, colored separator borders, light-grey fills on structural rows (totals, group headers, stub), subtle font-size differences. Use these to break up a blank white canvas, not to communicate.
 
-Stacking too many treatments on the same cell (fill + bold + colored text + border) is reserved for genuine outliers. Otherwise pick one mechanism per cell.
+Combining mechanisms on the same cell (e.g. bold + colored text, or fill + bold for an outlier) is fine and counts as a single loud treatment as long as the cell answers one clear question. What you're budgeting is the number of distinct emphasis stories the table tells, not the number of CSS properties applied.
 
 ## Table Anatomy: When to Use Each Structural Element
 
@@ -783,6 +783,8 @@ gt = (
 
 **Never** loop row-by-row calling `tab_style` once per row. Collect row indices into lists first. For pass/fail and other binary status patterns, see *Scenario 4* in `references/color.md`.
 
+The ≥5-row trigger that gates `data_color` (see Table Anatomy) applies in spirit here too: mass-filling cells via `tab_style` on a 2–4 row table adds noise without communicating much. Use targeted highlights (one or two cells) instead.
+
 ## Structural Element Treatment
 
 Stub, totals rows, row group labels, and spanners are *structural* — they organize the table rather than carry primary values. They get their own restrained treatment so they don't compete with the data.
@@ -802,18 +804,17 @@ The total row carries the most important number(s) in the table — it must read
 
 - Bold text in the cells of the totals row.
 - A top border separating the total from the body rows.
-- A subtle row fill (light grey, or a deeper tint of the column's `data_color` if the column uses one).
-- If a column has `data_color` applied, the total cell may keep the same fill scale rather than be excluded.
+- A subtle row fill — light grey, or if the column uses `data_color`, let the same fill scale carry through the total cell rather than excluding it.
 
 Pick the combination that fits the table's overall color budget. The non-negotiable: the total must not look like just another body row.
 
 ### Row Group Labels
 
-When using `groupname_col`, the group label row already gains structural prominence from its placement. Add just enough on top to make groups scannable without overpowering the column headers or title:
+When using `groupname_col`, the group label row already gains structural prominence from its placement. Add just enough on top to make groups scannable without piling on:
 
 - Bold the group label.
-- Optionally add a subtle background fill (light grey or a very pale tint) to the label row.
-- Avoid strong fills or colored text — the group label is a wayfinding cue, not a value.
+- Optionally add a background fill — a light tint for a quiet treatment, or a stronger color if grouping is part of the table's story. A stronger fill counts toward the loud color budget.
+- Keep group labels from competing with the title or column headers visually.
 
 ### Spanner Labels
 
@@ -842,10 +843,10 @@ Use **bold text** and **colored text** deliberately to draw the reader's eye to 
 **When NOT to use:**
 - Don't bold every cell — if everything is bold, nothing is bold
 - Don't color text randomly — every colored cell should answer "why is this highlighted?"
-- Don't combine bold + color + fill on the same cell unless it's a critical outlier
-- Don't use more than 2-3 text colors in a single table
+- Don't use more than 2–3 text colors in a single table
 
-**Example — highlight extreme values:**
+**Example — highlight extreme values:** combining bold + colored text is appropriate here because the targets are *outliers* (a small fraction of rows). Do not apply this pattern to every row in a column.
+
 ```python
 gt = (
     gt
@@ -903,7 +904,7 @@ Use these as starting points, then override specific elements with `tab_style` o
 | Use default column names like `avg_rev_q1_ytd` | Relabel with `cols_label` to human-readable text |
 | Apply data_color without a domain | Set `domain=[min, max]` for consistency |
 | Create a table without a title | Always use `tab_header(title=...)` |
-| Use red/green for the only visual distinction | Ensure colorblind accessibility; use patterns or bold text alongside color |
+| Use red/green for the only visual distinction | Add a redundant encoding (bold weight, an icon, or a short text label) so the cell is readable without color |
 | Put source info in the title/subtitle | Use `tab_source_note` for citations |
 | Show >20 rows without grouping | Use `groupname_col` or limit to top-N with a note |
 

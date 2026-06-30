@@ -26,7 +26,7 @@ gt = (
 
 **Notes.**
 - Always compute `max_abs = max(abs(df["return"].min()), abs(df["return"].max()))` so the domain is symmetric and the neutral midpoint aligns with zero.
-- Do **not** also color text red/green on top of the fill — that's stacking two loud treatments on the same cell. Pick one.
+- Do **not** also color the text red/green on top of the fill — the text color encodes the same information as the fill (sign of value) and adds no new signal. Pick whichever reads more cleanly.
 - Use `force_sign=True` in `fmt_percent` / `fmt_number` so the `+`/`−` is part of the cell text.
 
 ---
