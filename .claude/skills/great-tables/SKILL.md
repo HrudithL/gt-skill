@@ -714,7 +714,7 @@ Stacking too many treatments on the same cell (fill + bold + colored text + bord
 | `tab_spanner` | 3+ columns share a logical parent (e.g., "Q1", "Performance") | Only 1–2 related columns |
 | `tab_source_note` | Data has a citable source or needs methodology notes | Data is self-evident or internal |
 | `cols_hide` | Columns were used for grouping, or are IDs/internals | Every column has display value |
-| `data_color` | Values encode a natural gradient (good→bad, low→high) | Data is categorical or has no natural order |
+| `data_color` | The column is a measure with a natural order **and** has ≥5 rows so the gradient is readable | Fewer than 5 rows, categorical data, or no natural order — the gradient carries no signal |
 
 ### Column Count Guidelines
 
@@ -723,6 +723,8 @@ Stacking too many treatments on the same cell (fill + bold + colored text + bord
 - **If more**: Consider splitting into multiple tables, hiding less important columns, or using spanners to create visual groups
 
 ## Color Palette Selection
+
+Before picking a palette, confirm `data_color` is the right call: see the trigger row in the Table Anatomy table above (column is an ordered measure **and** ≥5 rows). If either condition fails, skip `data_color` and rely on formatting + structure to tell the story.
 
 ### For Sequential Data (low → high)
 
