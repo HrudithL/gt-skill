@@ -776,6 +776,46 @@ gt = (
 
 **Never** loop row-by-row calling `tab_style` once per row. Collect row indices into lists first.
 
+## Structural Element Treatment
+
+Stub, totals rows, row group labels, and spanners are *structural* — they organize the table rather than carry primary values. They get their own restrained treatment so they don't compete with the data.
+
+### Stub Column
+
+The stub holds identifiers (names, dates, IDs), not measures. Keep it visually quiet:
+
+- **Do not** apply `data_color` to the stub.
+- **Do not** fill the stub aggressively (no strong background colors).
+- A subtle light-grey fill is acceptable as a "quiet" treatment to separate it from value columns — but only if the table needs that separation.
+- Bold is fine for emphasis if the row labels are the primary lookup key.
+
+### Totals / Summary Rows
+
+The total row carries the most important number(s) in the table — it must read as visually elevated. The exact mechanism is flexible (combine as needed):
+
+- Bold text in the cells of the totals row.
+- A top border separating the total from the body rows.
+- A subtle row fill (light grey, or a deeper tint of the column's `data_color` if the column uses one).
+- If a column has `data_color` applied, the total cell may keep the same fill scale rather than be excluded.
+
+Pick the combination that fits the table's overall color budget. The non-negotiable: the total must not look like just another body row.
+
+### Row Group Labels
+
+When using `groupname_col`, the group label row already gains structural prominence from its placement. Add just enough on top to make groups scannable without overpowering the column headers or title:
+
+- Bold the group label.
+- Optionally add a subtle background fill (light grey or a very pale tint) to the label row.
+- Avoid strong fills or colored text — the group label is a wayfinding cue, not a value.
+
+### Spanner Labels
+
+Spanners sit one level above column labels and cover multiple columns, so they should read as *at least as prominent* as the column labels beneath them — often slightly more so.
+
+- At minimum, match the column-label formatting (same font weight and size).
+- For tables where grouping is part of the story, the spanner can be slightly grander: a touch larger, bolder, or with a subtle background fill that ties together the columns it covers.
+- Do not let the spanner overpower the title.
+
 ## Typography & Spacing
 
 ### Bold and Color Text Emphasis
@@ -783,9 +823,9 @@ gt = (
 Use **bold text** and **colored text** deliberately to draw the reader's eye to what matters most. This is one of the most powerful tools for making a table scannable — but overuse destroys its impact.
 
 **When to use bold text (`style.text(weight="bold")`):**
-- Total/summary rows — the final "Total" or "Average" row should stand out
 - Key metrics — if the table's story centers on one number, bold it
 - Column headers or labels that need extra emphasis
+- (Totals, row group labels, and spanners have their own rules in *Structural Element Treatment* above.)
 
 **When to use colored text (`style.text(color=...)`):**
 - Positive/negative indicators — green for gains, red for losses (pair with bold for critical values)
