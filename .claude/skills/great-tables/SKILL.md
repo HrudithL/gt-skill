@@ -686,6 +686,8 @@ system_fonts("humanist")         # Font stacks: "humanist", "old-style", "transi
 
 Visual design principles and patterns for building polished, publication-ready tables.
 
+**Scenario recipes:** for concrete color treatments in common situations (financial signed-delta, ranking top-N, heatmap full-fill, status indicators, domain-clipping pitfalls, and when to add "quiet" polish), load `references/color.md`. The rules in this section are the source of truth; the reference file just shows them applied.
+
 ## Core Design Principles
 
 1. **Tables tell stories** — Every table should have a clear narrative. The title states the takeaway, the subtitle provides context, and the structure guides the reader's eye to what matters.
@@ -724,7 +726,7 @@ Stacking too many treatments on the same cell (fill + bold + colored text + bord
 
 ## Color Palette Selection
 
-Before picking a palette, confirm `data_color` is the right call: see the trigger row in the Table Anatomy table above (column is an ordered measure **and** ≥5 rows). If either condition fails, skip `data_color` and rely on formatting + structure to tell the story.
+Before picking a palette, confirm `data_color` is the right call: see the trigger row in the Table Anatomy table above (column is an ordered measure **and** ≥5 rows). If either condition fails, skip `data_color` and rely on formatting + structure to tell the story. For worked recipes (financial signed-delta, heatmap matrix, top-N highlight, status indicators), see `references/color.md`.
 
 ### For Sequential Data (low → high)
 
@@ -779,7 +781,7 @@ gt = (
 )
 ```
 
-**Never** loop row-by-row calling `tab_style` once per row. Collect row indices into lists first.
+**Never** loop row-by-row calling `tab_style` once per row. Collect row indices into lists first. For pass/fail and other binary status patterns, see *Scenario 4* in `references/color.md`.
 
 ## Structural Element Treatment
 
