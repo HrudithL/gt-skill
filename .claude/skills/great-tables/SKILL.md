@@ -728,11 +728,16 @@ Before picking a palette, confirm `data_color` is the right call: see the trigge
 
 ### For Sequential Data (low → high)
 
-Use single-hue palettes for magnitude:
-- `"Blues"` — neutral, professional
-- `"Greens"` — positive connotation (growth, success rates)
-- `"Reds"` or `"Oranges"` — attention/warning (error rates, risk)
-- `"Greys"` — subtle background emphasis
+Pick the palette by **semantic meaning**, not by aesthetic preference. Each single-hue palette carries a connotation that should match the data:
+
+- `"Greens"` — **positive direction**: growth, success rates, gains, things where "more is better."
+- `"Reds"` (or `"Oranges"`) — **warning/attention**: error rates, risk, defect counts, things where "more is worse."
+- `"Blues"` — **neutral measure**: volumes, counts, prices, populations — quantities with no inherent good/bad direction.
+
+Grey has two distinct uses; don't mix them up:
+
+- **Light grey** — an *accent* to break up an otherwise stark white canvas (e.g. a faint stub-column fill, a subtle row stripe, a tinted heading background). Quiet-tier polish, not data encoding.
+- **Darker grey** — *de-emphasis* for cells whose values you want to fade back (e.g. a helper column the reader can ignore unless they're checking the math). Use sparingly.
 
 ### For Diverging Data (negative ↔ positive)
 
