@@ -692,7 +692,16 @@ Visual design principles and patterns for building polished, publication-ready t
 2. **Less is more** — Hide internal columns, remove visual clutter, use whitespace. A table with 5 well-formatted columns beats one with 15 raw columns.
 3. **Format for meaning** — Formatting communicates data type instantly. Currency symbols say "money," percentage signs say "rate." Never show raw floats when a semantic formatter exists.
 4. **Group for comprehension** — Spanners and row groups create visual hierarchy. Use them when columns or rows share a logical parent category.
-5. **Color with purpose** — Data coloring should encode information (performance, rank, status), not decorate. Every colored cell should answer a question.
+5. **Color with purpose, on a budget** — Color should primarily *encode information* (value, category, status). Decorative color (zebra striping, subtle heading shades, tinted borders) is allowed but must stay restrained. See the budget below.
+
+### Color Budget
+
+Every table has a small budget for color. Distinguish two tiers and stay inside both:
+
+- **Loud treatments** (attention-drawing) — **1–3 per table maximum.** These actively pull the eye: `data_color` on a column, full-cell fills, strong text colors (red/green for signed values), highlighted outlier rows or cells. Each loud treatment should answer a specific question the reader has.
+- **Quiet treatments** (aesthetic polish) — **2–4 per table maximum.** These make the table feel professional without competing for attention: alternating row stripes, lightly tinted column-label backgrounds, colored separator borders, light-grey fills on structural rows (totals, group headers, stub). Use these to break up a blank white canvas, not to communicate.
+
+Stacking too many treatments on the same cell (fill + bold + colored text + border) is reserved for genuine outliers. Otherwise pick one mechanism per cell.
 
 ## Table Anatomy: When to Use Each Structural Element
 
