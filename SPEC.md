@@ -129,11 +129,11 @@ Two files, both kept small:
 
 **`design.md` starts effectively empty.** Like `SKILL.md` itself, it grows only when testing shows that without specific guidance the model produces poor aesthetic choices. A pre-populated `design.md` is the same anti-pattern as a bloated `SKILL.md`: speculation, not evidence.
 
-**Why no `patterns.md` or `recipes.md`:** rendered exemplars in `assets/examples/` cover the "what does a good X table look like" need more efficiently than a prose recipe file.
+**Why no `patterns.md` or `recipes.md`:** rendered exemplars in `examples/` cover the "what does a good X table look like" need more efficiently than a prose recipe file.
 
 ### Assets
 
-`assets/examples/` holds rendered images of well-made tables (with their source code alongside). These serve as visual exemplars — concrete demonstrations of what "good" looks like for various table archetypes. SKILL.md may reference these by filename when relevant.
+`examples/` holds rendered images of well-made tables (with their source code alongside), one archetype per subfolder. These serve as visual exemplars — concrete demonstrations of what "good" looks like for various table archetypes. SKILL.md may reference these by filename when relevant.
 
 ---
 
@@ -359,7 +359,7 @@ Compare with_skill vs without_skill: where did the skill help? where did it not 
         ↓
 Identify a RECURRING failure mode (not a one-off)
         ↓
-Add the minimum content to SKILL.md (or references/design.md, or assets/examples/)
+Add the minimum content to SKILL.md (or references/design.md, or examples/)
 that addresses that specific failure
         ↓
 Re-run the same prompts to verify improvement + check for regression elsewhere
