@@ -686,13 +686,24 @@ system_fonts("humanist")         # Font stacks: "humanist", "old-style", "transi
 
 Visual design principles and patterns for building polished, publication-ready tables.
 
+**Scenario recipes:** for concrete color treatments in common situations (financial signed-delta, ranking top-N, heatmap full-fill, status indicators, domain-clipping pitfalls, and when to add "quiet" polish), load `references/color.md`. The rules in this section are the source of truth; the reference file just shows them applied.
+
 ## Core Design Principles
 
 1. **Tables tell stories** — Every table should have a clear narrative. The title states the takeaway, the subtitle provides context, and the structure guides the reader's eye to what matters.
 2. **Less is more** — Hide internal columns, remove visual clutter, use whitespace. A table with 5 well-formatted columns beats one with 15 raw columns.
 3. **Format for meaning** — Formatting communicates data type instantly. Currency symbols say "money," percentage signs say "rate." Never show raw floats when a semantic formatter exists.
 4. **Group for comprehension** — Spanners and row groups create visual hierarchy. Use them when columns or rows share a logical parent category.
-5. **Color with purpose** — Data coloring should encode information (performance, rank, status), not decorate. Every colored cell should answer a question.
+5. **Color with purpose, on a budget** — Color should primarily *encode information* (value, category, status). Decorative color (zebra striping, subtle heading shades, tinted borders) is allowed but must stay restrained. See the budget below.
+
+### Color Budget
+
+Every table has a small budget for visual emphasis. "Treatment" here means any deliberate visual choice — cell fills, text color, bold/italic, font sizing, borders, row striping. Distinguish two tiers and stay inside both:
+
+- **Loud treatments** (attention-drawing) — **1–3 per table maximum.** These actively pull the eye to specific data: `data_color` on a column, full-cell fills, strong text colors (red/green for signed values), bold + colored text on outliers, highlighted rows. Each loud treatment should answer a specific question the reader has.
+- **Quiet treatments** (aesthetic polish) — **2–4 per table maximum.** These make the table feel professional without competing for attention: alternating row stripes, lightly tinted column-label backgrounds, colored separator borders, light-grey fills on structural rows (totals, group headers, stub), subtle font-size differences. Use these to break up a blank white canvas, not to communicate.
+
+Combining mechanisms on the same cell (e.g. bold + colored text, or fill + bold for an outlier) is fine and counts as a single loud treatment as long as the cell answers one clear question. What you're budgeting is the number of distinct emphasis stories the table tells, not the number of CSS properties applied.
 
 ## Table Anatomy: When to Use Each Structural Element
 
@@ -705,7 +716,7 @@ Visual design principles and patterns for building polished, publication-ready t
 | `tab_spanner` | 3+ columns share a logical parent (e.g., "Q1", "Performance") | Only 1–2 related columns |
 | `tab_source_note` | Data has a citable source or needs methodology notes | Data is self-evident or internal |
 | `cols_hide` | Columns were used for grouping, or are IDs/internals | Every column has display value |
-| `data_color` | Values encode a natural gradient (good→bad, low→high) | Data is categorical or has no natural order |
+| `data_color` | The column is a measure with a natural order **and** has ≥5 rows so the gradient is readable | Fewer than 5 rows, categorical data, or no natural order — the gradient carries no signal |
 
 ### Column Count Guidelines
 
@@ -715,13 +726,20 @@ Visual design principles and patterns for building polished, publication-ready t
 
 ## Color Palette Selection
 
+Before picking a palette, confirm `data_color` is the right call: see the trigger row in the Table Anatomy table above (column is an ordered measure **and** ≥5 rows). If either condition fails, skip `data_color` and rely on formatting + structure to tell the story. For worked recipes (financial signed-delta, heatmap matrix, top-N highlight, status indicators), see `references/color.md`.
+
 ### For Sequential Data (low → high)
 
-Use single-hue palettes for magnitude:
-- `"Blues"` — neutral, professional
-- `"Greens"` — positive connotation (growth, success rates)
-- `"Reds"` or `"Oranges"` — attention/warning (error rates, risk)
-- `"Greys"` — subtle background emphasis
+Pick the palette by **semantic meaning**, not by aesthetic preference. Each single-hue palette carries a connotation that should match the data:
+
+- `"Greens"` — **positive direction**: growth, success rates, gains, things where "more is better."
+- `"Reds"` (or `"Oranges"`) — **warning/attention**: error rates, risk, defect counts, things where "more is worse."
+- `"Blues"` — **neutral measure**: volumes, counts, prices, populations — quantities with no inherent good/bad direction.
+
+Grey has two distinct uses; don't mix them up:
+
+- **Light grey** — an *accent* to break up an otherwise stark white canvas (e.g. a faint stub-column fill, a subtle row stripe, a tinted heading background). Quiet-tier polish, not data encoding.
+- **Darker grey** — *de-emphasis* for cells whose values you want to fade back (e.g. a helper column the reader can ignore unless they're checking the math). Use sparingly.
 
 ### For Diverging Data (negative ↔ positive)
 
@@ -763,7 +781,48 @@ gt = (
 )
 ```
 
-**Never** loop row-by-row calling `tab_style` once per row. Collect row indices into lists first.
+**Never** loop row-by-row calling `tab_style` once per row. Collect row indices into lists first. For pass/fail and other binary status patterns, see *Scenario 4* in `references/color.md`.
+
+The ≥5-row trigger that gates `data_color` (see Table Anatomy) applies in spirit here too: mass-filling cells via `tab_style` on a 2–4 row table adds noise without communicating much. Use targeted highlights (one or two cells) instead.
+
+## Structural Element Treatment
+
+Stub, totals rows, row group labels, and spanners are *structural* — they organize the table rather than carry primary values. They get their own restrained treatment so they don't compete with the data.
+
+### Stub Column
+
+The stub holds identifiers (names, dates, IDs), not measures. Keep it visually quiet:
+
+- **Do not** apply `data_color` to the stub.
+- **Do not** fill the stub aggressively (no strong background colors).
+- A subtle light-grey fill is acceptable as a "quiet" treatment to separate it from value columns — but only if the table needs that separation.
+- Bold is fine for emphasis if the row labels are the primary lookup key.
+
+### Totals / Summary Rows
+
+The total row carries the most important number(s) in the table — it must read as visually elevated. The exact mechanism is flexible (combine as needed):
+
+- Bold text in the cells of the totals row.
+- A top border separating the total from the body rows.
+- A subtle row fill — light grey, or if the column uses `data_color`, let the same fill scale carry through the total cell rather than excluding it.
+
+Pick the combination that fits the table's overall color budget. The non-negotiable: the total must not look like just another body row.
+
+### Row Group Labels
+
+When using `groupname_col`, the group label row already gains structural prominence from its placement. Add just enough on top to make groups scannable without piling on:
+
+- Bold the group label.
+- Optionally add a background fill — a light tint for a quiet treatment, or a stronger color if grouping is part of the table's story. A stronger fill counts toward the loud color budget.
+- Keep group labels from competing with the title or column headers visually.
+
+### Spanner Labels
+
+Spanners sit one level above column labels and cover multiple columns, so they should read as *at least as prominent* as the column labels beneath them — often slightly more so.
+
+- At minimum, match the column-label formatting (same font weight and size).
+- For tables where grouping is part of the story, the spanner can be slightly grander: a touch larger, bolder, or with a subtle background fill that ties together the columns it covers.
+- Do not let the spanner overpower the title.
 
 ## Typography & Spacing
 
@@ -772,9 +831,9 @@ gt = (
 Use **bold text** and **colored text** deliberately to draw the reader's eye to what matters most. This is one of the most powerful tools for making a table scannable — but overuse destroys its impact.
 
 **When to use bold text (`style.text(weight="bold")`):**
-- Total/summary rows — the final "Total" or "Average" row should stand out
 - Key metrics — if the table's story centers on one number, bold it
 - Column headers or labels that need extra emphasis
+- (Totals, row group labels, and spanners have their own rules in *Structural Element Treatment* above.)
 
 **When to use colored text (`style.text(color=...)`):**
 - Positive/negative indicators — green for gains, red for losses (pair with bold for critical values)
@@ -784,10 +843,10 @@ Use **bold text** and **colored text** deliberately to draw the reader's eye to 
 **When NOT to use:**
 - Don't bold every cell — if everything is bold, nothing is bold
 - Don't color text randomly — every colored cell should answer "why is this highlighted?"
-- Don't combine bold + color + fill on the same cell unless it's a critical outlier
-- Don't use more than 2-3 text colors in a single table
+- Don't use more than 2–3 text colors in a single table
 
-**Example — highlight extreme values:**
+**Example — highlight extreme values:** combining bold + colored text is appropriate here because the targets are *outliers* (a small fraction of rows). Do not apply this pattern to every row in a column.
+
 ```python
 gt = (
     gt
@@ -845,7 +904,7 @@ Use these as starting points, then override specific elements with `tab_style` o
 | Use default column names like `avg_rev_q1_ytd` | Relabel with `cols_label` to human-readable text |
 | Apply data_color without a domain | Set `domain=[min, max]` for consistency |
 | Create a table without a title | Always use `tab_header(title=...)` |
-| Use red/green for the only visual distinction | Ensure colorblind accessibility; use patterns or bold text alongside color |
+| Use red/green for the only visual distinction | Add a redundant encoding (bold weight, an icon, or a short text label) so the cell is readable without color |
 | Put source info in the title/subtitle | Use `tab_source_note` for citations |
 | Show >20 rows without grouping | Use `groupname_col` or limit to top-N with a note |
 
