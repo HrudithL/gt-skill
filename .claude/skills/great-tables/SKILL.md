@@ -13,7 +13,7 @@ Build publication-ready display tables in Python using the `great_tables` packag
 2. **Understand the data** — Go beyond column names. Examine distributions, ranges, units, and relationships. Understand what makes the data valuable and what story it can tell before deciding how to present it.
 3. **Inspect the data** — Read a sample (head + dtypes + shape) to understand columns, types, nulls, scale, and units.
 4. **Plan the table** — Decide: which columns to show/hide, how to format each one, whether to use spanners, row groups, a header/subtitle, source notes, or data coloring. Consider what story the table tells.
-   - **Every table produced with this skill uses 1–2 Big Color treatments and 2–3 Small Color treatments.** These are the norm, not a maximum — a table without them is under-designed and should be revised before rendering.
+   - **Every finished table produced with this skill features exactly one or two Big Color treatments and either two or three Small Color treatments.** A table with zero of either tier, or with only one Small Color treatment, is under-designed and should be revised before rendering. The point is not decoration — the point is that the two tiers together are what distinguishes a publication-ready table from a raw data dump.
    - **Pick 1–2 Big Color techniques.** Scan the columns of the table you're about to build. Pick the row(s) of the table below whose "If your table will contain..." description matches your data best (one row is typical; two if the data legitimately has two independent stories), and `Read` the listed file(s) *now*, before writing `table.py`. The file is the source of truth for the mechanic (palette, domain, per-cell targeting) — applying color from memory has repeatedly produced wrong palettes and clipped domains. If nothing in the table looks like a strong match, pick the closest fit and use it at a restrained intensity; every table benefits from at least one attention anchor.
 
      | If your table will contain... | `Read`... |
@@ -27,7 +27,7 @@ Build publication-ready display tables in Python using the `great_tables` packag
      | One entire non-numeric column that should read as *the* column (labels, tags, categories) | `references/big_color/full_column_fill.md` |
      | An editorial/branded look where the column-label row needs to anchor the eye (many spanners, dashboard-style) | `references/big_color/column_label_emphasis.md` |
 
-   - **Pick 2–3 Small Color techniques for polish.** From the list below, pick 2–3 whose "when to use" cue matches the table's rough edges after Big Color is planned, and `Read` those files *now*. Every table benefits from a few quiet aesthetic moves — a bare white body with black text reads as unfinished.
+   - **Pick 2–3 Small Color techniques for polish.** From the list below, pick 2–3 whose "when to use" cue matches the table's rough edges after Big Color is planned, and `Read` those files *now*. Every table benefits from a few quiet aesthetic moves — a bare white body with black text reads as unfinished. If no single cue feels like a strong match, pick `row_striping.md` and `subtle_borders.md` as a safe default pair (they help virtually every table) and add a third based on the closest remaining cue.
 
      | Small Color file | Reach for it when... |
      |---|---|
@@ -39,7 +39,9 @@ Build publication-ready display tables in Python using the `great_tables` packag
      | `references/small_color/compact_padding.md` | The table has >15 rows (compact) or <5 columns in a large canvas (airy) |
      | `references/small_color/font_family_choice.md` | The default font's tone doesn't match the content (editorial vs technical) |
 
-5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`). Before calling `Write` for `table.py`, verify the plan includes 1–2 Big Color and 2–3 Small Color treatments drawn from the files loaded in Step 4. If the current plan is short on either tier, revise it now rather than shipping an under-designed table.
+   - **Pre-Write checklist.** Before moving to Step 5, write out (mentally or in a scratch message) two bullet lists: the 1–2 Big Color technique names you'll use, and the 2–3 Small Color technique names you'll use. If either list is short of the target count, extend it by picking the next-best-fit row from the table above. Do not proceed with 0 Big, 0 Small, or 1 Small.
+
+5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`). The final script should contain method calls that implement every technique on the Step 4 checklist — for example, one `data_color(...)` call (Big) plus `opt_row_striping()` and a `subtle_borders`-style `tab_options(...)` (Small) plus one more Small treatment. If a re-read of the script shows fewer method calls than the checklist promised, revise before running.
 6. **Render** — Every table script **must** end with `gt.gtsave("table.png")`. Do not substitute `gt.save()` (deprecated), do not save HTML, do not render with PIL/imgkit/wkhtmltoimage/Playwright/Selenium.
 7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, judge the result, and refine the script. Repeat until the table is correct and looks polished. Fix the root cause of any error — never swap in a fallback renderer.
 8. **Commit** — When satisfied, leave the final `table.py` and `table.png` in the working directory.
