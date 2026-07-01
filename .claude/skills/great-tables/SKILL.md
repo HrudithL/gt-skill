@@ -7,6 +7,17 @@ description: Use when building any `great_tables` table from a data file. Provid
 
 Build publication-ready display tables in Python using the `great_tables` package.
 
+## What a finished table looks like
+
+Every `table.py` produced with this skill ships with:
+
+- **Correct formatting** — one `fmt_*` per column matched to its semantic type (currency, percent, integer, date).
+- **A `tab_header(title=..., subtitle=...)`** — non-optional; the title states the takeaway.
+- **1–2 Big Color treatments** — attention-grabbing techniques from `references/big_color/` that encode the primary data story (`data_color`, per-cell `style.fill`, colored `style.text`, `column_labels_background_color`, etc.).
+- **2–3 Small Color treatments** — subtle polish from `references/small_color/` (row striping, subtle borders, stub tint, heading tint, compact padding, font choice, etc.).
+
+A rendered `table.png` missing any of the above — especially a table with zero Big Color, or with only `opt_row_striping()` as its sole Small Color — is under-designed. Revise `table.py` before considering the run complete.
+
 ## Workflow
 
 1. **Validate the request** — Before doing anything, check whether the provided data can fulfill the user's request. If the dataset does not contain relevant columns or rows for what the user is asking, **stop and tell the user** that the request cannot be fulfilled with the given data. Explain what is missing. Write a minimal `table.py` that produces a blank/empty table and save a blank `table.png`. Do not fabricate data or force an irrelevant table.
@@ -43,7 +54,12 @@ Build publication-ready display tables in Python using the `great_tables` packag
 
 5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`). The final script should contain method calls that implement every technique on the Step 4 checklist — for example, one `data_color(...)` call (Big) plus `opt_row_striping()` and a `subtle_borders`-style `tab_options(...)` (Small) plus one more Small treatment. If a re-read of the script shows fewer method calls than the checklist promised, revise before running.
 6. **Render** — Every table script **must** end with `gt.gtsave("table.png")`. Do not substitute `gt.save()` (deprecated), do not save HTML, do not render with PIL/imgkit/wkhtmltoimage/Playwright/Selenium.
-7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, judge the result, and refine the script. Repeat until the table is correct and looks polished. Fix the root cause of any error — never swap in a fallback renderer.
+7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, and audit the result against the *What a finished table looks like* section at the top of this skill:
+   - Count the Big Color treatments visible in the PNG (data-color fills, per-cell colored fills, colored bold text, dark column-label bands). If the count is 0, add one.
+   - Count the Small Color treatments visible in the PNG (row stripes, header/stub tints, subtle borders, padding changes, font swaps). If the count is 0 or 1, add another so the total lands in 2–3.
+   - Fix any rendering errors at the root; never swap in a fallback renderer.
+
+   Re-run and re-audit until the PNG matches the deliverable.
 8. **Commit** — When satisfied, leave the final `table.py` and `table.png` in the working directory.
 
 ## Understanding the Data
