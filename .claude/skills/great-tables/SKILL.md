@@ -13,6 +13,14 @@ Build publication-ready display tables in Python using the `great_tables` packag
 2. **Understand the data** — Go beyond column names. Examine distributions, ranges, units, and relationships. Understand what makes the data valuable and what story it can tell before deciding how to present it.
 3. **Inspect the data** — Read a sample (head + dtypes + shape) to understand columns, types, nulls, scale, and units.
 4. **Plan the table** — Decide: which columns to show/hide, how to format each one, whether to use spanners, row groups, a header/subtitle, source notes, or data coloring. Consider what story the table tells.
+   - **Mandatory reference load.** If ANY of the following are true about the data or plan, `Read` `references/color.md` before writing `table.py`:
+     - A column contains signed values (returns, P&L, budget variance, YoY change, deltas).
+     - A column is a percent-change / period-over-period comparison.
+     - The table is a top-N ranking or leaderboard.
+     - A column encodes a categorical status (pass/fail, on/off, ok/error, tier).
+     - The layout is a matrix / heatmap (rows × columns of comparable values).
+     - The table has ≥8 rows and any column is an ordered measure you're considering for `data_color`.
+   - Skip only if none of the above apply. The reference contains recipes with the exact palette, domain, and budget mechanics for each case; the inline rules alone are not enough to get these right consistently.
 5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`).
 6. **Render** — Every table script **must** end with `gt.gtsave("table.png")`. Do not substitute `gt.save()` (deprecated), do not save HTML, do not render with PIL/imgkit/wkhtmltoimage/Playwright/Selenium.
 7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, judge the result, and refine the script. Repeat until the table is correct and looks polished. Fix the root cause of any error — never swap in a fallback renderer.
