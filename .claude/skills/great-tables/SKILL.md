@@ -13,11 +13,21 @@ Build publication-ready display tables in Python using the `great_tables` packag
 2. **Understand the data** — Go beyond column names. Examine distributions, ranges, units, and relationships. Understand what makes the data valuable and what story it can tell before deciding how to present it.
 3. **Inspect the data** — Read a sample (head + dtypes + shape) to understand columns, types, nulls, scale, and units.
 4. **Plan the table** — Decide: which columns to show/hide, how to format each one, whether to use spanners, row groups, a header/subtitle, source notes, or data coloring. Consider what story the table tells.
-   - **Identify the table archetype.** Look at `examples/EXAMPLES.md` and decide which archetype your table most resembles (financial, time series, ranking, summary stats, scientific, heatmap). The archetype tells you what the reader is looking for and, therefore, what deserves visual emphasis.
-   - **Identify the critical data.** Ask: *what is the one column, row, or cell that this table exists to show?* That answer is the target of any Big Color treatment.
-   - **Choose a Big Color technique for the critical data.** Read `references/big_color/README.md`, pick the one (or two) technique(s) whose "When to use" section matches, then load only that specific file (e.g. `references/big_color/diverging_fill.md`) and follow its recipe. If nothing in the table warrants attention-grabbing color, skip Big Color entirely.
-   - **Choose Small Color for polish.** After Big Color is settled (or skipped), read `references/small_color/README.md` and pick 2–4 subtle techniques whose "When to use" sections match the table's remaining rough edges. Load only the specific files you need.
-   - The inline rules in the Design Guide below are the source of truth for budgets and principles; the reference files contain the exact code recipes and per-technique rules that are too much detail to keep here.
+   - **Big Color trigger table.** If any row below matches your data or plan, `Read` the listed file before writing `table.py` — the inline rules alone are not enough to get the color mechanics (palette, domain, per-cell targeting) right consistently. Read only the row(s) that match; if none match, skip Big Color entirely and a plain well-formatted table is likely correct.
+
+     | If the data/plan has... | Read... |
+     |---|---|
+     | Signed values (returns, P&L, YoY change, variance, deltas — any column with both negatives and positives that carry opposite meaning) | `references/big_color/diverging_fill.md` |
+     | An ordered numeric measure with ≥5 rows where relative magnitude is part of the story | `references/big_color/column_gradient_fill.md` |
+     | A heatmap / matrix layout (rows × columns of comparable values) | `references/big_color/column_gradient_fill.md` |
+     | A top-N ranking or a small set (1–3) of "winner" rows that need to dominate | `references/big_color/full_row_highlight.md` |
+     | A binary/categorical status column (pass/fail, on/off, ok/warn/error, tier) | `references/big_color/status_cell_fill.md` |
+     | A small number of outlier cells / threshold breaches that should pop out of an otherwise-quiet table | `references/big_color/bold_colored_number.md` |
+     | One entire non-numeric column that should read as *the* column (labels, tags, categories) | `references/big_color/full_column_fill.md` |
+     | An editorial/branded look where the column-label row needs to anchor the eye (many spanners, dashboard) | `references/big_color/column_label_emphasis.md` |
+
+     Each matched file is small and self-contained. `Read` it, apply its recipe, and move on. Never read the whole `references/big_color/` folder speculatively.
+   - **Small Color polish (optional).** Once the table renders and Big Color (if any) is settled, ask whether it feels unfinished — dense rows without stripes, stub blurring into data, stark white canvas. If yes, browse `references/small_color/README.md` for the index of subtle techniques and `Read` at most 1–2 specific files whose "When to use" matches. If the table already looks polished, skip Small Color.
 5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`).
 6. **Render** — Every table script **must** end with `gt.gtsave("table.png")`. Do not substitute `gt.save()` (deprecated), do not save HTML, do not render with PIL/imgkit/wkhtmltoimage/Playwright/Selenium.
 7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, judge the result, and refine the script. Repeat until the table is correct and looks polished. Fix the root cause of any error — never swap in a fallback renderer.
