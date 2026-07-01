@@ -13,9 +13,10 @@ Build publication-ready display tables in Python using the `great_tables` packag
 2. **Understand the data** — Go beyond column names. Examine distributions, ranges, units, and relationships. Understand what makes the data valuable and what story it can tell before deciding how to present it.
 3. **Inspect the data** — Read a sample (head + dtypes + shape) to understand columns, types, nulls, scale, and units.
 4. **Plan the table** — Decide: which columns to show/hide, how to format each one, whether to use spanners, row groups, a header/subtitle, source notes, or data coloring. Consider what story the table tells.
-   - **STOP — Big Color trigger check (do this before Step 5).** Scan the columns of the table you're about to build. For **every** row of the table below whose "If your table will contain..." description matches something in your dataframe, you **must** invoke the `Read` tool on the listed file *now*, before writing `table.py`. Applying color from memory (setting `data_color` palettes or `tab_style` fills without loading the file) has repeatedly produced wrong palettes and clipped domains — the file is the source of truth for the specific mechanic. If **no** row matches, skip this step entirely; a plain well-formatted table is often the right call.
+   - **Every table produced with this skill uses 1–2 Big Color treatments and 2–3 Small Color treatments.** These are the norm, not a maximum — a table without them is under-designed and should be revised before rendering.
+   - **Pick 1–2 Big Color techniques.** Scan the columns of the table you're about to build. Pick the row(s) of the table below whose "If your table will contain..." description matches your data best (one row is typical; two if the data legitimately has two independent stories), and `Read` the listed file(s) *now*, before writing `table.py`. The file is the source of truth for the mechanic (palette, domain, per-cell targeting) — applying color from memory has repeatedly produced wrong palettes and clipped domains. If nothing in the table looks like a strong match, pick the closest fit and use it at a restrained intensity; every table benefits from at least one attention anchor.
 
-     | If your table will contain... | You must `Read`... |
+     | If your table will contain... | `Read`... |
      |---|---|
      | A signed-values column: returns, P&L, YoY change, variance, deltas, monthly/quarterly/period-over-period percent-change — **any column that can be both negative and positive with opposite meaning** | `references/big_color/diverging_fill.md` |
      | An ordered numeric measure with ≥5 rows where relative magnitude is part of the story (volumes, counts, scores, prices, densities, populations) | `references/big_color/column_gradient_fill.md` |
@@ -26,9 +27,19 @@ Build publication-ready display tables in Python using the `great_tables` packag
      | One entire non-numeric column that should read as *the* column (labels, tags, categories) | `references/big_color/full_column_fill.md` |
      | An editorial/branded look where the column-label row needs to anchor the eye (many spanners, dashboard-style) | `references/big_color/column_label_emphasis.md` |
 
-     Multiple rows can match — Read all matched files (they're ~50 lines each). Never Read the whole `references/big_color/` folder speculatively.
-   - **Small Color polish (optional).** Once the table renders and any Big Color is settled, ask whether it feels unfinished — dense rows without stripes, stub blurring into data, stark white canvas. If yes, browse `references/small_color/README.md` for the index of subtle techniques and `Read` at most 1–2 specific files whose "When to use" matches. If the table already looks polished, skip Small Color.
-5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`). Before calling `Write` for `table.py`: if you plan to use `data_color`, `style.fill`, or `style.text(color=...)` **anywhere** in the script, verify the matching `references/big_color/*.md` file was already `Read` during this session. If not, `Read` it now and revise the plan against its recipe.
+   - **Pick 2–3 Small Color techniques for polish.** From the list below, pick 2–3 whose "when to use" cue matches the table's rough edges after Big Color is planned, and `Read` those files *now*. Every table benefits from a few quiet aesthetic moves — a bare white body with black text reads as unfinished.
+
+     | Small Color file | Reach for it when... |
+     |---|---|
+     | `references/small_color/row_striping.md` | The table has ≥10 body rows or is visually wide |
+     | `references/small_color/stub_tint.md` | You've set `rowname_col` and the stub blurs into the first value column |
+     | `references/small_color/heading_tint.md` | The column-label row is hard to distinguish from the body |
+     | `references/small_color/subtle_borders.md` | The default grid feels heavy, or a header/totals rule would help |
+     | `references/small_color/light_vertical_dividers.md` | The table has 2+ spanners or logical column groups |
+     | `references/small_color/compact_padding.md` | The table has >15 rows (compact) or <5 columns in a large canvas (airy) |
+     | `references/small_color/font_family_choice.md` | The default font's tone doesn't match the content (editorial vs technical) |
+
+5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`). Before calling `Write` for `table.py`, verify the plan includes 1–2 Big Color and 2–3 Small Color treatments drawn from the files loaded in Step 4. If the current plan is short on either tier, revise it now rather than shipping an under-designed table.
 6. **Render** — Every table script **must** end with `gt.gtsave("table.png")`. Do not substitute `gt.save()` (deprecated), do not save HTML, do not render with PIL/imgkit/wkhtmltoimage/Playwright/Selenium.
 7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, judge the result, and refine the script. Repeat until the table is correct and looks polished. Fix the root cause of any error — never swap in a fallback renderer.
 8. **Commit** — When satisfied, leave the final `table.py` and `table.png` in the working directory.
@@ -703,8 +714,8 @@ Visual design principles and patterns for building polished, publication-ready t
 
 **Technique recipes:** for the exact code and per-technique rules, use the two reference folders:
 
-- `references/big_color/` — attention-grabbing techniques that encode information (full column fill, gradient fill, diverging fill, bold+colored numbers, full-row highlight, column-label emphasis, status-cell fill). Start with its `README.md` and load only the specific technique file you need.
-- `references/small_color/` — subtle aesthetic techniques that don't encode information (row striping, stub tint, heading tint, subtle borders, light vertical dividers, compact padding, font family). Same pattern: start at `README.md`, load specific files as needed.
+- `references/big_color/` — attention-grabbing techniques that encode information: `full_column_fill.md`, `column_gradient_fill.md`, `diverging_fill.md`, `bold_colored_number.md`, `full_row_highlight.md`, `column_label_emphasis.md`, `status_cell_fill.md`. Load only the specific file(s) you need — the trigger table in Workflow Step 4 maps data patterns to the right file.
+- `references/small_color/` — subtle aesthetic techniques that don't encode information: `row_striping.md`, `stub_tint.md`, `heading_tint.md`, `subtle_borders.md`, `light_vertical_dividers.md`, `compact_padding.md`, `font_family_choice.md`. Load only the 2–3 you're actually going to apply — the Small Color list in Workflow Step 4 maps table-feel cues to the right file.
 
 The rules in this Design Guide are the source of truth for budgets and principles; the reference folders contain the concrete recipes.
 
@@ -714,36 +725,35 @@ The rules in this Design Guide are the source of truth for budgets and principle
 2. **Less is more** — Hide internal columns, remove visual clutter, use whitespace. A table with 5 well-formatted columns beats one with 15 raw columns.
 3. **Format for meaning** — Formatting communicates data type instantly. Currency symbols say "money," percentage signs say "rate." Never show raw floats when a semantic formatter exists.
 4. **Group for comprehension** — Spanners and row groups create visual hierarchy. Use them when columns or rows share a logical parent category.
-5. **Color with purpose, on a budget** — Split color decisions into Big (data emphasis) and Small (aesthetic polish). Big Color encodes information and stays within a 1–3 treatment budget; Small Color is subtle polish and stays within a 2–4 treatment budget. See the *Two Color Tiers* section immediately below.
+5. **Color with purpose, on a budget** — Split color decisions into Big (data emphasis) and Small (aesthetic polish). Every table produced with this skill uses 1–2 Big Color treatments and 2–3 Small Color treatments. See the *Two Color Tiers* section immediately below.
 
 ## Two Color Tiers: Big and Small
 
-Every visual choice in a table falls into one of two tiers. Keep them separate in your head and stay within both budgets.
+Every visual choice in a table falls into one of two tiers. Keep them separate in your head; the two tiers together define what makes a finished, publication-ready table.
 
 ### Big Color — data emphasis (Loud)
 
 Big Color techniques **encode information** and pull the reader to the specific data that matters. They answer a question the reader has: *which numbers are extreme? which row won? what's the trend across this row?*
 
-- **Budget: 1–3 Big Color treatments per table maximum.**
-- Every Big Color treatment should be tied to a specific piece of the data story. If you can't state the question it answers, cut it.
+- **Every table gets 1–2 Big Color treatments.** These are the norm, not a maximum — a table without any Big Color has no visual anchor and reads as unfinished. Two treatments is the ceiling; more than that and nothing stands out.
+- Every Big Color treatment should be tied to a specific piece of the data story. If you can't state the question it answers, pick a different technique.
 - Combining mechanisms on the same cell (fill + bold, or bold + colored text) counts as **one** Big Color treatment as long as the cell answers one question.
-- See `references/big_color/README.md` for the full technique catalog and per-technique rules.
+- The trigger table in Workflow Step 4 maps data patterns → the specific `references/big_color/*.md` file to load. Load the recipe file; do not apply color from memory.
 
 ### Small Color — aesthetic polish (Quiet)
 
 Small Color techniques **do not encode information**. They make the table feel finished — separating structure from data, breaking up a stark white canvas, matching tone to content.
 
-- **Budget: 2–4 Small Color treatments per table maximum.**
+- **Every table gets 2–3 Small Color treatments.** These are the norm, not a maximum — a bare white body with black text reads as unfinished, and more than three treatments crosses from polish into noise.
 - Good Small Color is barely noticeable in isolation. If a reader has to squint to see whether it's there, it's the right intensity.
 - Bad Small Color is saturated, high-contrast, or uses a hue that competes with a Big Color treatment already in the table.
-- See `references/small_color/README.md` for the generic principles of good vs bad aesthetic choices and the full technique catalog.
+- The Small Color list in Workflow Step 4 maps table-feel cues → the specific `references/small_color/*.md` file to load.
 
 ### How the two tiers interact
 
-1. Identify what matters most in the data — that's your Big Color target.
-2. Apply Big Color first (or decide none is warranted and skip it).
-3. Then look at the table with Big Color in place and ask what still feels unfinished — that's where Small Color goes.
-4. Never let Small Color use a hue that could be confused with a Big Color data encoding in the same table. If Big Color is green (positive measure), don't stripe rows with pale green.
+1. Identify what matters most in the data — that's your Big Color target. Pick 1–2 techniques from the trigger table in Step 4 and load their recipe files.
+2. Apply Big Color first, then look at the table with Big Color in place and ask what still feels unfinished — that's where Small Color goes. Pick 2–3 techniques from the Small Color list in Step 4.
+3. Never let Small Color use a hue that could be confused with a Big Color data encoding in the same table. If Big Color is green (positive measure), don't stripe rows with pale green.
 
 ## Table Anatomy: When to Use Each Structural Element
 
