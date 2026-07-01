@@ -13,14 +13,11 @@ Build publication-ready display tables in Python using the `great_tables` packag
 2. **Understand the data** — Go beyond column names. Examine distributions, ranges, units, and relationships. Understand what makes the data valuable and what story it can tell before deciding how to present it.
 3. **Inspect the data** — Read a sample (head + dtypes + shape) to understand columns, types, nulls, scale, and units.
 4. **Plan the table** — Decide: which columns to show/hide, how to format each one, whether to use spanners, row groups, a header/subtitle, source notes, or data coloring. Consider what story the table tells.
-   - **Mandatory reference load.** If ANY of the following are true about the data or plan, `Read` `references/color.md` before writing `table.py`:
-     - A column contains signed values (returns, P&L, budget variance, YoY change, deltas).
-     - A column is a percent-change / period-over-period comparison.
-     - The table is a top-N ranking or leaderboard.
-     - A column encodes a categorical status (pass/fail, on/off, ok/error, tier).
-     - The layout is a matrix / heatmap (rows × columns of comparable values).
-     - The table has ≥8 rows and any column is an ordered measure you're considering for `data_color`.
-   - Skip only if none of the above apply. The reference contains recipes with the exact palette, domain, and budget mechanics for each case; the inline rules alone are not enough to get these right consistently.
+   - **Identify the table archetype.** Look at `examples/EXAMPLES.md` and decide which archetype your table most resembles (financial, time series, ranking, summary stats, scientific, heatmap). The archetype tells you what the reader is looking for and, therefore, what deserves visual emphasis.
+   - **Identify the critical data.** Ask: *what is the one column, row, or cell that this table exists to show?* That answer is the target of any Big Color treatment.
+   - **Choose a Big Color technique for the critical data.** Read `references/big_color/README.md`, pick the one (or two) technique(s) whose "When to use" section matches, then load only that specific file (e.g. `references/big_color/diverging_fill.md`) and follow its recipe. If nothing in the table warrants attention-grabbing color, skip Big Color entirely.
+   - **Choose Small Color for polish.** After Big Color is settled (or skipped), read `references/small_color/README.md` and pick 2–4 subtle techniques whose "When to use" sections match the table's remaining rough edges. Load only the specific files you need.
+   - The inline rules in the Design Guide below are the source of truth for budgets and principles; the reference files contain the exact code recipes and per-technique rules that are too much detail to keep here.
 5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`).
 6. **Render** — Every table script **must** end with `gt.gtsave("table.png")`. Do not substitute `gt.save()` (deprecated), do not save HTML, do not render with PIL/imgkit/wkhtmltoimage/Playwright/Selenium.
 7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, judge the result, and refine the script. Repeat until the table is correct and looks polished. Fix the root cause of any error — never swap in a fallback renderer.
@@ -694,7 +691,12 @@ system_fonts("humanist")         # Font stacks: "humanist", "old-style", "transi
 
 Visual design principles and patterns for building polished, publication-ready tables.
 
-**Scenario recipes:** for concrete color treatments in common situations (financial signed-delta, ranking top-N, heatmap full-fill, status indicators, domain-clipping pitfalls, and when to add "quiet" polish), load `references/color.md`. The rules in this section are the source of truth; the reference file just shows them applied.
+**Technique recipes:** for the exact code and per-technique rules, use the two reference folders:
+
+- `references/big_color/` — attention-grabbing techniques that encode information (full column fill, gradient fill, diverging fill, bold+colored numbers, full-row highlight, column-label emphasis, status-cell fill). Start with its `README.md` and load only the specific technique file you need.
+- `references/small_color/` — subtle aesthetic techniques that don't encode information (row striping, stub tint, heading tint, subtle borders, light vertical dividers, compact padding, font family). Same pattern: start at `README.md`, load specific files as needed.
+
+The rules in this Design Guide are the source of truth for budgets and principles; the reference folders contain the concrete recipes.
 
 ## Core Design Principles
 
@@ -702,16 +704,36 @@ Visual design principles and patterns for building polished, publication-ready t
 2. **Less is more** — Hide internal columns, remove visual clutter, use whitespace. A table with 5 well-formatted columns beats one with 15 raw columns.
 3. **Format for meaning** — Formatting communicates data type instantly. Currency symbols say "money," percentage signs say "rate." Never show raw floats when a semantic formatter exists.
 4. **Group for comprehension** — Spanners and row groups create visual hierarchy. Use them when columns or rows share a logical parent category.
-5. **Color with purpose, on a budget** — Color should primarily *encode information* (value, category, status). Decorative color (zebra striping, subtle heading shades, tinted borders) is allowed but must stay restrained. See the budget below.
+5. **Color with purpose, on a budget** — Split color decisions into Big (data emphasis) and Small (aesthetic polish). Big Color encodes information and stays within a 1–3 treatment budget; Small Color is subtle polish and stays within a 2–4 treatment budget. See the *Two Color Tiers* section immediately below.
 
-### Color Budget
+## Two Color Tiers: Big and Small
 
-Every table has a small budget for visual emphasis. "Treatment" here means any deliberate visual choice — cell fills, text color, bold/italic, font sizing, borders, row striping. Distinguish two tiers and stay inside both:
+Every visual choice in a table falls into one of two tiers. Keep them separate in your head and stay within both budgets.
 
-- **Loud treatments** (attention-drawing) — **1–3 per table maximum.** These actively pull the eye to specific data: `data_color` on a column, full-cell fills, strong text colors (red/green for signed values), bold + colored text on outliers, highlighted rows. Each loud treatment should answer a specific question the reader has.
-- **Quiet treatments** (aesthetic polish) — **2–4 per table maximum.** These make the table feel professional without competing for attention: alternating row stripes, lightly tinted column-label backgrounds, colored separator borders, light-grey fills on structural rows (totals, group headers, stub), subtle font-size differences. Use these to break up a blank white canvas, not to communicate.
+### Big Color — data emphasis (Loud)
 
-Combining mechanisms on the same cell (e.g. bold + colored text, or fill + bold for an outlier) is fine and counts as a single loud treatment as long as the cell answers one clear question. What you're budgeting is the number of distinct emphasis stories the table tells, not the number of CSS properties applied.
+Big Color techniques **encode information** and pull the reader to the specific data that matters. They answer a question the reader has: *which numbers are extreme? which row won? what's the trend across this row?*
+
+- **Budget: 1–3 Big Color treatments per table maximum.**
+- Every Big Color treatment should be tied to a specific piece of the data story. If you can't state the question it answers, cut it.
+- Combining mechanisms on the same cell (fill + bold, or bold + colored text) counts as **one** Big Color treatment as long as the cell answers one question.
+- See `references/big_color/README.md` for the full technique catalog and per-technique rules.
+
+### Small Color — aesthetic polish (Quiet)
+
+Small Color techniques **do not encode information**. They make the table feel finished — separating structure from data, breaking up a stark white canvas, matching tone to content.
+
+- **Budget: 2–4 Small Color treatments per table maximum.**
+- Good Small Color is barely noticeable in isolation. If a reader has to squint to see whether it's there, it's the right intensity.
+- Bad Small Color is saturated, high-contrast, or uses a hue that competes with a Big Color treatment already in the table.
+- See `references/small_color/README.md` for the generic principles of good vs bad aesthetic choices and the full technique catalog.
+
+### How the two tiers interact
+
+1. Identify what matters most in the data — that's your Big Color target.
+2. Apply Big Color first (or decide none is warranted and skip it).
+3. Then look at the table with Big Color in place and ask what still feels unfinished — that's where Small Color goes.
+4. Never let Small Color use a hue that could be confused with a Big Color data encoding in the same table. If Big Color is green (positive measure), don't stripe rows with pale green.
 
 ## Table Anatomy: When to Use Each Structural Element
 
@@ -724,7 +746,7 @@ Combining mechanisms on the same cell (e.g. bold + colored text, or fill + bold 
 | `tab_spanner` | 3+ columns share a logical parent (e.g., "Q1", "Performance") | Only 1–2 related columns |
 | `tab_source_note` | Data has a citable source or needs methodology notes | Data is self-evident or internal |
 | `cols_hide` | Columns were used for grouping, or are IDs/internals | Every column has display value |
-| `data_color` | The column is a measure with a natural order **and** has ≥5 rows so the gradient is readable | Fewer than 5 rows, categorical data, or no natural order — the gradient carries no signal |
+| `data_color` | The column is a measure with a natural order **and** has ≥5 rows so the gradient is readable — see `references/big_color/column_gradient_fill.md` (or `diverging_fill.md` for signed values) | Fewer than 5 rows, categorical data, or no natural order — the gradient carries no signal |
 
 ### Column Count Guidelines
 
@@ -734,9 +756,9 @@ Combining mechanisms on the same cell (e.g. bold + colored text, or fill + bold 
 
 ## Color Palette Selection
 
-Before picking a palette, confirm `data_color` is the right call: see the trigger row in the Table Anatomy table above (column is an ordered measure **and** ≥5 rows). If either condition fails, skip `data_color` and rely on formatting + structure to tell the story. For worked recipes (financial signed-delta, heatmap matrix, top-N highlight, status indicators), see `references/color.md`.
+The palette guidance below applies to whichever Big Color technique you've chosen. Before picking a palette, confirm the technique itself is warranted (see `references/big_color/README.md`); the palette is a *how*, not a *whether*.
 
-### For Sequential Data (low → high)
+### For Sequential Data (low → high) — used by `column_gradient_fill`
 
 Pick the palette by **semantic meaning**, not by aesthetic preference. Each single-hue palette carries a connotation that should match the data:
 
@@ -746,35 +768,36 @@ Pick the palette by **semantic meaning**, not by aesthetic preference. Each sing
 
 Grey has two distinct uses; don't mix them up:
 
-- **Light grey** — an *accent* to break up an otherwise stark white canvas (e.g. a faint stub-column fill, a subtle row stripe, a tinted heading background). Quiet-tier polish, not data encoding.
-- **Darker grey** — *de-emphasis* for cells whose values you want to fade back (e.g. a helper column the reader can ignore unless they're checking the math). Use sparingly.
+- **Light grey** — a Small Color *accent* to break up an otherwise stark white canvas (stub tint, row stripe, heading tint). Never a data encoding.
+- **Darker grey** — Big Color *de-emphasis* for cells whose values you want to fade back (e.g. a helper column the reader can ignore unless they're checking the math). Use sparingly.
 
-### For Diverging Data (negative ↔ positive)
+### For Diverging Data (negative ↔ positive) — used by `diverging_fill`
 
 Use two-hue palettes centered on a neutral midpoint:
 - `"RdYlGn"` — red=bad, green=good
 - `"RdBu"` — red vs blue (anomalies, sentiment)
 - `"PuOr"` — purple vs orange (balanced, colorblind-safe)
 
-**Critical: domain range must cover your actual data.** Set `domain=` to span the full range of values in your data (or a symmetric range around zero for diverging palettes). If your data ranges from -30% to +40%, use `domain=[-40, 40]` — not `domain=[-20, 30]` which clips extreme values to the same color as boundary values, making them invisible.
+**Critical: domain range must cover your actual data.** Set `domain=` to span the full range of values (or a symmetric range around zero for diverging palettes). If your data ranges from -30% to +40%, use `domain=[-40, 40]` — not `domain=[-20, 30]`, which clips extreme values to the boundary color and makes them invisible.
 
-**Always set `truncate=False`** (the default) so out-of-range values still get the most extreme color in the palette rather than disappearing. Values outside the domain should be **more** visually prominent, not less.
+**Always leave `truncate=False`** (the default) so out-of-range values still get the most extreme palette color rather than disappearing.
 
 **Prefer symmetric domains** for diverging data (e.g., `[-30, 30]` not `[-20, 30]`) so the neutral midpoint aligns with zero.
 
-### For Categorical Data
+### For Categorical Data — used by `status_cell_fill`
 
 Use qualitative palettes (no implied order):
 - `"Set2"` — muted, colorblind-friendly
 - `"Dark2"` — bold, high contrast
 - `"Paired"` — for paired categories
 
-### Manual Conditional Styling
+### Explicit two-state fills
 
-For binary good/bad indicators, use explicit colors with `tab_style`:
+For binary good/bad indicators, use explicit colors with `tab_style` (this is the recipe pattern used by `references/big_color/status_cell_fill.md` and `references/big_color/bold_colored_number.md`):
+
 ```python
-positive_rows = df[df["value"] >= 0].index.tolist()
-negative_rows = df[df["value"] < 0].index.tolist()
+positive_rows = df.index[df["value"] >= 0].tolist()
+negative_rows = df.index[df["value"] < 0].tolist()
 
 gt = (
     gt
@@ -789,9 +812,9 @@ gt = (
 )
 ```
 
-**Never** loop row-by-row calling `tab_style` once per row. Collect row indices into lists first. For pass/fail and other binary status patterns, see *Scenario 4* in `references/color.md`.
+**Never** loop row-by-row calling `tab_style` once per row. Collect row indices into lists first.
 
-The ≥5-row trigger that gates `data_color` (see Table Anatomy) applies in spirit here too: mass-filling cells via `tab_style` on a 2–4 row table adds noise without communicating much. Use targeted highlights (one or two cells) instead.
+The ≥5-row trigger that gates `column_gradient_fill` and `diverging_fill` applies in spirit here too: mass-filling cells via `tab_style` on a 2–4 row table adds noise without communicating much. Use targeted highlights (one or two cells) via `bold_colored_number` instead.
 
 ## Structural Element Treatment
 
@@ -801,9 +824,9 @@ Stub, totals rows, row group labels, and spanners are *structural* — they orga
 
 The stub holds identifiers (names, dates, IDs), not measures. Keep it visually quiet:
 
-- **Do not** apply `data_color` to the stub.
+- **Do not** apply `data_color` or any Big Color fill to the stub.
 - **Do not** fill the stub aggressively (no strong background colors).
-- A subtle light-grey fill is acceptable as a "quiet" treatment to separate it from value columns — but only if the table needs that separation.
+- A subtle light-grey fill (see `references/small_color/stub_tint.md`) is acceptable Small Color polish to separate the stub from value columns — but only if the table needs that separation.
 - Bold is fine for emphasis if the row labels are the primary lookup key.
 
 ### Totals / Summary Rows
@@ -811,8 +834,8 @@ The stub holds identifiers (names, dates, IDs), not measures. Keep it visually q
 The total row carries the most important number(s) in the table — it must read as visually elevated. The exact mechanism is flexible (combine as needed):
 
 - Bold text in the cells of the totals row.
-- A top border separating the total from the body rows.
-- A subtle row fill — light grey, or if the column uses `data_color`, let the same fill scale carry through the total cell rather than excluding it.
+- A top border separating the total from the body rows (see `references/small_color/subtle_borders.md`).
+- A subtle row fill — light grey, or if the column uses `column_gradient_fill`, let the same fill scale carry through the total cell rather than excluding it.
 
 Pick the combination that fits the table's overall color budget. The non-negotiable: the total must not look like just another body row.
 
@@ -821,7 +844,7 @@ Pick the combination that fits the table's overall color budget. The non-negotia
 When using `groupname_col`, the group label row already gains structural prominence from its placement. Add just enough on top to make groups scannable without piling on:
 
 - Bold the group label.
-- Optionally add a background fill — a light tint for a quiet treatment, or a stronger color if grouping is part of the table's story. A stronger fill counts toward the loud color budget.
+- Optionally add a background fill — a light tint counts as Small Color polish; a stronger, saturated fill counts as a Big Color treatment against the 1–3 budget and should be reserved for tables where grouping is *the* story.
 - Keep group labels from competing with the title or column headers visually.
 
 ### Spanner Labels
@@ -836,7 +859,7 @@ Spanners sit one level above column labels and cover multiple columns, so they s
 
 ### Bold and Color Text Emphasis
 
-Use **bold text** and **colored text** deliberately to draw the reader's eye to what matters most. This is one of the most powerful tools for making a table scannable — but overuse destroys its impact.
+Use **bold text** and **colored text** deliberately to draw the reader's eye to what matters most. This is one of the most powerful Big Color tools; the exact recipe lives in `references/big_color/bold_colored_number.md`.
 
 **When to use bold text (`style.text(weight="bold")`):**
 - Key metrics — if the table's story centers on one number, bold it
@@ -852,22 +875,7 @@ Use **bold text** and **colored text** deliberately to draw the reader's eye to 
 - Don't bold every cell — if everything is bold, nothing is bold
 - Don't color text randomly — every colored cell should answer "why is this highlighted?"
 - Don't use more than 2–3 text colors in a single table
-
-**Example — highlight extreme values:** combining bold + colored text is appropriate here because the targets are *outliers* (a small fraction of rows). Do not apply this pattern to every row in a column.
-
-```python
-gt = (
-    gt
-    .tab_style(
-        style=style.text(weight="bold", color="#d32f2f"),
-        locations=loc.body(columns="value", rows=large_negative_rows)
-    )
-    .tab_style(
-        style=style.text(weight="bold", color="#2e7d32"),
-        locations=loc.body(columns="value", rows=large_positive_rows)
-    )
-)
-```
+- Don't stack colored text on top of a `column_gradient_fill` or `diverging_fill` — pick one Big Color mechanism per column
 
 ### Font Choices
 
