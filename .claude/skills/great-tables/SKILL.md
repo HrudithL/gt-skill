@@ -16,7 +16,15 @@ Every `table.py` produced with this skill ships with:
 - **1–2 Big Color treatments** — attention-grabbing techniques from `references/big_color/` that encode the primary data story (`data_color`, per-cell `style.fill`, colored `style.text`, `column_labels_background_color`, etc.).
 - **2–3 Small Color treatments** — subtle polish from `references/small_color/` (row striping, subtle borders, stub tint, heading tint, compact padding, font choice, etc.).
 
-A rendered `table.png` missing any of the above — especially a table with zero Big Color, or with only `opt_row_striping()` as its sole Small Color — is under-designed. Revise `table.py` before considering the run complete.
+### Under-designed tables (do not ship)
+
+A `table.png` fitting **any** of these descriptions is under-designed and needs another Write-and-render pass:
+
+- Zero Big Color — no `data_color`, no `tab_style` with colored fills or colored text, no `column_labels_background_color`.
+- Only `opt_row_striping()` for Small Color — stripes alone are one treatment, not two. Add at least a `subtle_borders`-style `tab_options(...)` (e.g., `column_labels_border_bottom_color`, `table_body_hlines_color`) and ideally a third from the Small Color list.
+- Big Color present, but no attention-grabbing fill actually touches the column the reader cares about most.
+
+If the rendered PNG hits any of the above, treat the run as incomplete: revise `table.py`, re-render, re-audit.
 
 ## Workflow
 
