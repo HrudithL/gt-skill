@@ -1,6 +1,6 @@
 ---
 name: great-tables
-description: Use when building any `great_tables` table from a data file. Provides API reference, design patterns, the render-to-PNG workflow, and modular color-recipe references under `references/big_color/` (diverging fills, gradient fills, ranking highlights, status fills, etc.) and `references/small_color/` (row striping, stub tint, borders, etc.) that must be loaded on-demand when specific data patterns appear. Load before writing code.
+description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Provides the full API reference, mandatory rendering workflow (`gt.gtsave("table.png")` with a headless-Chrome sidecar), design deliverables (1–2 Big Color + 2–3 Small Color treatments per table), and modular color-recipe references under `references/big_color/` (diverging, gradient, ranking, status, outlier, column-label, full-column fills) and `references/small_color/` (row striping, stub tint, heading tint, subtle borders, vertical dividers, padding, fonts). Invoke this skill before reading the data or writing any Python — the workflow and deliverables shape the whole script.
 ---
 
 # Great Tables Skill
