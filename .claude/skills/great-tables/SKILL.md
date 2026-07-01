@@ -13,22 +13,22 @@ Build publication-ready display tables in Python using the `great_tables` packag
 2. **Understand the data** — Go beyond column names. Examine distributions, ranges, units, and relationships. Understand what makes the data valuable and what story it can tell before deciding how to present it.
 3. **Inspect the data** — Read a sample (head + dtypes + shape) to understand columns, types, nulls, scale, and units.
 4. **Plan the table** — Decide: which columns to show/hide, how to format each one, whether to use spanners, row groups, a header/subtitle, source notes, or data coloring. Consider what story the table tells.
-   - **Big Color trigger table.** If any row below matches your data or plan, `Read` the listed file before writing `table.py` — the inline rules alone are not enough to get the color mechanics (palette, domain, per-cell targeting) right consistently. Read only the row(s) that match; if none match, skip Big Color entirely and a plain well-formatted table is likely correct.
+   - **Big Color trigger check.** Before you proceed to Step 5, scan the table you're about to build against the rows below. For every row that matches, `Read` the listed file first — the inline rules alone are not enough to get the color mechanics (palette, domain, per-cell targeting) right. If **no** row matches, skip Big Color entirely; a plain well-formatted table is often correct.
 
-     | If the data/plan has... | Read... |
+     | If your table will contain... | You must Read... |
      |---|---|
-     | Signed values (returns, P&L, YoY change, variance, deltas — any column with both negatives and positives that carry opposite meaning) | `references/big_color/diverging_fill.md` |
-     | An ordered numeric measure with ≥5 rows where relative magnitude is part of the story | `references/big_color/column_gradient_fill.md` |
-     | A heatmap / matrix layout (rows × columns of comparable values) | `references/big_color/column_gradient_fill.md` |
-     | A top-N ranking or a small set (1–3) of "winner" rows that need to dominate | `references/big_color/full_row_highlight.md` |
-     | A binary/categorical status column (pass/fail, on/off, ok/warn/error, tier) | `references/big_color/status_cell_fill.md` |
+     | A signed-values column: returns, P&L, YoY change, variance, deltas, monthly/quarterly/period-over-period percent-change — **any column with both negatives and positives that carry opposite meaning** | `references/big_color/diverging_fill.md` |
+     | An ordered numeric measure with ≥5 rows where relative magnitude is part of the story (volumes, counts, scores, prices, densities) | `references/big_color/column_gradient_fill.md` |
+     | A heatmap / matrix layout (rows × columns of comparable values on one scale) | `references/big_color/column_gradient_fill.md` |
+     | A top-N ranking or a small set (1–3) of "winner" rows that need to dominate the table | `references/big_color/full_row_highlight.md` |
+     | A binary/categorical status column (pass/fail, on/off, ok/warn/error, tier A/B/C) | `references/big_color/status_cell_fill.md` |
      | A small number of outlier cells / threshold breaches that should pop out of an otherwise-quiet table | `references/big_color/bold_colored_number.md` |
      | One entire non-numeric column that should read as *the* column (labels, tags, categories) | `references/big_color/full_column_fill.md` |
-     | An editorial/branded look where the column-label row needs to anchor the eye (many spanners, dashboard) | `references/big_color/column_label_emphasis.md` |
+     | An editorial/branded look where the column-label row needs to anchor the eye (many spanners, dashboard-style) | `references/big_color/column_label_emphasis.md` |
 
-     Each matched file is small and self-contained. `Read` it, apply its recipe, and move on. Never read the whole `references/big_color/` folder speculatively.
-   - **Small Color polish (optional).** Once the table renders and Big Color (if any) is settled, ask whether it feels unfinished — dense rows without stripes, stub blurring into data, stark white canvas. If yes, browse `references/small_color/README.md` for the index of subtle techniques and `Read` at most 1–2 specific files whose "When to use" matches. If the table already looks polished, skip Small Color.
-5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`).
+     Each matched file is small (≈50 lines) and self-contained: read it, apply its recipe, move on. Never read the whole `references/big_color/` folder speculatively — only the specific rows that matched above.
+   - **Small Color polish (optional).** Once the table renders and any Big Color is settled, ask whether it feels unfinished — dense rows without stripes, stub blurring into data, stark white canvas. If yes, browse `references/small_color/README.md` for the index of subtle techniques and `Read` at most 1–2 specific files whose "When to use" matches. If the table already looks polished, skip Small Color.
+5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`). Before you call `Write` for `table.py`, confirm the Big Color trigger check from Step 4 has been honored: if any trigger row matched your table, the corresponding `references/big_color/*.md` file must already have been `Read` during this session.
 6. **Render** — Every table script **must** end with `gt.gtsave("table.png")`. Do not substitute `gt.save()` (deprecated), do not save HTML, do not render with PIL/imgkit/wkhtmltoimage/Playwright/Selenium.
 7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, judge the result, and refine the script. Repeat until the table is correct and looks polished. Fix the root cause of any error — never swap in a fallback renderer.
 8. **Commit** — When satisfied, leave the final `table.py` and `table.png` in the working directory.
