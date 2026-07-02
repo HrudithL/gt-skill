@@ -802,7 +802,7 @@ Small Color techniques **do not encode information**. They make the table feel f
 
 ## Color Palette Selection
 
-The palette guidance below applies to whichever Big Color technique you've chosen. Before picking a palette, confirm the technique itself is warranted (see `references/big_color/README.md`); the palette is a *how*, not a *whether*.
+The palette guidance below applies to whichever Big Color technique you've chosen. Before picking a palette, confirm the technique itself is warranted (see the Big Color trigger table in Workflow Step 4); the palette is a *how*, not a *whether*.
 
 ### For Sequential Data (low → high) — used by `column_gradient_fill`
 
