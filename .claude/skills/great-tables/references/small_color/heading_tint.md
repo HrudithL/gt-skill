@@ -27,9 +27,9 @@ gt = (
 
 ## Rules
 
-- **Near-white tint only.** If the tint is clearly a color, it's Big Color — either commit to `column_label_emphasis.md` or back off.
+- **Near-white tint only** — pale grey, or a very light tint of a color already used elsewhere in the table (e.g. `#eef3fa` for a blue-themed table, `#eef7ee` for a green-themed one). If the tint is clearly a mid-saturation color, it's Big Color — either commit to `column_label_emphasis.md` or back off.
 - **Bold font weight is fine** and often improves readability; it doesn't count against the color budget.
-- **Add a slightly-darker bottom border** under the header at the same time — the border + tint pair gives the header a "seat" without needing a strong fill.
+- **Add a slightly-darker bottom border** under the header at the same time — the border + tint pair gives the header a "seat" without needing a strong fill. If the tint is a color, use a slightly-darker shade of the same hue for the border.
 - **Do not** also tint the stub, source note, and totals row with different pale shades. Pick one polish move and let it echo elsewhere (e.g., stub tint uses the *same* near-white as the header tint, not a different one).
 
 ## Counts as
