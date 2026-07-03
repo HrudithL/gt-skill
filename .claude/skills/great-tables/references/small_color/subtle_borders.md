@@ -41,7 +41,7 @@ gt = gt.tab_style(
 
 ## Rules
 
-- **Grey, not colored.** Borders in a brand hue read as decorative and count as louder. Stay in the `#c7ccd3`–`#e5e7eb` grey range for body/header lines.
+- **Low-saturation, not necessarily grey.** Neutral greys (`#c7ccd3`–`#e5e7eb`) are the safe default. A muted tint of a color already used elsewhere in the table (e.g. a light blue border on a blue-themed table, matching what `opt_stylize(color="blue")` produces) is also fine — it makes the chrome feel intentional rather than applied on top. Avoid mid-saturation or brand-primary borders; those are Big Color territory.
 - **1px, occasionally 1.5px.** Anything thicker than 2px is Big Color territory and should be justified by structure (e.g., separating body from totals).
 - **Prefer removing borders over adding them** if the table already has enough structure — e.g., set `table_body_hlines_style="none"` for tables with clear row striping.
 - **Consistency**: if you set body hlines to a specific grey, use the same grey (or one shade darker) for the header underline. Do not mix unrelated grey values.
