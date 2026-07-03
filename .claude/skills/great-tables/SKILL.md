@@ -1,6 +1,6 @@
 ---
 name: great-tables
-description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Provides the full API reference, mandatory rendering workflow (`gt.gtsave("table.png")` with a headless-Chrome sidecar), design deliverables (1–2 Big Color + 2–3 Small Color treatments per table), and modular color-recipe references under `references/big_color/` (diverging, gradient, ranking, status, outlier, column-label, full-column fills) and `references/small_color/` (row striping, stub tint, heading tint, subtle borders, vertical dividers, padding, fonts). Invoke this skill before reading the data or writing any Python — the workflow and deliverables shape the whole script.
+description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Provides the full API reference, mandatory rendering workflow (`gt.gtsave("table.png")` with a headless-Chrome sidecar), design deliverables (1–2 Big Color + 2–3 Small Color treatments per table), and modular color-recipe references under `references/big_color/` (diverging, gradient, ranking, status, outlier, column-label, full-column fills) and `references/small_color/` (themed `opt_stylize` baseline, row-group emphasis, row striping, stub tint, heading tint, subtle borders, vertical dividers, padding, fonts). Invoke this skill before reading the data or writing any Python — the workflow and deliverables shape the whole script.
 ---
 
 # Great Tables Skill
@@ -23,6 +23,8 @@ A `table.png` fitting **any** of these descriptions is under-designed and needs 
 - Zero Big Color — no `data_color`, no `tab_style` with colored fills or colored text, no `column_labels_background_color`.
 - Only `opt_row_striping()` for Small Color — stripes alone are one treatment, not two. Add at least a `subtle_borders`-style `tab_options(...)` (e.g., `column_labels_border_bottom_color`, `table_body_hlines_color`) and ideally a third from the Small Color list.
 - Big Color present, but no attention-grabbing fill actually touches the column the reader cares about most.
+- **Row groups sitting as unstyled plain text.** If the table uses `groupname_col=` and the group labels ("Italy", "United Kingdom", …) render as bare text between body rows, the sectioning is lost. Add `row_group_background_color` + `row_group_font_weight="bold"` (see `references/small_color/row_group_emphasis.md`).
+- **Structural chrome is entirely colorless.** If the only color in the PNG is a single `data_color` cell (or nothing at all), the surrounding table — header, borders, group breaks, stripes — reads as a raw dump. Add a themed baseline via `references/small_color/themed_stylize.md` (`opt_stylize(...)`) or hand-tune a colored column-label band (`references/big_color/column_label_emphasis.md`) so the frame supports the data.
 
 If the rendered PNG hits any of the above, treat the run as incomplete: revise `table.py`, re-render, re-audit.
 
@@ -50,6 +52,8 @@ If the rendered PNG hits any of the above, treat the run as incomplete: revise `
 
      | Small Color file | Reach for it when... |
      |---|---|
+     | `references/small_color/themed_stylize.md` | The table is a categorical/textual grid with no obvious numeric heatmap column — you want a cohesive colored baseline (header band + stripes + light dividers) from `opt_stylize(...)` in one call |
+     | `references/small_color/row_group_emphasis.md` | The table uses `groupname_col=` — the group labels must be shaded and bold, otherwise they blend into the body (this is the single most common cause of a "boring" table with real structure) |
      | `references/small_color/row_striping.md` | The table has ≥10 body rows or is visually wide |
      | `references/small_color/stub_tint.md` | You've set `rowname_col` and the stub blurs into the first value column |
      | `references/small_color/heading_tint.md` | The column-label row is hard to distinguish from the body |
@@ -212,7 +216,7 @@ Keep tables **concise by default**. A long table is not a better table — it is
 ## Table Structure Decisions
 
 - **`rowname_col`** — Use when a column has unique row identifiers (names, IDs, dates). Creates a stub with a vertical divider.
-- **`groupname_col`** — Use when a column has categorical values that naturally group rows (region, category, year).
+- **`groupname_col`** — Use when a column has categorical values that naturally group rows (region, category, year). **Always pair with `row_group_background_color` + `row_group_font_weight="bold"`** — see `references/small_color/row_group_emphasis.md`. An unstyled group header sits between body rows and destroys the sectioning it was meant to create.
 - **`tab_spanner`** — Use to group related columns under a shared label (e.g., "Performance" over hp/torque/mpg columns).
 - **`cols_hide`** — Remove columns used only for grouping or internal IDs from the display.
 - **`cols_label`** — Always relabel programmatic column names (e.g., `avg_revenue` → `"Avg. Revenue"`).
