@@ -20,11 +20,8 @@ top_rows = df.nsmallest(3, "rank").index.tolist()   # rank=1 is best
 gt = (
     GT(df, rowname_col="rank")
     .tab_style(
-        style=style.fill(color="#fff4cc"),          # warm pale highlight
-        locations=loc.body(rows=top_rows),
-    )
-    .tab_style(
-        style=style.text(weight="bold"),
+        style=[style.fill(color="#9A7B33"),          # Dark Academia solid (Ochre = premium/awards)
+               style.text(color="#ffffff", weight="bold")],   # white text on the solid
         locations=loc.body(rows=top_rows),
     )
 )
@@ -33,8 +30,7 @@ gt = (
 ## Rules
 
 - **Fill spans all columns** in the body — omit `columns=` in `loc.body()` so the whole row gets the fill.
-- **Pale fill** so body text still reads on top. Saturated fills turn the row into a banner and swamp the data.
-- **Warm pale (yellow/gold/peach)** reads best as "featured" without implying good/bad. Use red-pale only if the highlighted row means "bad" (a violation, a losing entry).
+- **A solid Dark Academia hex with white text** (this is a non-gradient Big Color). Ochre `#9A7B33` reads as "featured / winner / premium"; use Oxblood `#5C2E2E` when the highlighted row means "bad" (a violation, a losing entry); Navy `#22384F` is the neutral default. Pick the hue per the DA hue-selection rule in `references/palettes.md` §1. Never a pale/washed tint here — that quiet tint is a Small-Color surface, not a Big-Color highlight.
 - **Do not** stack a full-row highlight on top of a column gradient or diverging fill — the two treatments compete and cancel out. Pick one.
 - **≤30% of rows.** More than that and you're not highlighting, you're recoloring the table.
 
