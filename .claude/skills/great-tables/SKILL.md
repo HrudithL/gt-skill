@@ -1,976 +1,225 @@
 ---
 name: great-tables
-description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Provides the full API reference, mandatory rendering workflow (`gt.gtsave("table.png")` with a headless-Chrome sidecar), design deliverables (1–2 Big Color + 2–3 Small Color treatments per table), and modular color-recipe references under `references/big_color/` (diverging, gradient, ranking, status, outlier, column-label, full-column fills) and `references/small_color/` (themed `opt_stylize` baseline, row-group emphasis, row striping, stub tint, heading tint, subtle borders, vertical dividers, padding, fonts). Invoke this skill before reading the data or writing any Python — the workflow and deliverables shape the whole script.
+description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Drives every table through one deterministic 7-step flowchart — understand data, organize columns, Big Color (≤2 colored measures), heading band, Small-Color checklist, titles/annotations, render+verify — so the same input characteristics always produce the same publication-ready design. Provides the full API reference (`references/api.md`), the color source-of-truth (`references/palettes.md`: Dark Academia solids, washed tints, neutrals, sequential/diverging), the fixed Small-Color polish checklist (`references/small_color.md`), per-data-shape Big-Color recipes (`references/big_color/`), and archetype examples (`assets/examples/`). The mandatory renderer is `gt.gtsave("table.png")`. Invoke before reading the data or writing any Python — the flowchart shapes the whole script.
 ---
 
 # Great Tables Skill
 
-Build publication-ready display tables in Python using the `great_tables` package.
+Build publication-ready display tables in Python with `great_tables`. This skill is
+a **flowchart, not a menu**: for every part of a table there is one deterministic
+rule (or one explicit, data-driven branch), so the same input characteristics
+always produce the same visual result. Every table reads as one product.
 
-## What a finished table looks like
+## Rule 0 — the user's prompt overrides everything
 
-Every `table.py` produced with this skill ships with:
+Every rule below is a **default**. Any explicit instruction in the user's prompt
+wins (a requested font, a column's format, "bold the totals," "show all rows"). The
+flowchart decides what to do *in the absence of* an instruction; it never overrides
+one. When a user instruction conflicts with a default, follow the user and drop the
+conflicting default silently — do not fight it or add it back later.
 
-- **Correct formatting** — one `fmt_*` per column matched to its semantic type (currency, percent, integer, date).
-- **A `tab_header(title=..., subtitle=...)`** — non-optional; the title states the takeaway.
-- **1–2 Big Color treatments** — attention-grabbing techniques from `references/big_color/` that encode the primary data story (`data_color`, per-cell `style.fill`, colored `style.text`, `column_labels_background_color`, etc.).
-- **2–3 Small Color treatments** — subtle polish from `references/small_color/` (row striping, subtle borders, stub tint, heading tint, compact padding, font choice, etc.).
+## The 7-step flowchart
 
-### Under-designed tables (do not ship)
-
-A `table.png` fitting **any** of these descriptions is under-designed and needs another Write-and-render pass:
-
-- Zero Big Color — no `data_color`, no `tab_style` with colored fills or colored text, no `column_labels_background_color`.
-- Only `opt_row_striping()` for Small Color — stripes alone are one treatment, not two. Add at least a `subtle_borders`-style `tab_options(...)` (e.g., `column_labels_border_bottom_color`, `table_body_hlines_color`) and ideally a third from the Small Color list.
-- Big Color present, but no attention-grabbing fill actually touches the column the reader cares about most.
-- **Row groups sitting as unstyled plain text.** If the table uses `groupname_col=` and the group labels ("Italy", "United Kingdom", …) render as bare text between body rows, the sectioning is lost. Add `row_group_background_color` + `row_group_font_weight="bold"` (see `references/small_color/row_group_emphasis.md`).
-- **Structural chrome is entirely colorless.** If the only color in the PNG is a single `data_color` cell (or nothing at all), the surrounding table — header, borders, group breaks, stripes — reads as a raw dump. Add a themed baseline via `references/small_color/themed_stylize.md` (`opt_stylize(...)`) or hand-tune a colored column-label band (`references/big_color/column_label_emphasis.md`) so the frame supports the data.
-
-If the rendered PNG hits any of the above, treat the run as incomplete: revise `table.py`, re-render, re-audit.
-
-## Workflow
-
-1. **Validate the request** — Before doing anything, check whether the provided data can fulfill the user's request. If the dataset does not contain relevant columns or rows for what the user is asking, **stop and tell the user** that the request cannot be fulfilled with the given data. Explain what is missing. Write a minimal `table.py` that produces a blank/empty table and save a blank `table.png`. Do not fabricate data or force an irrelevant table.
-2. **Understand the data** — Go beyond column names. Examine distributions, ranges, units, and relationships. Understand what makes the data valuable and what story it can tell before deciding how to present it.
-3. **Inspect the data** — Read a sample (head + dtypes + shape) to understand columns, types, nulls, scale, and units.
-4. **Plan the table** — Decide: which columns to show/hide, how to format each one, whether to use spanners, row groups, a header/subtitle, source notes, or data coloring. Consider what story the table tells.
-   - **Every finished table produced with this skill features exactly one or two Big Color treatments and either two or three Small Color treatments.** A table with zero of either tier, or with only one Small Color treatment, is under-designed and should be revised before rendering. The point is not decoration — the point is that the two tiers together are what distinguishes a publication-ready table from a raw data dump.
-   - **Pick 1–2 Big Color techniques.** Scan the columns of the table you're about to build. Pick the row(s) of the table below whose "If your table will contain..." description matches your data best (one row is typical; two if the data legitimately has two independent stories), and `Read` the listed file(s) *now*, before writing `table.py`. The file is the source of truth for the mechanic (palette, domain, per-cell targeting) — applying color from memory has repeatedly produced wrong palettes and clipped domains. If nothing in the table looks like a strong match, pick the closest fit and use it at a restrained intensity; every table benefits from at least one attention anchor.
-
-     | If your table will contain... | `Read`... |
-     |---|---|
-     | A signed-values column: returns, P&L, YoY change, variance, deltas, monthly/quarterly/period-over-period percent-change — **any column that can be both negative and positive with opposite meaning** | `references/big_color/diverging_fill.md` |
-     | An ordered numeric measure with ≥5 rows where relative magnitude is part of the story (volumes, counts, scores, prices, densities, populations) | `references/big_color/column_gradient_fill.md` |
-     | A heatmap / matrix layout (rows × columns of comparable values on one scale) | `references/big_color/column_gradient_fill.md` |
-     | A top-N ranking or a small set (1–3) of "winner" rows that need to dominate the table | `references/big_color/full_row_highlight.md` |
-     | A binary/categorical status column (pass/fail, on/off, ok/warn/error, tier A/B/C) | `references/big_color/status_cell_fill.md` |
-     | A small number of outlier cells / threshold breaches that should pop out of an otherwise-quiet table | `references/big_color/bold_colored_number.md` |
-     | One entire non-numeric column that should read as *the* column (labels, tags, categories) | `references/big_color/full_column_fill.md` |
-     | An editorial/branded look where the column-label row needs to anchor the eye (many spanners, dashboard-style) | `references/big_color/column_label_emphasis.md` |
-
-   - **Pick 2–3 Small Color techniques for polish.** From the list below, pick 2–3 whose "when to use" cue matches the table's rough edges after Big Color is planned, and `Read` those files *now*. Every table benefits from a few quiet aesthetic moves — a bare white body with black text reads as unfinished. If no single cue feels like a strong match, pick `row_striping.md` and `subtle_borders.md` as a safe default pair (they help virtually every table) and add a third based on the closest remaining cue.
-
-     | Small Color file | Reach for it when... |
-     |---|---|
-     | `references/small_color/themed_stylize.md` | The table is a categorical/textual grid with no obvious numeric heatmap column — you want a cohesive colored baseline (header band + stripes + light dividers) from `opt_stylize(...)` in one call |
-     | `references/small_color/row_group_emphasis.md` | The table uses `groupname_col=` — the group labels must be shaded and bold, otherwise they blend into the body (this is the single most common cause of a "boring" table with real structure) |
-     | `references/small_color/row_striping.md` | The table has ≥10 body rows or is visually wide |
-     | `references/small_color/stub_tint.md` | You've set `rowname_col` and the stub blurs into the first value column |
-     | `references/small_color/heading_tint.md` | The column-label row is hard to distinguish from the body |
-     | `references/small_color/subtle_borders.md` | The default grid feels heavy, or a header/totals rule would help |
-     | `references/small_color/light_vertical_dividers.md` | The table has 2+ spanners or logical column groups |
-     | `references/small_color/compact_padding.md` | The table has >15 rows (compact) or <5 columns in a large canvas (airy) |
-     | `references/small_color/font_family_choice.md` | The default font's tone doesn't match the content (editorial vs technical) |
-
-   - **Pre-Write checklist.** Before moving to Step 5, write out (mentally or in a scratch message) two bullet lists: the 1–2 Big Color technique names you'll use, and the 2–3 Small Color technique names you'll use. If either list is short of the target count, extend it by picking the next-best-fit row from the table above. Do not proceed with 0 Big, 0 Small, or 1 Small.
-
-5. **Write idiomatic code** — Produce a single Python script using method chaining. Import from `great_tables` and `pandas` (or `polars`). The final script should contain method calls that implement every technique on the Step 4 checklist — for example, one `data_color(...)` call (Big) plus `opt_row_striping()` and a `subtle_borders`-style `tab_options(...)` (Small) plus one more Small treatment. If a re-read of the script shows fewer method calls than the checklist promised, revise before running.
-6. **Render** — Every table script **must** end with `gt.gtsave("table.png")`. Do not substitute `gt.save()` (deprecated), do not save HTML, do not render with PIL/imgkit/wkhtmltoimage/Playwright/Selenium.
-7. **Run, view, iterate** — Execute `python table.py`, read `table.png` back with the Read tool, and audit the result against the *What a finished table looks like* section at the top of this skill:
-   - Count the Big Color treatments visible in the PNG (data-color fills, per-cell colored fills, colored bold text, dark column-label bands). If the count is 0, add one.
-   - Count the Small Color treatments visible in the PNG (row stripes, header/stub tints, subtle borders, padding changes, font swaps). If the count is 0 or 1, add another so the total lands in 2–3.
-   - Fix any rendering errors at the root; never swap in a fallback renderer.
-
-   Re-run and re-audit until the PNG matches the deliverable.
-8. **Commit** — When satisfied, leave the final `table.py` and `table.png` in the working directory.
-
-## Understanding the Data
-
-How to read, interpret, and evaluate data before building a table. **Do this before writing any GT code.**
-
-### Step 1: Structural Inspection
-
-Before thinking about presentation, understand what you have:
-
-```python
-df = pd.read_csv("data.csv")
-print(df.shape)          # How many rows and columns?
-print(df.dtypes)         # What types are the columns?
-print(df.head(10))       # What do the first rows look like?
-print(df.describe())     # What are the distributions?
-print(df.isnull().sum()) # Where is data missing?
+```
+1. UNDERSTAND THE DATA   grain? identifiers? measures? categories? units? quality?
+                         validate request vs data (blank table if unanswerable)
+2. ORGANIZE COLUMNS      show/hide · limit rows · stub (default) · groups (gated)
+                         spanners (column groups) · name the hero column
+3. BIG COLOR             ≤ 2 colored MEASURES (the hero if only 1); encoding by
+                         data shape; gradients use sequential/diverging, everything
+                         else uses Dark Academia solids
+4. HEADING BAND          any Big Color? → LIGHT band.  none? → DARK saturated band
+5. SMALL COLOR           fixed checklist: borders · dividers · striping · stub tint ·
+                         fmt_* per column · grey-budget rule
+6. TITLES & ANNOTATIONS  title + subtitle (both required) · caption (≥5 rows) +
+                         source (when known), stacked footer notes
+7. RENDER & VERIFY       gt.gtsave("table.png") · read it back · audit every rule
 ```
 
-Answer these questions:
-- **What is a row?** Each row should represent one "thing" — a year, a person, a product, a measurement. If you can't describe what a row is, the data may need reshaping.
-- **What is the grain?** Is this daily, monthly, yearly, per-person, per-transaction? The grain determines how to aggregate and what row labels to use.
-- **What are the key identifiers?** Which columns uniquely identify a row? These are candidates for `rowname_col`.
-- **What are the measures?** Which columns contain the numbers/values you'd present? These are the display columns.
-- **What are the categories?** Which columns partition the data into groups? These are candidates for `groupname_col` or filters.
+The order is fixed: color intent (Step 3) is decided before the quiet polish
+(Step 5), and the band (Step 4) can only be decided once Big Color is known.
 
-### Step 2: Understand What the Data Means
+### Loading map — what to read, and when
 
-Column names are hints, not answers. Go deeper:
+Keep the activation body lean; pull the detail in at the step that needs it.
 
-**Identify Units and Scale**
-- A column called `revenue` — is it in dollars, thousands, or millions? Check the magnitude of values.
-- A column called `rate` — is it 0.05 (decimal, needs `scale_values=True`) or 5.0 (percentage, needs `scale_values=False`)?
-- A column called `volume` — volume of what? Trading shares? Liters? The context of the dataset determines the unit.
-
-**Identify Relationships**
-- Which columns move together? (e.g., `open`/`close`/`high`/`low` are all prices — group them under a spanner)
-- Which columns are derived from others? (e.g., `return %` is computed from `open` and `close` — it's a summary metric, often the most important column)
-- Are there natural comparisons? (e.g., `budget` vs `actual`, `this_year` vs `last_year`)
-
-**Identify What Makes the Data Valuable**
-Ask: **why would someone look at this table?** The answer drives every design decision:
-- **To compare** → emphasize the comparison columns, use consistent formatting, consider `data_color`
-- **To find extremes** → highlight min/max values with bold or color
-- **To see trends** → order chronologically, use `data_color` to show direction
-- **To look up a value** → make row labels clear, keep the table scannable
-- **To get a summary** → aggregate the raw data, show totals/averages, keep it short
-
-### Step 3: Assess Data Quality
-
-Before presenting data, check for issues that affect table quality:
-
-- **Outliers**: Are there extreme values that will distort `data_color` domains? Compute the range.
-- **Missing data**: Use `sub_missing(missing_text="—")` for NaN/None. Don't let blank cells confuse the reader.
-- **Precision**: How many decimal places are meaningful? Match precision to context — financial values often need 2 decimals, scientific measurements should match instrument precision, percentages usually 1–2 decimals.
-- **Consistency**: Are all monetary values in the same currency? All dates in the same timezone? All percentages on the same scale?
-
-### Step 4: Match Data to the User's Request
-
-This is the critical validation step:
-
-1. **Read the user's request carefully.** What specifically are they asking to see?
-2. **Check if the data contains what they need.** If they ask for a view the data cannot support (e.g., quarterly breakdown when only annual totals exist), the data cannot fulfill the request.
-3. **If there's a mismatch**: Stop. Tell the user what you found in the data and why it doesn't match their request. Do not force a table that doesn't answer the question.
-4. **If the data is close but not exact**: Explain what you can show instead and proceed only if it's genuinely useful.
-
-### Step 5: Plan the Presentation
-
-Now that you understand the data, decide:
-
-**What to Show**
-- **Not every column deserves to be in the table.** Internal IDs, raw timestamps, and intermediate calculations should be hidden.
-- **Not every row deserves to be in the table.** If there are 1000 rows, show the top 10, the most recent 5 years, or a meaningful aggregate.
-- **Derived columns may be more valuable than raw ones.** A "Return %" column tells more story than separate open/close prices.
-
-**How to Aggregate**
-- If the raw data is too granular for the requested view, aggregate it: daily → monthly, transactions → totals, individual → category averages.
-- Choose aggregation functions that match the data meaning: `sum` for counts and revenues, `mean` for rates and scores, `max`/`min` for extremes.
-
-**What Story to Tell**
-- **The title should state the takeaway**, not just describe the data. A title that names the insight is better than one that just names the dataset.
-- **The subtitle provides context**: date range, data source, methodology.
-- **Column order should follow the reader's eye**: identifiers → key metrics → supporting detail.
-- **The most important column** should get visual emphasis: bold headers, `data_color`, or prominent positioning.
-
-## Core Pattern
-
-```python
-import pandas as pd
-from great_tables import GT, md, html, style, loc
-
-df = pd.read_csv("data.csv")
-
-gt = (
-    GT(df, rowname_col="id_col", groupname_col="category_col")
-    .tab_header(
-        title="Clear Descriptive Title",
-        subtitle="Context or date range"
-    )
-    .cols_label(col_name="Human Label", another_col="Another Label")
-    .cols_hide(columns=["internal_id", "raw_field"])
-    .fmt_currency(columns="revenue", currency="USD")
-    .fmt_number(columns="quantity", decimals=0, use_seps=True)
-    .fmt_percent(columns="growth_rate", decimals=1)
-    .fmt_date(columns="date", date_style="year.month.day.2")
-    .tab_spanner(label="Financial", columns=["revenue", "cost", "profit"])
-    .tab_source_note(source_note="Source: Company quarterly reports")
-    .tab_options(table_font_size="14px")
-)
-
-gt.gtsave("table.png")
-```
-
-## Formatting Rules
-
-Match `fmt_*` to data semantics, not just numeric type:
-
-| Data meaning | Method | Key args |
+| At step | If… | Load |
 |---|---|---|
-| Money/prices | `fmt_currency` | `currency="USD"`, `accounting=True` for finance |
-| Counts/integers | `fmt_integer` | `use_seps=True` |
-| Decimals/measurements | `fmt_number` | `decimals=` (match precision to context) |
-| Percentages/rates | `fmt_percent` | `decimals=1` |
-| Dates | `fmt_date` | `date_style=` |
-| Datetimes | `fmt_datetime` | `date_style=`, `time_style=` |
-| Times | `fmt_time` | `time_style=` |
-| Large byte values | `fmt_bytes` | |
-| Scientific data | `fmt_scientific` | |
-| True/False | `fmt_tf` | |
-| Markdown content | `fmt_markdown` | |
+| any | unsure of a method's exact signature/args/defaults | `references/api.md` |
+| 3 | a measure needs an encoding | `references/palettes.md` **and** the one `references/big_color/<shape>.md` matching the data shape |
+| 4 | choosing the band hue | rule is below; hexes from `references/palettes.md` |
+| 5 | applying polish | `references/small_color.md` |
+| 2 / 5 | the data matches an archetype (financial, time-series, heatmap, ranking, summary, scientific) | `assets/examples/<archetype>/` |
+| any (scripted variant) | writing hexes / the frame | `import` from `scripts/gt_consistency.py` (see Fast path) |
 
-## Table Length
+## Global constants (true for every table)
 
-Keep tables **concise by default**. A long table is not a better table — it is harder to read and dilutes the story.
+Set once, never vary unless Rule 0 fires.
 
-- **Target 5–15 rows** for most tables. This is enough to show trends, comparisons, and key data points.
-- **Never show every row** from a large dataset unless the user explicitly asks for it. Aggregate, filter to top-N, or sample instead.
-- When the data has many rows, choose the most meaningful subset: most recent years, top performers, notable outliers, or a representative sample.
-- If you must show more than 20 rows, use `groupname_col` to create visual sections, and consider whether the user's request truly requires all that data.
-- **Ask yourself**: "Does every row in this table earn its place?" If a row doesn't add new information or context, cut it.
-
-## Table Structure Decisions
-
-- **`rowname_col`** — Use when a column has unique row identifiers (names, IDs, dates). Creates a stub with a vertical divider.
-- **`groupname_col`** — Use when a column has categorical values that naturally group rows (region, category, year). **Always pair with `row_group_background_color` + `row_group_font_weight="bold"`** — see `references/small_color/row_group_emphasis.md`. An unstyled group header sits between body rows and destroys the sectioning it was meant to create.
-- **`tab_spanner`** — Use to group related columns under a shared label (e.g., "Performance" over hp/torque/mpg columns).
-- **`cols_hide`** — Remove columns used only for grouping or internal IDs from the display.
-- **`cols_label`** — Always relabel programmatic column names (e.g., `avg_revenue` → `"Avg. Revenue"`).
-- **`tab_stubhead`** — When using `rowname_col`, add a stub heading with `tab_stubhead(label="Year")` to label the row name column. Skip only when the row names are self-evident (e.g., sequential numbers).
-- **`tab_source_note`** — Add when data has a clear source or needs citation.
-
-## Units in Column Labels
-
-Include units in column labels when the unit is **not already conveyed by formatting**. This is a judgment call:
-
-- **Skip units when `fmt_*` already shows them**: Currency columns formatted with `fmt_currency` already display `$`, so the label should be `"Revenue"` not `"Revenue ($)"`. Same for `fmt_percent` (already shows `%`).
-- **Include units when formatting does not show them**: A column of distances formatted with `fmt_number` should be labeled `"Distance (km)"` not just `"Distance"`. A speed column should be `"Speed (m/s)"`.
-- **Include units for scientific/measurement data**: Always include units for physical quantities — `"Temperature (°C)"`, `"Pressure (atm)"`, `"Weight (kg)"`.
-- **Use the `{{unit}}` notation** in `cols_label` for proper unit rendering: `cols_label(speed="Speed ({{m/s}})")`.
-- **Be consistent**: If one column in a group shows units, all columns in that group should show units.
-
-## Gotchas
-
-- **Save method**: Every table **must** be rendered with `gt.gtsave("table.png")`. Do **not** use `gt.save()` — it is deprecated (removed mid-2027) and relies on Selenium/chromedriver.
-- **Absolute paths**: When the working directory might differ from where the script runs, use absolute paths for both input data and output PNG.
-- **Column names in `fmt_*`**: Use the *original DataFrame column names*, not the labels set by `cols_label()`. Labels are display-only.
-- **Row indices in `loc.body()`**: Use integer indices (0-based position in the displayed table), NOT DataFrame index values.
-- **`tab_spanner` column order**: Columns under a spanner are gathered together by default (`gather=True`). If you don't want reordering, set `gather=False`.
-- **`data_color` domain**: Always set `domain=` explicitly when using `data_color()`. The domain must cover the **full range of your actual data** — compute `min()` and `max()` of the column first. For diverging palettes (e.g., `"RdYlGn"`), use a **symmetric domain** centered on zero (e.g., `domain=[-40, 40]`). A too-narrow domain makes extreme values invisible; a too-wide domain compresses the color gradient. Use `na_color=` for missing values.
-- **Method chaining**: Build the entire table in one chained expression. Avoid mutating the GT object in a loop (use `tab_style` with row lists instead of one call per row).
-- **`fmt_percent` input scale**: Values should already be in decimal form (0.15 = 15%). If your data is already 0–100, use `scale_values=False`.
-- **Imports**: Always import `style` and `loc` from `great_tables` if using `tab_style` or `data_color`. Common: `from great_tables import GT, md, html, style, loc`.
-- **`cols_label` syntax**: Use keyword arguments (`cols_label(col_name="Label")`) or a dict (`cols_label(cases={"col_name": "Label"})`). The dict form is required when column names have special characters.
-- **No fallback renderers**: The deliverable is a real `great_tables` PNG produced by `gt.gtsave("table.png")`. If rendering ever fails, **stop and surface the error verbatim**. Do **NOT**:
-    - fall back to the deprecated `gt.save()`,
-    - call `.write_raw_html()` / `.as_raw_html()` and feed it into a different screenshot tool,
-    - hand-render the table with PIL / Pillow / `ImageDraw`,
-    - shell out to `imgkit`, `wkhtmltoimage`, `weasyprint`, `playwright`, `puppeteer`, headless `chrome --screenshot`, or any other html-to-image tool,
-    - write `table.html` and call the task done.
-    Any of those produces a fake table, not a `great_tables` render. The user can tell the difference at a glance, and so can the test suite.
-
----
-
-# API Reference
-
-Detailed method signatures and parameters for the `great_tables` Python package.
-
-## GT Constructor
-
-```python
-GT(
-    data,                    # DataFrame (pandas or polars)
-    rowname_col=None,        # str — column to use as row labels (stub)
-    groupname_col=None,      # str — column to use for row groups
-    auto_align=True,         # bool — auto-align columns by type
-    id=None,                 # str — custom table ID
-    locale=None,             # str — default locale for all fmt_* methods (e.g., "en", "fr")
-)
-```
-
-Setting `locale` at the GT level avoids repeating it in every `fmt_*` call.
-
-## Header & Footer
-
-### tab_header
-
-```python
-.tab_header(
-    title,                   # str | md() | html()
-    subtitle=None,           # str | md() | html()
-    preheader=None,          # str | list[str] — rendered above the table
-)
-```
-
-Use `md("**bold** text")` or `html("<em>styled</em>")` for rich formatting.
-
-### tab_source_note
-
-```python
-.tab_source_note(source_note)   # str | md() | html()
-```
-
-Call multiple times to add multiple source notes (they appear in order).
-
-### tab_stubhead
-
-```python
-.tab_stubhead(label)   # str | md() | html() — label for the stub column header
-```
-
-## Column Operations
-
-### cols_label
-
-```python
-.cols_label(
-    cases=None,              # dict[str, str | md() | html()] — for special char column names
-    **kwargs,                # col_name="Label" pairs
-)
-```
-
-Unit notation: `"Speed ({{m/s}})"` renders as "Speed (m/s)" with proper formatting.
-
-### cols_hide
-
-```python
-.cols_hide(columns)          # str | list[str]
-```
-
-### cols_move / cols_move_to_start / cols_move_to_end
-
-```python
-.cols_move(columns, after)           # move columns after a specified column
-.cols_move_to_start(columns)         # move to leftmost position
-.cols_move_to_end(columns)           # move to rightmost position
-```
-
-### cols_width
-
-```python
-.cols_width(
-    cases=None,              # dict[str, str] — e.g., {"col": "200px"}
-    **kwargs,                # col_name="150px" or col_name="30%"
-)
-```
-
-### cols_align
-
-```python
-.cols_align(
-    align,                   # "left" | "center" | "right"
-    columns=None,            # str | list[str] — defaults to all
-)
-```
-
-## Formatting Methods
-
-All `fmt_*` methods share common parameters:
-- `columns` — target columns (str or list)
-- `rows` — target rows (int or list of int indices, 0-based)
-
-### fmt_number
-
-```python
-.fmt_number(
-    columns=None,
-    rows=None,
-    decimals=2,              # exact decimal places
-    n_sigfig=None,           # significant figures (overrides decimals)
-    drop_trailing_zeros=False,
-    use_seps=True,           # thousands separator
-    accounting=False,        # parentheses for negatives
-    scale_by=1,              # multiply values before formatting
-    compact=False,           # 1230 → "1.23K"
-    pattern="{x}",           # decoration pattern
-    sep_mark=",",
-    dec_mark=".",
-    force_sign=False,
-    locale=None,
-)
-```
-
-### fmt_integer
-
-```python
-.fmt_integer(
-    columns=None,
-    rows=None,
-    use_seps=True,
-    accounting=False,
-    scale_by=1,
-    compact=False,
-    pattern="{x}",
-    sep_mark=",",
-    force_sign=False,
-    locale=None,
-)
-```
-
-### fmt_currency
-
-```python
-.fmt_currency(
-    columns=None,
-    rows=None,
-    currency=None,           # "USD", "EUR", "GBP", etc. (3-letter ISO code)
-    use_subunits=True,       # show cents/pence
-    decimals=None,           # override default decimal places
-    use_seps=True,
-    accounting=False,        # parentheses for negatives
-    scale_by=1,
-    compact=False,           # $1.23M
-    pattern="{x}",
-    sep_mark=",",
-    dec_mark=".",
-    force_sign=False,
-    placement="left",        # "left" ($450) or "right" (450$)
-    incl_space=False,        # space between symbol and value
-    locale=None,
-)
-```
-
-### fmt_percent
-
-```python
-.fmt_percent(
-    columns=None,
-    rows=None,
-    decimals=2,
-    drop_trailing_zeros=False,
-    use_seps=True,
-    accounting=False,
-    scale_values=True,       # True: 0.15 → "15.00%"; False: 15 → "15.00%"
-    pattern="{x}",
-    sep_mark=",",
-    dec_mark=".",
-    force_sign=False,
-    locale=None,
-)
-```
-
-**Important**: `scale_values=True` (default) multiplies by 100. If data is already in 0–100 range, set `scale_values=False`.
-
-### fmt_date
-
-```python
-.fmt_date(
-    columns=None,
-    rows=None,
-    date_style="iso",        # see date styles below
-    locale=None,
-)
-```
-
-Date styles: `"iso"` (2020-01-15), `"wday_month_day_year"` (Wednesday, January 15, 2020), `"year.month.day.2"` (2020/01/15), `"day_month_year"` (15 January 2020), `"m_day_year"` (Jan 15, 2020), and more.
-
-### fmt_time
-
-```python
-.fmt_time(
-    columns=None,
-    rows=None,
-    time_style="iso",        # "iso", "h_m_s_p" (HH:MM:SS AM/PM), "h_m_p", etc.
-    locale=None,
-)
-```
-
-### fmt_datetime
-
-```python
-.fmt_datetime(
-    columns=None,
-    rows=None,
-    date_style="iso",
-    time_style="iso",
-    sep=" ",                 # separator between date and time
-    locale=None,
-)
-```
-
-### fmt_scientific
-
-```python
-.fmt_scientific(
-    columns=None,
-    rows=None,
-    decimals=2,
-    drop_trailing_zeros=False,
-    scale_by=1,
-    exp_style="x10n",        # "x10n", "e", "E"
-    pattern="{x}",
-    sep_mark=",",
-    dec_mark=".",
-    force_sign_m=False,
-    force_sign_n=False,
-    locale=None,
-)
-```
-
-### fmt_bytes
-
-```python
-.fmt_bytes(
-    columns=None,
-    rows=None,
-    standard="decimal",      # "decimal" (KB=1000) or "binary" (KiB=1024)
-    decimals=1,
-    drop_trailing_zeros=True,
-    use_seps=True,
-    pattern="{x}",
-    sep_mark=",",
-    dec_mark=".",
-    force_sign=False,
-    locale=None,
-)
-```
-
-### fmt_roman
-
-```python
-.fmt_roman(columns=None, rows=None, case="upper")  # "upper" or "lower"
-```
-
-### fmt_tf
-
-```python
-.fmt_tf(columns=None, rows=None)  # formats True/False values
-```
-
-### fmt_markdown
-
-```python
-.fmt_markdown(columns=None, rows=None)  # renders Markdown in cells
-```
-
-### fmt_image
-
-```python
-.fmt_image(
-    columns=None,
-    rows=None,
-    height=None,             # "30px"
-    width=None,              # "30px"
-    path=None,               # base directory for relative paths
-)
-```
-
-### fmt_nanoplot
-
-```python
-.fmt_nanoplot(
-    columns=None,
-    rows=None,
-    plot_type="line",        # "line" or "bar"
-    plot_height="2em",
-)
-```
-
-Embed sparkline-style plots in cells from list/array data.
-
-### fmt (custom formatter)
-
-```python
-.fmt(
-    fns,                     # callable that takes cell value, returns str
-    columns=None,
-    rows=None,
-)
-```
-
-## Substitution Methods
-
-### sub_missing
-
-```python
-.sub_missing(
-    columns=None,
-    rows=None,
-    missing_text="—",        # what to show for None/NaN
-)
-```
-
-### sub_zero
-
-```python
-.sub_zero(columns=None, rows=None, zero_text="—")
-```
-
-### sub_small_vals / sub_large_vals
-
-```python
-.sub_small_vals(columns=None, rows=None, threshold=0.01, small_pattern="< {x}")
-.sub_large_vals(columns=None, rows=None, threshold=1e12, large_pattern="> {x}")
-```
-
-## Styling
-
-### tab_style
-
-```python
-.tab_style(
-    style,                   # CellStyle | list[CellStyle]
-    locations,               # Loc | list[Loc]
-)
-```
-
-**Style classes** (combine in a list for multiple):
-```python
-style.text(color=None, size=None, weight=None, style=None, decorate=None, transform=None, whitespace=None)
-style.fill(color=None)
-style.borders(sides, color="#000000", style="solid", weight="1px")
-```
-
-**Location classes**:
-```python
-loc.body(columns=None, rows=None)          # body cells
-loc.header()                                # title & subtitle
-loc.column_labels(columns=None)            # column label cells
-loc.row_groups(rows=None)                  # row group labels
-loc.stub(rows=None)                        # stub (row labels)
-loc.source_notes()                         # footer source notes
-```
-
-### data_color
-
-```python
-.data_color(
-    columns=None,
-    rows=None,
-    palette=None,            # list of colors OR named palette string
-    domain=None,             # [min, max] for numeric; list of categories for factor
-    na_color=None,           # color for missing values (default: "#808080")
-    alpha=None,              # 0-1 transparency
-    reverse=False,           # reverse palette direction
-    autocolor_text=True,     # auto-contrast text color
-    truncate=False,          # clip out-of-domain values to boundary colors
-)
-```
-
-**Named palettes**: All ColorBrewer palettes (`"Blues"`, `"Reds"`, `"RdYlGn"`, `"Spectral"`, `"Set2"`, etc.) and viridis family (`"viridis"`, `"plasma"`, `"inferno"`, `"magma"`, `"cividis"`).
-
-## Spanners & Row Groups
-
-### tab_spanner
-
-```python
-.tab_spanner(
-    label,                   # str | md() | html()
-    columns=None,            # list of column names to span
-    spanners=None,           # existing spanner IDs to span over
-    level=None,              # explicit level (0 = closest to column labels)
-    id=None,                 # ID for referencing this spanner later
-    gather=True,             # reorder columns to be contiguous under spanner
-    replace=False,           # allow replacing existing spanners
-)
-```
-
-Multiple levels: call `tab_spanner` multiple times. Spanners stack automatically from bottom to top.
-
-### tab_row_group (via constructor)
-
-Row groups are set via `groupname_col=` in the GT constructor. The order of groups matches their first appearance in the data.
-
-## Table Options
-
-### tab_options (key parameters)
-
-```python
-.tab_options(
-    # Container
-    container_width=None,             # "100%" or pixel value
-    # Table
-    table_width=None,                 # "auto", pixel, or percentage
-    table_font_size=None,             # "14px", "small", etc.
-    table_font_names=None,            # ["Arial", "sans-serif"]
-    table_background_color=None,
-    # Heading
-    heading_background_color=None,
-    heading_align=None,               # "center", "left", "right"
-    heading_title_font_size=None,
-    heading_subtitle_font_size=None,
-    # Column labels
-    column_labels_background_color=None,
-    column_labels_font_weight=None,   # "bold", "normal", or numeric
-    column_labels_text_transform=None,  # "uppercase", "lowercase"
-    column_labels_border_bottom_color=None,
-    # Row groups
-    row_group_background_color=None,
-    row_group_font_weight=None,
-    # Body
-    table_body_hlines_style=None,     # "solid", "dotted", "none"
-    table_body_hlines_color=None,
-    table_body_hlines_width=None,
-    # Data rows
-    data_row_padding=None,            # "8px"
-    data_row_padding_horizontal=None,
-    # Source notes
-    source_notes_font_size=None,
-    # Row striping
-    row_striping_background_color=None,
-)
-```
-
-### opt_ helpers
-
-```python
-.opt_stylize(style=1, color="blue")          # pre-built theme (styles 1-6, colors: blue/cyan/pink/green/red/gray)
-.opt_row_striping()                           # alternate row colors
-.opt_horizontal_padding(scale=1)             # multiply horizontal padding
-.opt_vertical_padding(scale=1)               # multiply vertical padding
-.opt_table_font(font=None, weight=None, size=None)
-.opt_all_caps()                              # uppercase column labels
-.opt_align_table_header(align="center")
-```
-
-## Saving
-
-```python
-gt.gtsave(
-    "table.png",
-    # Optional kwargs forwarded to the renderer:
-    # selector="table",         # CSS selector to capture (defaults to the whole page)
-    # zoom=2,                   # pixel density multiplier for raster output
-    # expand=10,                # padding around the selector in pixels
-    # vwidth=992, vheight=744,  # initial viewport
-)
-```
-
-`gtsave()` is the current `great_tables >= 0.22.0` API. It renders the table to an image (or PDF, depending on the file extension) via a headless Chromium browser.
-
-- Do **not** use `gt.save()` — it is deprecated (removed mid-2027) and uses Selenium/chromedriver.
-- If `gt.gtsave()` ever fails, **stop and surface the full error**. Do not silently swap in a PIL/imgkit/wkhtmltoimage/Playwright/HTML fallback. The deliverable is the actual `great_tables` PNG render and nothing else qualifies.
-
-## Helpers
-
-```python
-from great_tables import md, html, define_units, system_fonts
-
-md("**bold** and *italic*")      # Markdown in headers, labels, cells
-html("<span style='...'>X</span>")  # Raw HTML
-define_units("m^2 s^-1")         # Unit notation for labels
-system_fonts("humanist")         # Font stacks: "humanist", "old-style", "transitional", "geometric-humanist", "classical-humanist", "neo-grotesque", "monospace-slab-serif", "monospace-code", "industrial", "rounded-sans", "slab-serif", "system-ui"
-```
-
----
-
-# Design Guide
-
-Visual design principles and patterns for building polished, publication-ready tables.
-
-**Technique recipes:** for the exact code and per-technique rules, use the two reference folders:
-
-- `references/big_color/` — attention-grabbing techniques that encode information: `full_column_fill.md`, `column_gradient_fill.md`, `diverging_fill.md`, `bold_colored_number.md`, `full_row_highlight.md`, `column_label_emphasis.md`, `status_cell_fill.md`. Load only the specific file(s) you need — the trigger table in Workflow Step 4 maps data patterns to the right file.
-- `references/small_color/` — subtle aesthetic techniques that don't encode information: `row_striping.md`, `stub_tint.md`, `heading_tint.md`, `subtle_borders.md`, `light_vertical_dividers.md`, `compact_padding.md`, `font_family_choice.md`. Load only the 2–3 you're actually going to apply — the Small Color list in Workflow Step 4 maps table-feel cues to the right file.
-
-The rules in this Design Guide are the source of truth for budgets and principles; the reference folders contain the concrete recipes.
-
-## Core Design Principles
-
-1. **Tables tell stories** — Every table should have a clear narrative. The title states the takeaway, the subtitle provides context, and the structure guides the reader's eye to what matters.
-2. **Less is more** — Hide internal columns, remove visual clutter, use whitespace. A table with 5 well-formatted columns beats one with 15 raw columns.
-3. **Format for meaning** — Formatting communicates data type instantly. Currency symbols say "money," percentage signs say "rate." Never show raw floats when a semantic formatter exists.
-4. **Group for comprehension** — Spanners and row groups create visual hierarchy. Use them when columns or rows share a logical parent category.
-5. **Color with purpose, on a budget** — Split color decisions into Big (data emphasis) and Small (aesthetic polish). Every table produced with this skill uses 1–2 Big Color treatments and 2–3 Small Color treatments. See the *Two Color Tiers* section immediately below.
-
-## Two Color Tiers: Big and Small
-
-Every visual choice in a table falls into one of two tiers. Keep them separate in your head; the two tiers together define what makes a finished, publication-ready table.
-
-### Big Color — data emphasis (Loud)
-
-Big Color techniques **encode information** and pull the reader to the specific data that matters. They answer a question the reader has: *which numbers are extreme? which row won? what's the trend across this row?*
-
-- **Every table gets 1–2 Big Color treatments.** These are the norm, not a maximum — a table without any Big Color has no visual anchor and reads as unfinished. Two treatments is the ceiling; more than that and nothing stands out.
-- Every Big Color treatment should be tied to a specific piece of the data story. If you can't state the question it answers, pick a different technique.
-- Combining mechanisms on the same cell (fill + bold, or bold + colored text) counts as **one** Big Color treatment as long as the cell answers one question.
-- The trigger table in Workflow Step 4 maps data patterns → the specific `references/big_color/*.md` file to load. Load the recipe file; do not apply color from memory.
-
-### Small Color — aesthetic polish (Quiet)
-
-Small Color techniques **do not encode information**. They make the table feel finished — separating structure from data, breaking up a stark white canvas, matching tone to content.
-
-- **Every table gets 2–3 Small Color treatments.** These are the norm, not a maximum — a bare white body with black text reads as unfinished, and more than three treatments crosses from polish into noise.
-- Good Small Color is barely noticeable in isolation. If a reader has to squint to see whether it's there, it's the right intensity.
-- Bad Small Color is saturated, high-contrast, or uses a hue that competes with a Big Color treatment already in the table.
-- The Small Color list in Workflow Step 4 maps table-feel cues → the specific `references/small_color/*.md` file to load.
-
-### How the two tiers interact
-
-1. Identify what matters most in the data — that's your Big Color target. Pick 1–2 techniques from the trigger table in Step 4 and load their recipe files.
-2. Apply Big Color first, then look at the table with Big Color in place and ask what still feels unfinished — that's where Small Color goes. Pick 2–3 techniques from the Small Color list in Step 4.
-3. Never let Small Color use a hue that could be confused with a Big Color data encoding in the same table. If Big Color is green (positive measure), don't stripe rows with pale green.
-
-## Table Anatomy: When to Use Each Structural Element
-
-| Element | Use when... | Skip when... |
-|---|---|---|
-| `tab_header` (title) | Always. Every table needs a title. | Never skip this. |
-| `tab_header` (subtitle) | There's a date range, data source, or clarifying context | The title is self-explanatory |
-| `rowname_col` | A column has unique identifiers (names, dates, IDs) | All columns are value columns |
-| `groupname_col` | A column has 2–8 categories that meaningfully partition rows | Too many groups (>8) or only 1 group |
-| `tab_spanner` | 3+ columns share a logical parent (e.g., "Q1", "Performance") | Only 1–2 related columns |
-| `tab_source_note` | Data has a citable source or needs methodology notes | Data is self-evident or internal |
-| `cols_hide` | Columns were used for grouping, or are IDs/internals | Every column has display value |
-| `data_color` | The column is a measure with a natural order **and** has ≥5 rows so the gradient is readable — see `references/big_color/column_gradient_fill.md` (or `diverging_fill.md` for signed values) | Fewer than 5 rows, categorical data, or no natural order — the gradient carries no signal |
-
-### Column Count Guidelines
-
-- **Ideal**: 4–8 columns visible in the final table
-- **Maximum**: 10–12 columns before the table becomes hard to scan
-- **If more**: Consider splitting into multiple tables, hiding less important columns, or using spanners to create visual groups
-
-## Color Palette Selection
-
-The palette guidance below applies to whichever Big Color technique you've chosen. Before picking a palette, confirm the technique itself is warranted (see the Big Color trigger table in Workflow Step 4); the palette is a *how*, not a *whether*.
-
-### For Sequential Data (low → high) — used by `column_gradient_fill`
-
-Pick the palette by **semantic meaning**, not by aesthetic preference. Each single-hue palette carries a connotation that should match the data:
-
-- `"Greens"` — **positive direction**: growth, success rates, gains, things where "more is better."
-- `"Reds"` (or `"Oranges"`) — **warning/attention**: error rates, risk, defect counts, things where "more is worse."
-- `"Blues"` — **neutral measure**: volumes, counts, prices, populations — quantities with no inherent good/bad direction.
-
-Grey has two distinct uses; don't mix them up:
-
-- **Light grey** — a Small Color *accent* to break up an otherwise stark white canvas (stub tint, row stripe, heading tint). Never a data encoding.
-- **Darker grey** — Big Color *de-emphasis* for cells whose values you want to fade back (e.g. a helper column the reader can ignore unless they're checking the math). Use sparingly.
-
-### For Diverging Data (negative ↔ positive) — used by `diverging_fill`
-
-Use two-hue palettes centered on a neutral midpoint:
-- `"RdYlGn"` — red=bad, green=good
-- `"RdBu"` — red vs blue (anomalies, sentiment)
-- `"PuOr"` — purple vs orange (balanced, colorblind-safe)
-
-**Critical: domain range must cover your actual data.** Set `domain=` to span the full range of values (or a symmetric range around zero for diverging palettes). If your data ranges from -30% to +40%, use `domain=[-40, 40]` — not `domain=[-20, 30]`, which clips extreme values to the boundary color and makes them invisible.
-
-**Always leave `truncate=False`** (the default) so out-of-range values still get the most extreme palette color rather than disappearing.
-
-**Prefer symmetric domains** for diverging data (e.g., `[-30, 30]` not `[-20, 30]`) so the neutral midpoint aligns with zero.
-
-### For Categorical Data — used by `status_cell_fill`
-
-Use qualitative palettes (no implied order):
-- `"Set2"` — muted, colorblind-friendly
-- `"Dark2"` — bold, high contrast
-- `"Paired"` — for paired categories
-
-### Explicit two-state fills
-
-For binary good/bad indicators, use explicit colors with `tab_style` (this is the recipe pattern used by `references/big_color/status_cell_fill.md` and `references/big_color/bold_colored_number.md`):
-
-```python
-positive_rows = df.index[df["value"] >= 0].tolist()
-negative_rows = df.index[df["value"] < 0].tolist()
-
-gt = (
-    gt
-    .tab_style(
-        style=style.fill(color="#c6efce"),
-        locations=loc.body(columns="value", rows=positive_rows)
-    )
-    .tab_style(
-        style=style.fill(color="#ffc7ce"),
-        locations=loc.body(columns="value", rows=negative_rows)
-    )
-)
-```
-
-**Never** loop row-by-row calling `tab_style` once per row. Collect row indices into lists first.
-
-The ≥5-row trigger that gates `column_gradient_fill` and `diverging_fill` applies in spirit here too: mass-filling cells via `tab_style` on a 2–4 row table adds noise without communicating much. Use targeted highlights (one or two cells) via `bold_colored_number` instead.
-
-## Structural Element Treatment
-
-Stub, totals rows, row group labels, and spanners are *structural* — they organize the table rather than carry primary values. They get their own restrained treatment so they don't compete with the data.
-
-### Stub Column
-
-The stub holds identifiers (names, dates, IDs), not measures. Keep it visually quiet:
-
-- **Do not** apply `data_color` or any Big Color fill to the stub.
-- **Do not** fill the stub aggressively (no strong background colors).
-- A subtle light-grey fill (see `references/small_color/stub_tint.md`) is acceptable Small Color polish to separate the stub from value columns — but only if the table needs that separation.
-- Bold is fine for emphasis if the row labels are the primary lookup key.
-
-### Totals / Summary Rows
-
-The total row carries the most important number(s) in the table — it must read as visually elevated. The exact mechanism is flexible (combine as needed):
-
-- Bold text in the cells of the totals row.
-- A top border separating the total from the body rows (see `references/small_color/subtle_borders.md`).
-- A subtle row fill — light grey, or if the column uses `column_gradient_fill`, let the same fill scale carry through the total cell rather than excluding it.
-
-Pick the combination that fits the table's overall color budget. The non-negotiable: the total must not look like just another body row.
-
-### Row Group Labels
-
-When using `groupname_col`, the group label row already gains structural prominence from its placement. Add just enough on top to make groups scannable without piling on:
-
-- Bold the group label.
-- Optionally add a background fill — a light tint counts as Small Color polish; a stronger, saturated fill counts as a Big Color treatment against the 1–3 budget and should be reserved for tables where grouping is *the* story.
-- Keep group labels from competing with the title or column headers visually.
-
-### Spanner Labels
-
-Spanners sit one level above column labels and cover multiple columns, so they should read as *at least as prominent* as the column labels beneath them — often slightly more so.
-
-- At minimum, match the column-label formatting (same font weight and size).
-- For tables where grouping is part of the story, the spanner can be slightly grander: a touch larger, bolder, or with a subtle background fill that ties together the columns it covers.
-- Do not let the spanner overpower the title.
-
-## Typography & Spacing
-
-### Bold and Color Text Emphasis
-
-Use **bold text** and **colored text** deliberately to draw the reader's eye to what matters most. This is one of the most powerful Big Color tools; the exact recipe lives in `references/big_color/bold_colored_number.md`.
-
-**When to use bold text (`style.text(weight="bold")`):**
-- Key metrics — if the table's story centers on one number, bold it
-- Column headers or labels that need extra emphasis
-- (Totals, row group labels, and spanners have their own rules in *Structural Element Treatment* above.)
-
-**When to use colored text (`style.text(color=...)`):**
-- Positive/negative indicators — green for gains, red for losses (pair with bold for critical values)
-- Threshold alerts — values above or below a meaningful threshold
-- Category identification — when color maps to a category and reinforces a grouping
-
-**When NOT to use:**
-- Don't bold every cell — if everything is bold, nothing is bold
-- Don't color text randomly — every colored cell should answer "why is this highlighted?"
-- Don't use more than 2–3 text colors in a single table
-- Don't stack colored text on top of a `column_gradient_fill` or `diverging_fill` — pick one Big Color mechanism per column
-
-### Font Choices
-
-- Default system fonts work well for most tables
-- Use `system_fonts("humanist")` for a warmer, readable feel
-- Use `system_fonts("neo-grotesque")` for a clean, modern look
-- Set via `opt_table_font()` or `tab_options(table_font_names=...)`
-
-### Sizing
-
-- `table_font_size="14px"` — good default for readability
-- `heading_title_font_size="18px"` — title should be noticeably larger
-- `source_notes_font_size="11px"` — de-emphasize footnotes
-
-### Padding
-
-- Use `opt_horizontal_padding(scale=2)` for tables with few columns (adds breathing room)
-- Use `opt_vertical_padding(scale=0.8)` for dense data tables with many rows
-- Default padding works for most 5–15 row tables
-
-## Pre-built Themes
-
-`opt_stylize(style=N, color=C)` provides quick professional looks:
-
-- **Style 1**: Colored heading background, clean body
-- **Style 2**: Colored column labels, striped rows
-- **Style 3**: Heavy borders, bold structure
-- **Style 4**: Minimal, thin lines
-- **Style 5**: Colored row groups
-- **Style 6**: Full color with all elements styled
-
-Colors: `"blue"`, `"cyan"`, `"pink"`, `"green"`, `"red"`, `"gray"`
-
-Use these as starting points, then override specific elements with `tab_style` or `tab_options`.
-
-## Common Anti-patterns
-
-| Don't | Do instead |
+| Constant | Value |
 |---|---|
-| Show raw float columns without formatting | Apply `fmt_number` with appropriate decimals |
-| Display all 20+ columns from the source data | Select 5–8 most relevant, hide the rest |
-| Use default column names like `avg_rev_q1_ytd` | Relabel with `cols_label` to human-readable text |
-| Apply data_color without a domain | Set `domain=[min, max]` for consistency |
-| Create a table without a title | Always use `tab_header(title=...)` |
-| Use red/green for the only visual distinction | Add a redundant encoding (bold weight, an icon, or a short text label) so the cell is readable without color |
-| Put source info in the title/subtitle | Use `tab_source_note` for citations |
-| Show >20 rows without grouping | Use `groupname_col` or limit to top-N with a note |
+| **Frame** | Boxed: an enclosing light border on all four sides + a margin around the whole table (never flat/edge-to-edge). Margin = `gtsave(expand=…)` (raise from the 5px default to ~15–20). Border = `tab_options(table_border_top/bottom/left/right_color/width)`. Rounded corners preferred (`opt_stylize` is an accepted mechanism); a square light border is acceptable — the enclosing border + margin is the non-negotiable. |
+| **Header alignment** | Title + subtitle centered (`heading_align="center"`, the default). |
+| **Font family** | great-tables default. Do **not** set `table_font_names` unless the user asks. |
+| **Font size** | Default; shrink as little as possible, only when forced. |
 
+**Font-size fit rule.** When a table is too big to render cleanly, in this order:
+(1) give it room — raise `gtsave(vwidth=…, vheight=…)`; (2) keep it crisp — raise
+`gtsave(zoom=…)` (default `2.0`); (3) **only then** reduce font size, by the
+smallest amount that restores clarity. Relative scale when sizes are set:
+title > subtitle > body > source/caption.
+
+## Step 1 — Understand the data
+
+Read a sample (`df.shape`, `df.dtypes`, `df.head`, `df.describe()`, `df.isnull().sum()`)
+and establish: **what a row is**, the grain, key identifiers, the measures, the
+categories, units/scale, ranges, and data quality (nulls, outliers). Watch scale
+traps: is `rate` 0.05 (decimal) or 5.0 (percent)? is `revenue` dollars or thousands?
+
+**Validate the request against the data.** If the data cannot answer the request,
+stop, tell the user what is missing, write a minimal `table.py` that emits a blank
+table, and save a blank `table.png`. **Never fabricate data.**
+
+## Step 2 — Organize columns
+
+1. **Show / hide.** Target **4–8** visible columns (max 10–12). Hide IDs, internals,
+   intermediate calculations.
+2. **Limit rows.** Target **5–15**. For large data: top-N, aggregate, or a meaningful
+   subset. Every row must earn its place.
+3. **Stub (`rowname_col`) — the default.** If a column holds row identifiers
+   (name/date/ID), make it the stub. Add `tab_stubhead(label=…)` unless self-evident.
+4. **Groups (`groupname_col`) — additive, gated.** Add groups **only if** data
+   volume/goal warrants it **and** it doesn't conflict with the request. **When
+   unsure, do not add groups.** Stub + groups may coexist.
+5. **Spanners (`tab_spanner`).** Give logically related columns (facets of one
+   measure, a period, a category) a spanner. These boundaries drive Step 5's dividers.
+6. **Name the hero.** Which column(s) carry the story? This drives Big-Color
+   targeting (Step 3) and, if the hero isn't colored, bold emphasis.
+
+## Step 3 — Big Color: at most 2 colored measures
+
+A **measure** is a distinct quantity encoded by color; it may span **many columns**
+when they are facets/repetitions of the same quantity (e.g. density across 6
+year-columns is one measure). **Ceiling: at most 2 colored measures.** One measure ⇒
+it's the hero and gets colored. Never a third.
+
+**Load `references/palettes.md` plus the matching `big_color/<shape>.md`**, then pick
+each measure's encoding by data shape:
+
+| The measure is… | Encoding | Palette | Load |
+|---|---|---|---|
+| Signed (neg/pos, opposite meaning) | diverging fill, symmetric domain | `RdYlGn` (default) | `big_color/diverging_fill.md` |
+| Ordered magnitude, ≥5 rows | sequential gradient | semantic hue | `big_color/column_gradient_fill.md` |
+| Matrix / heatmap (facets, one scale) | one gradient shared across facets (single domain) | semantic hue | `big_color/column_gradient_fill.md` |
+| Top-N / a few "winner" rows | full-row highlight | DA solid | `big_color/full_row_highlight.md` |
+| Binary / categorical status | status cell fill | DA solids | `big_color/status_cell_fill.md` |
+| A few outlier cells | bold colored number | DA solid | `big_color/bold_colored_number.md` |
+| One text column that IS the column | full-column fill | DA solid | `big_color/full_column_fill.md` |
+
+Rules:
+
+- **Consistency within a measure:** every column shares the **same palette and the
+  same domain** (one `data_color` domain across all facet columns, not per-column).
+- **Two sequential measures:** give them **two distinct semantic hue families —
+  never the same** (e.g. `Blues` + `Greens`, not `Blues` + `Blues`).
+- **Non-gradient Big Color uses the Dark Academia solids** (hue per the DA
+  selection rule in `palettes.md`).
+- **No-Big-Color branch:** a pure categorical/text table with no magnitude / trend /
+  signed / winner story gets **no** color fill — its anchor is the **dark heading
+  band** (Step 4). This is the branch that produces classic grouped grids.
+- **Hero-not-colored:** if the hero is textual and isn't a colored measure, emphasize
+  it with **bold text**. Never stack bold on a filled column.
+
+## Step 4 — Heading band (conditional)
+
+Keyed **only off Big Color** (fills, colored text, highlighted row/column from
+Step 3). The quiet washed/grey surfaces of Step 5 do **not** count here.
+
+```
+Does the table have ANY Big Color?
+  ├─ YES → column-label band = LIGHT (washed-DA tint of the Big-Color hue, or grey)
+  └─ NO  → column-label band = DARK saturated (Dark Academia solid, white text;
+           hue per the DA selection rule → usually Navy — this band is the anchor)
+```
+
+Always keep the column-label **bottom rule** (`#CCCCCC`, 2px) regardless of band.
+Spanner labels read **at least as prominent** as the column labels beneath them.
+
+## Step 5 — Small Color (fixed, rule-gated checklist)
+
+No free menu. **Load `references/small_color.md`** and run every item; each is gated
+by a rule, and every light surface comes from the washed-DA + grey palette:
+
+- **(a) Cell borders — always.** Light hairline (`#E8E8E8`, 1px) between body rows;
+  a slightly stronger rule (`#BDBDBD`) at structural boundaries (totals, group breaks).
+- **(b) Column-group dividers.** IF spanners/column groups exist → a light,
+  easily-noticeable vertical divider (`#D0D0D0`) **at each group boundary only**.
+- **(c) Row striping.** IF **≥10 rows** AND the body is **not** essentially fully
+  filled by Big Color → `opt_row_striping()`. Skip otherwise (stripes and fills fight).
+- **(d) Stub tint.** IF a stub exists → a light tint (grey by default; washed-DA tint
+  when Big Color present). Subject to the grey-budget rule.
+- **(e) fmt_* per column.** Match semantic type. Percent 1 decimal; currency 0 dec.
+  for whole-dollar, 2 for small money; number = meaningful precision; `use_seps=True`;
+  `sub_missing("—")`. Units in labels only when the formatter doesn't convey them.
+
+**Grey-budget rule:** when several large grey areas stack and go monotonous, recolor
+the **highest-priority** element (order: `stub → labels → row design`) to the
+washed-DA tint of the Big-Color hue. Shift only as many elements as needed.
+
+## Step 6 — Titles & annotations
+
+Four elements with distinct, non-overlapping jobs. Caption and source are both
+`tab_source_note` calls in the footer, emitted in this order (each renders on its own
+stacked line):
+
+| Element | Required? | Job |
+|---|---|---|
+| **Title** | Always | The headline naming the table |
+| **Subtitle** | Always | Raw understanding of the data **+ how the table is organized** (grouping, dimensions, scope, time range, units). Must **not** merely list columns and must **not** carry the insight. |
+| **Caption** | When **≥5 rows** | The **takeaway** — *exactly one sentence* on what the reader should gain. First footer line. |
+| **Source** | When stated/implied | Provenance only. Footer, below the caption. |
+
+Subtitle describes *how the table is built and what it shows*; the caption states
+*what it means / why you'd read it*. Do not let the subtitle steal the caption's
+insight. Either footer note may be omitted independently.
+
+## Step 7 — Render & verify
+
+- End with **`gt.gtsave("table.png")`**. **Never** fall back to `gt.save()` (deprecated),
+  `.as_raw_html()` + a screenshot tool, PIL/Pillow, imgkit/wkhtmltoimage/weasyprint,
+  Playwright/Selenium/headless-chrome, or writing `table.html`. If rendering fails,
+  **stop and surface the error verbatim** — a fallback produces a fake table.
+- Read the PNG back and audit against **every** rule:
+  - Frame boxed with margin? Header centered? Default font? Resolution clean (raise
+    `zoom`/`vwidth` before shrinking text)?
+  - ≤2 colored measures, each one palette+domain consistent across its columns? Two
+    sequential measures using distinct hue families?
+  - Heading band correct per the Big-Color test (Step 4), hue per the DA rule?
+  - Every Step-5 item applied per its gate? Light surfaces from the washed-DA+grey
+    palette? Grey-budget respected?
+  - Title + subtitle present with the right roles? Caption **iff** ≥5 rows (one
+    sentence, first footer line)? Source **iff** known (below caption)?
+- Fix at the **root**, re-render, re-audit until fully conformant.
+
+## Correctness gotchas
+
+- **`data_color` domain**: always set `domain=` to the full data range; diverging →
+  **symmetric around 0** (`domain=[-40, 40]`, not `[-20, 30]`); `truncate=False`.
+- **`fmt_percent` scale**: values in decimal form (0.15 = 15%); if data is 0–100, use
+  `scale_values=False`.
+- **Original column names** in `fmt_*`/`data_color` — not the `cols_label` display text.
+- **Row indices in `loc.body()`** are 0-based display positions, not DataFrame index.
+- **Method chaining**: build the whole table in one chained expression; collect row
+  indices into lists rather than looping `tab_style` per row.
+- **Imports**: `from great_tables import GT, md, html, style, loc`.
+
+## Fast path
+
+If `scripts/gt_consistency.py` is importable, prefer it over hand-writing hexes and
+the frame: `from gt_consistency import PALETTE, frame, finalize`. `PALETTE` holds the
+exact hexes from `palettes.md` (`PALETTE["solid"]["navy"]`, `PALETTE["washed"]["navy"]`,
+`PALETTE["neutral"]["hairline"]`, …); `frame(gt)` applies the boxed border; and
+`finalize(gt, "table.png")` calls `gtsave` with the right margin/zoom defaults. The
+script encodes **zero decisions** — every choice still comes from the flowchart
+above; it only removes the chance to fat-finger a hex or forget a `gtsave` arg. When
+the import isn't present, hand-write the values from `palettes.md`.
