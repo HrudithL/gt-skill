@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 from datetime import datetime
@@ -37,6 +38,91 @@ from claude_agent_sdk import (
 ROOT = Path(__file__).parent.resolve()
 SKILL_NAME = "great-tables"
 SKILL_DIR = ROOT / ".claude" / "skills" / SKILL_NAME
+
+# The three skill variants the harness can run a prompt under. See
+# _prepare_skill_root() for how each is physically realized.
+SKILL_VARIANTS = ("none", "prose", "scripted")
+
+# Heading of the SKILL.md block that only ships in the "scripted" variant.
+# Stripped verbatim (heading through the next level-2 heading / EOF) to build
+# the "prose" variant.
+_FAST_PATH_HEADING = "Fast path"
+
+
+def _strip_fast_path(text: str) -> str:
+    """Return SKILL.md text with the `## Fast path` section removed.
+
+    Deletes from the `## Fast path` heading up to (but not including) the next
+    level-2 `## ` heading, or end-of-file. Level-3+ headings (`### …`) inside
+    the block do not terminate it. If no such section exists this is a no-op,
+    so it is safe to run against a SKILL.md that predates the Fast-path block.
+    """
+    lines = text.splitlines(keepends=True)
+    out: list[str] = []
+    i, n = 0, len(lines)
+    heading_re = re.compile(rf"^##\s+{re.escape(_FAST_PATH_HEADING)}\s*$")
+    next_h2_re = re.compile(r"^##\s+\S")
+    while i < n:
+        if heading_re.match(lines[i]):
+            i += 1  # drop the heading
+            while i < n and not next_h2_re.match(lines[i]):
+                i += 1  # drop the body up to the next level-2 heading / EOF
+            continue
+        out.append(lines[i])
+        i += 1
+    return "".join(out)
+
+
+def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
+    """Return the `.claude` root the SDK should load for this variant.
+
+    - ``scripted`` → the repo's own ``.claude`` as-is (with ``scripts/`` and the
+      ``## Fast path`` block if present). No copy is made, so existing callers
+      that never pass a variant behave exactly as before.
+    - ``prose`` → an ephemeral ``.claude`` copied under ``run_dir`` whose skill
+      has ``scripts/`` deleted and the ``## Fast path`` section stripped from
+      ``SKILL.md``. The model then hand-writes constants/frame from prose.
+    - ``none`` → an ephemeral ``.claude`` with an EMPTY ``skills/`` dir, so no
+      skill is discovered even under ``setting_sources=["project"]`` — the
+      baseline. Everything else (e.g. ``settings.local.json``) is copied so the
+      only thing that differs from the with-skill variants is the skill itself.
+    """
+    if skill_variant not in SKILL_VARIANTS:
+        raise ValueError(
+            f"skill_variant must be one of {SKILL_VARIANTS}, got {skill_variant!r}"
+        )
+    if skill_variant == "scripted":
+        return ROOT / ".claude"
+
+    eph = run_dir / f".claude-{skill_variant}"
+    if eph.exists():
+        shutil.rmtree(eph)
+    eph.mkdir(parents=True)
+
+    # Mirror everything except skills/ so permissions etc. match the real project.
+    for item in (ROOT / ".claude").iterdir():
+        if item.name == "skills":
+            continue
+        if item.is_dir():
+            shutil.copytree(item, eph / item.name)
+        else:
+            shutil.copy2(item, eph / item.name)
+
+    skills_dst = eph / "skills"
+    skills_dst.mkdir()
+    if skill_variant == "none":
+        return eph  # empty skills/ = baseline
+
+    # prose: copy the skill, drop scripts/, strip the Fast-path block.
+    dst_skill = skills_dst / SKILL_NAME
+    shutil.copytree(SKILL_DIR, dst_skill, symlinks=False)
+    scripts_dir = dst_skill / "scripts"
+    if scripts_dir.exists():
+        shutil.rmtree(scripts_dir)
+    skill_md = dst_skill / "SKILL.md"
+    if skill_md.exists():
+        skill_md.write_text(_strip_fast_path(skill_md.read_text()))
+    return eph
 
 # Harness-specific rendering instructions appended to the claude_code system
 # prompt. Kept here (not in the skill) because they describe THIS environment's
@@ -226,15 +312,25 @@ def log_message(d: dict) -> None:
 
 
 async def run(
-    user_prompt: str, data_path: Path, run_dir: Path, chrome_ws: str
+    user_prompt: str,
+    data_path: Path,
+    run_dir: Path,
+    chrome_ws: str,
+    skill_variant: str = "scripted",
 ) -> None:
     data_link = run_dir / data_path.name
     if not data_link.is_symlink() and not data_link.exists():
         data_link.symlink_to(data_path)
 
+    # Point run_dir/.claude at the right skill root for this variant. For the
+    # default "scripted" variant this resolves to ROOT/.claude, preserving the
+    # original behavior; "prose"/"none" get an ephemeral copy under run_dir.
+    skill_root = _prepare_skill_root(run_dir, skill_variant)
     claude_link = run_dir / ".claude"
-    if not claude_link.is_symlink() and not claude_link.exists():
-        claude_link.symlink_to(ROOT / ".claude")
+    if claude_link.is_symlink():
+        claude_link.unlink()  # re-point a stale link from a previous variant
+    if not claude_link.exists():
+        claude_link.symlink_to(skill_root)
 
     # Symlink the nokap monkey-patch shim into the run dir so the agent's
     # `table.py` can `import gtskill_chrome` and reuse the sidecar browser.
@@ -261,7 +357,9 @@ async def run(
             "preset": "claude_code",
             "append": _RENDER_INSTRUCTIONS,
         },
-        skills=[SKILL_NAME],
+        # "none" is the baseline: request no skill. The ephemeral .claude root
+        # for "none" also has an empty skills/, so nothing is auto-discovered.
+        skills=[] if skill_variant == "none" else [SKILL_NAME],
         setting_sources=["project"],
         # Allowed_tools in ClaudeAgentOptions doesn't shrink the CLIs inventory (this is why the transcript shows all tools), it gets translated into permission rules that are checked when the model tries to call a tool
         # There is a chance that in the system prompt for the agent it may see all available skills and the allowlist just limits running the tools (dependent on the SDK itself), luckily this doesnt happen rn, but could in future possibly
