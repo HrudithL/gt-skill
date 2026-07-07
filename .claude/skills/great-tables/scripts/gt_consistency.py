@@ -71,25 +71,32 @@ PALETTE = {
 }
 
 
-def frame(gt, color=None, width="1px"):
+def frame(gt, color=None, width="1px", style="solid"):
     """Apply the boxed enclosing light border on all four sides.
 
     Mechanical only — no decisions. Sets the top/bottom/left/right table
-    border color to a light neutral from ``PALETTE`` and their widths, giving
-    the non-negotiable enclosing box. ``color``/``width`` may be overridden but
-    default to values derived from ``PALETTE``.
+    border color, width, and style to give the non-negotiable enclosing box.
+    The ``style`` is set explicitly because Great Tables defaults the left/right
+    border style to ``"none"`` — setting only color/width would leave the side
+    borders invisible and render top/bottom rules instead of a box.
+    ``color``/``width``/``style`` may be overridden but default to values
+    derived from ``PALETTE``.
 
     Returns the GT object (``tab_options`` is chainable).
     """
     if color is None:
         color = PALETTE["neutral"]["column_label_rule"]
     return gt.tab_options(
+        table_border_top_style=style,
         table_border_top_color=color,
         table_border_top_width=width,
+        table_border_bottom_style=style,
         table_border_bottom_color=color,
         table_border_bottom_width=width,
+        table_border_left_style=style,
         table_border_left_color=color,
         table_border_left_width=width,
+        table_border_right_style=style,
         table_border_right_color=color,
         table_border_right_width=width,
     )
