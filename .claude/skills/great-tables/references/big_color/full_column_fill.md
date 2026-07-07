@@ -18,11 +18,8 @@ from great_tables import GT, style, loc
 gt = (
     GT(df)
     .tab_style(
-        style=style.fill(color="#eef4fb"),          # pale, saturated enough to notice
-        locations=loc.body(columns="focus_col"),
-    )
-    .tab_style(
-        style=style.text(weight="bold"),            # optional: reinforce the column
+        style=[style.fill(color="#22384F"),          # Dark Academia solid (Navy default)
+               style.text(color="#ffffff", weight="bold")],   # white text on the solid
         locations=loc.body(columns="focus_col"),
     )
 )
@@ -31,10 +28,9 @@ gt = (
 ## Rules
 
 - **One fill color for the whole column.** Do not vary it row-by-row — that's a different technique (`column_gradient_fill` or `status_cell_fill`).
-- **Pale, not saturated.** A saturated fill fights with the text on top and blows the color budget. Aim for a fill where black body text still reads cleanly.
-- **Match the fill hue to the column's meaning** using the palette guidance in `SKILL.md` (green = positive measure, red/orange = risk/warning, blue = neutral).
-- **Also fill the column-label header** for that column if you want the emphasis to extend into the header — pair with the `column_label_emphasis` technique on just that column.
-- **Do not** fill the stub column this way. Stub is structural — use Small Color's `stub_tint` instead.
+- **A solid Dark Academia hex with white text** (this is a non-gradient Big Color). Navy `#22384F` is the default; harmonize to the table's DA hue per the DA hue-selection rule in `references/palettes.md` §1 (Forest `#2F4A38`, Oxblood `#5C2E2E`, Espresso `#4A3A2C`, Ochre `#9A7B33`, Tan `#8A7452`). Never a pale/washed tint here — that quiet tint belongs to the stub, not to a Big-Color column.
+- **Also fill the column-label header** for that column with the same DA solid if you want the emphasis to extend into the header — pair with the `column_label_emphasis` technique on just that column.
+- **Do not** fill the stub column this way. Stub is structural — use the stub tint in `references/small_color.md` instead.
 
 ## Counts as
 
