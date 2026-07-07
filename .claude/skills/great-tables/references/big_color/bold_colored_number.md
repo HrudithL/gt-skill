@@ -25,11 +25,11 @@ gt = (
     GT(df, rowname_col="period")
     .fmt_percent(columns="return", decimals=1, force_sign=True)
     .tab_style(
-        style=style.text(weight="bold", color="#2e7d32"),      # green for positive outliers
+        style=style.text(weight="bold", color="#2F4A38"),      # Forest solid = positive outliers
         locations=loc.body(columns="return", rows=hi_rows),
     )
     .tab_style(
-        style=style.text(weight="bold", color="#c62828"),      # red for negative outliers
+        style=style.text(weight="bold", color="#5C2E2E"),      # Oxblood solid = negative outliers
         locations=loc.body(columns="return", rows=lo_rows),
     )
 )
@@ -39,7 +39,7 @@ gt = (
 
 - **Collect row indices into a list first**, then make one `tab_style` call per style. Never loop `tab_style` once per row.
 - **Cap the number of highlighted cells.** If more than ~1/3 of the column is bold-colored, nothing stands out — switch to a gradient/diverging fill instead.
-- **No more than 2–3 text colors in a single table.** Green/red is the standard pair; a single amber is fine for a "warning" tier.
+- **Colored text uses the Dark Academia solids** (per `references/palettes.md` §1): Forest `#2F4A38` = positive/good, Oxblood `#5C2E2E` = negative/bad, Ochre `#9A7B33` for a single "warning" tier. No more than 2–3 text colors in one table.
 - **Use `rows=<list of int positions>`** — positional row indices in the displayed table, not DataFrame index values (they only match when the DataFrame index is `0..n-1`).
 - Bold-only (no color) is also a valid variant when the highlight is about *importance*, not *direction* — e.g. the row that answers the user's specific question.
 
