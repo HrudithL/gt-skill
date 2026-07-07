@@ -25,7 +25,7 @@ gt = (
         columns="measure",
         palette="Blues",         # Greens = good-direction, Reds/Oranges = warning, Blues = neutral
         domain=[lo, hi],         # explicit — never omit
-        na_color="#f2f2f2",
+        na_color="#808080",      # NA/empty neutral (palettes.md §2)
     )
 )
 ```
