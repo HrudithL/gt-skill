@@ -1,6 +1,6 @@
 ---
 name: great-tables
-description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Drives every table through one deterministic 7-step flowchart — understand data, organize columns, Big Color (≤2 colored measures), heading band, Small-Color checklist, titles/annotations, render+verify — so the same input characteristics always produce the same publication-ready design. Provides the full API reference (`references/api.md`), the color source-of-truth (`references/palettes.md`: Dark Academia solids, washed tints, neutrals, sequential/diverging), the fixed Small-Color polish checklist (`references/small_color.md`), per-data-shape Big-Color recipes (`references/big_color/`), and archetype examples (`assets/examples/`). The mandatory renderer is `gt.gtsave("table.png")`. Invoke before reading the data or writing any Python — the flowchart shapes the whole script.
+description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Drives every table through one deterministic 7-step flowchart — understand data, organize columns, Big Color (≤2 colored measures), heading band, Small-Color checklist, titles/annotations, render+verify — so the same input characteristics always produce the same publication-ready design. Provides the full API reference (`references/api.md`), the color source-of-truth (`references/palettes.md` — Dark Academia solids, washed tints, neutrals, sequential/diverging), the fixed Small-Color polish checklist (`references/small_color.md`), per-data-shape Big-Color recipes (`references/big_color/`), and archetype examples (`assets/examples/`). The mandatory renderer is `gt.gtsave("table.png")`. Invoke before reading the data or writing any Python — the flowchart shapes the whole script.
 ---
 
 # Great Tables Skill
@@ -103,18 +103,18 @@ when they are facets/repetitions of the same quantity (e.g. density across 6
 year-columns is one measure). **Ceiling: at most 2 colored measures.** One measure ⇒
 it's the hero and gets colored. Never a third.
 
-**Load `references/palettes.md` plus the matching `big_color/<shape>.md`**, then pick
-each measure's encoding by data shape:
+**Load `references/palettes.md` plus the matching `references/big_color/<shape>.md`**,
+then pick each measure's encoding by data shape:
 
 | The measure is… | Encoding | Palette | Load |
 |---|---|---|---|
-| Signed (neg/pos, opposite meaning) | diverging fill, symmetric domain | `RdYlGn` (default) | `big_color/diverging_fill.md` |
-| Ordered magnitude, ≥5 rows | sequential gradient | semantic hue | `big_color/column_gradient_fill.md` |
-| Matrix / heatmap (facets, one scale) | one gradient shared across facets (single domain) | semantic hue | `big_color/column_gradient_fill.md` |
-| Top-N / a few "winner" rows | full-row highlight | DA solid | `big_color/full_row_highlight.md` |
-| Binary / categorical status | status cell fill | DA solids | `big_color/status_cell_fill.md` |
-| A few outlier cells | bold colored number | DA solid | `big_color/bold_colored_number.md` |
-| One text column that IS the column | full-column fill | DA solid | `big_color/full_column_fill.md` |
+| Signed (neg/pos, opposite meaning) | diverging fill, symmetric domain | `RdYlGn` (default) | `references/big_color/diverging_fill.md` |
+| Ordered magnitude, ≥5 rows | sequential gradient | semantic hue | `references/big_color/column_gradient_fill.md` |
+| Matrix / heatmap (facets, one scale) | one gradient shared across facets (single domain) | semantic hue | `references/big_color/column_gradient_fill.md` |
+| Top-N / a few "winner" rows | full-row highlight | DA solid | `references/big_color/full_row_highlight.md` |
+| Binary / categorical status | status cell fill | DA solids | `references/big_color/status_cell_fill.md` |
+| A few outlier cells | bold colored number | DA solid | `references/big_color/bold_colored_number.md` |
+| One text column that IS the column | full-column fill | DA solid | `references/big_color/full_column_fill.md` |
 
 Rules:
 
@@ -160,7 +160,12 @@ by a rule, and every light surface comes from the washed-DA + grey palette:
   when Big Color present). Subject to the grey-budget rule.
 - **(e) fmt_* per column.** Match semantic type. Percent 1 decimal; currency 0 dec.
   for whole-dollar, 2 for small money; number = meaningful precision; `use_seps=True`;
-  `sub_missing("—")`. Units in labels only when the formatter doesn't convey them.
+  `sub_missing(missing_text="—")`. Units in labels only when the formatter doesn't convey them.
+- **(f) Row-group headers.** IF the table uses `groupname_col` → style each group-label
+  row: **bold weight + a light tint** (`row_group_background_color`, grey `#F0F0F0` by
+  default or the washed-DA tint when Big Color present) + a `#BDBDBD` structural rule.
+  Never leave group labels as bare rows; never fill them with a saturated color.
+  (mechanism in `references/small_color.md`.)
 
 **Grey-budget rule:** when several large grey areas stack and go monotonous, recolor
 the **highest-priority** element (order: `stub → labels → row design`) to the
@@ -196,7 +201,8 @@ insight. Either footer note may be omitted independently.
     sequential measures using distinct hue families?
   - Heading band correct per the Big-Color test (Step 4), hue per the DA rule?
   - Every Step-5 item applied per its gate? Light surfaces from the washed-DA+grey
-    palette? Grey-budget respected?
+    palette? Grey-budget respected? If `groupname_col` is used, are the group-label
+    rows styled (bold + tint + rule) rather than bare?
   - Title + subtitle present with the right roles? Caption **iff** ≥5 rows (one
     sentence, first footer line)? Source **iff** known (below caption)?
 - Fix at the **root**, re-render, re-audit until fully conformant.
