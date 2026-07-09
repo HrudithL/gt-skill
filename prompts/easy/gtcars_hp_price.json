@@ -1,4 +1,4 @@
-{
-  "prompt": "Show me a table of the gt cars with their horsepower and price.",
-  "data": "data/gtcars.csv"
-}
+  {
+    "prompt": "Show me a table of the gt cars with their horsepower and price.",
+    "data": "data/gtcars.csv"
+  }
