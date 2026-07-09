@@ -6,13 +6,10 @@ Story:  "How did the four pizza categories perform across sizes?" — a
         category, each cell is an aggregate, and the table closes
         with a grand total row so the headline number is on the page.
 """
-import sys
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent.parent
-sys.path.insert(0, str(_ROOT))
-import gtskill_chrome  # noqa: F401
 
 import pandas as pd
 from great_tables import GT, loc, style

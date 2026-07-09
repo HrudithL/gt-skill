@@ -11,13 +11,10 @@ Story:  Rate constants of ten common atmospheric trace gases reacting
         an uncertainty so the reader knows when two rows are
         statistically indistinguishable.
 """
-import sys
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent.parent
-sys.path.insert(0, str(_ROOT))
-import gtskill_chrome  # noqa: F401
 
 import pandas as pd
 from great_tables import GT, html

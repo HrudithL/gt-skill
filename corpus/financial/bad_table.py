@@ -10,13 +10,10 @@ Dominant failure mode (one per spec §13 Q2):
 Same source CSV as good_table.py (../../data/sp500.csv) so the judge is
 comparing presentation, not data.
 """
-import sys
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent.parent
-sys.path.insert(0, str(_ROOT))
-import gtskill_chrome  # noqa: F401
 
 import pandas as pd
 from great_tables import GT

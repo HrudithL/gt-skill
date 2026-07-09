@@ -7,13 +7,10 @@ Story:  Monthly summary of New York City air quality across the summer
         and a sparkline of daily ozone within each month so the eye can
         see the within-month volatility, not just the mean.
 """
-import sys
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent.parent
-sys.path.insert(0, str(_ROOT))
-import gtskill_chrome  # noqa: F401
 
 import pandas as pd
 from great_tables import GT, html
