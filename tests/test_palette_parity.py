@@ -25,8 +25,10 @@ HEX_RE = re.compile(r"#[0-9A-Fa-f]{6}")
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILL_DIR = os.path.join(REPO_ROOT, ".claude", "skills", "great-tables")
+# palettes.md is the source of truth in the prose skill's references/; the
+# helper library now lives in the scripted (CI) skill's scripts/ (R2 moved it).
 PALETTES_MD = os.path.join(SKILL_DIR, "references", "palettes.md")
-SCRIPTS_DIR = os.path.join(SKILL_DIR, "scripts")
+SCRIPTS_DIR = os.path.join(REPO_ROOT, ".claude", "skills", "great-tables-ci", "scripts")
 
 
 def _doc_hexes():

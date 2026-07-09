@@ -227,3 +227,32 @@ to `#CCCCCC`/2px, or match the band color to the table's DA hue).
   up on and fights the data-driven fill.
 - **Do not stack `opt_stylize` with `opt_row_striping()`** — the theme already stripes;
   layering produces darker-than-intended stripes.
+
+## Frame & render parameters (the Global-constant values)
+
+SKILL.md and `REFERENCE.md` route the **Frame** and **font-size fit** global constants
+here for their exact values.
+
+**Frame — the boxed enclosing border (every table).** A light border on **all four
+sides** plus an outer margin; never flat/edge-to-edge. The border color is the neutral
+`#CCCCCC`, 1px, `solid`. Great Tables defaults the *left/right* border style to
+`"none"`, so you MUST set the style explicitly or the sides render invisible (you'd get
+top/bottom rules, not a box):
+
+```python
+gt = gt.tab_options(
+    table_border_top_style="solid",    table_border_top_color="#CCCCCC",    table_border_top_width="1px",
+    table_border_bottom_style="solid", table_border_bottom_color="#CCCCCC", table_border_bottom_width="1px",
+    table_border_left_style="solid",   table_border_left_color="#CCCCCC",   table_border_left_width="1px",
+    table_border_right_style="solid",  table_border_right_color="#CCCCCC",  table_border_right_width="1px",
+)
+```
+
+**Outer margin.** `gt.gtsave("table.png", expand=15)` — raise from the 5px default to
+**~15–20** so the box has breathing room. (Scripted variant: `finalize(gt)` applies
+this.)
+
+**Render / fit order.** Keep the default **`zoom=2.0`**. When a table renders too big,
+in order: (1) raise `gtsave(vwidth=…, vheight=…)` to give it room; (2) raise
+`gtsave(zoom=…)` to keep it crisp; (3) only then reduce font size, minimally. Never
+*lower* `zoom` below 2.0 to force a fit — that just blurs the render.
