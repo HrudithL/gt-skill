@@ -17,8 +17,13 @@ Paths below are relative to the skill's `references/` directory (examples are un
 Open **`api.md`** and copy the exact signature. Mechanical API detail only; every
 design decision stays in SKILL.md and the files below.
 
-## 1. EVERY table — unconditional (Steps 4 & 5)
+## 1. EVERY table — unconditional (Steps 1, 4 & 5)
 
+- **`data.md`** — the data-cleaning sub-step (Step 1, **before you organize columns**):
+  get to ONE correctly-typed DataFrame. Strip currency/percent strings to floats, coerce
+  `object`-dtype numerics, fix a non-zero header row, cast SQL `Decimal`s, standardize
+  missing values. `great_tables` formats numbers, it does not parse strings — skip this
+  and `fmt_*` / `data_color` break silently.
 - **`palettes.md`** — the single source of truth for every hex: Dark Academia solids,
   their washed light tints, the neutral greys, and the sequential/diverging palette
   *names*. Open it before you write any color at all.
