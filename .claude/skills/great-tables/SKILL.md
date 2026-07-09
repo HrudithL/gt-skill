@@ -31,6 +31,7 @@ conflicting default silently — do not fight it or add it back later.
 
 ```
 1. UNDERSTAND THE DATA   grain? identifiers? measures? categories? units? quality?
+                         clean → ONE correctly-typed DataFrame (references/data.md)
                          validate request vs data (blank table if unanswerable)
 2. ORGANIZE COLUMNS      show/hide · limit rows · stub (default) · groups (gated)
                          spanners (column groups) · name the hero column
@@ -55,6 +56,11 @@ Before you type the code below, open the file `REFERENCE.md` routes you to and *
 the value out of it. Do NOT guess a palette, a hex, a domain, or a signature from
 memory.**
 
+- **Before you organize columns** (right after Step 1): open `data.md` and get to
+  **one clean, correctly-typed DataFrame** — strip currency/percent strings to floats,
+  coerce `object`-dtype numeric columns, fix a non-zero header row, cast SQL `Decimal`s.
+  `great_tables` *formats* numbers; it does **not** parse strings, so a `"$1,200"` value
+  silently breaks `fmt_*` / `data_color`.
 - **Before you write any `data_color(...)`** (Step 3): the exact palette name, hexes,
   and domain live ONLY in the `big_color/<shape>.md` file `REFERENCE.md` names for your
   data shape. Open that file (plus `palettes.md`) and copy them. Do not invent a
