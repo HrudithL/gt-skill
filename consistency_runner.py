@@ -29,6 +29,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 from collections import Counter
@@ -47,6 +48,11 @@ ROOT = Path(__file__).parent.resolve()
 # Fields the convergence metric is computed over, in report order. Each maps a
 # parsed design choice to a hashable value; palettes is list-valued and gets a
 # signature in _field_convergence().
+#
+# R5 (PP-29) widens the metric beyond styling: the trailing six fields score the
+# structural / data choices the palette-name-only metric was blind to —
+# grouping, stub, the visible column set + labels, number formatting, the
+# data_color domains, and a best-effort hash of the frame the table renders.
 CONVERGENCE_FIELDS = [
     "heading_band_shade",
     "heading_band_hue",
@@ -56,6 +62,12 @@ CONVERGENCE_FIELDS = [
     "dividers_present",
     "caption_present",
     "source_present",
+    "grouping_present",
+    "stub_present",
+    "columns_signature",
+    "fmt_signature",
+    "domain_signature",
+    "data_hash",
 ]
 
 # Palette hexes lifted from references/palettes.md (§1 solids + washed tints,
@@ -153,6 +165,29 @@ def _call_arg_blocks(source: str, func: str) -> list[str]:
     return blocks
 
 
+def _gt_constructor_blocks(source: str) -> list[str]:
+    """Return the argument text of every top-level `GT(...)` constructor call.
+
+    Distinct from `_call_arg_blocks` (which needs a leading dot): the GT
+    constructor is called bare, e.g. `GT(df, groupname_col='Country')`. The
+    negative lookbehind avoids matching identifiers ending in `GT` or `.GT`.
+    """
+    blocks: list[str] = []
+    for m in re.finditer(r"(?<![\w.])GT\s*\(", source):
+        open_idx = m.end() - 1
+        depth = 0
+        for j in range(open_idx, len(source)):
+            c = source[j]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    blocks.append(source[open_idx + 1 : j])
+                    break
+    return blocks
+
+
 def _find_band_color(source: str) -> str | None:
     """Extract the heading-band background hex, if the script sets one.
 
@@ -195,11 +230,300 @@ def _vlines_active(source: str) -> bool:
     return False
 
 
-def parse_design_choices(source: str) -> dict:
+# --------------------------------------------------------------------------- #
+# R5 — expanded convergence signals (structure / data, not just style)
+# --------------------------------------------------------------------------- #
+def _columns_signature(source: str) -> str:
+    """Canonical signature of the visible column set + labels (PP-19..24).
+
+    Built from the *displayed* labels in `cols_label(...)` and the hidden
+    columns in `cols_hide(...)`, so two runs that show the same columns under
+    the same labels produce the same string regardless of call ordering. Both
+    keyword (`open="Opening Price"`) and dict-unpacked
+    (`**{'Closing Price': 'Closing Price'}`) label forms are handled, plus an
+    optional `md(...)`/`html(...)` wrapper on the label value. Returns
+    "(unknown)" when neither call is parseable.
+    """
+    tokens: list[str] = []
+    for block in _call_arg_blocks(source, "cols_label"):
+        # keyword form:  ident = "Label"   (label optionally wrapped in md()/html())
+        for m in re.finditer(
+            r"\b[A-Za-z_]\w*\s*=\s*(?:md|html)?\s*\(?\s*['\"]([^'\"]+)['\"]", block
+        ):
+            tokens.append("label:" + m.group(1))
+        # dict form:  "key": "Label"
+        for m in re.finditer(
+            r"['\"][^'\"]+['\"]\s*:\s*(?:md|html)?\s*\(?\s*['\"]([^'\"]+)['\"]", block
+        ):
+            tokens.append("label:" + m.group(1))
+    for block in _call_arg_blocks(source, "cols_hide"):
+        for m in re.finditer(r"['\"]([^'\"]+)['\"]", block):
+            tokens.append("hide:" + m.group(1))
+    if not tokens:
+        return "(unknown)"
+    return "|".join(sorted(set(tokens)))
+
+
+def _fmt_signature(source: str) -> str:
+    """Sorted multiset of the `fmt_*` formatters applied (PP-14/15/16).
+
+    Function-name multiset only (duplicates kept, so two `fmt_currency` calls
+    read as two): captures currency-vs-plain and percent divergence. Column
+    targets are intentionally not parsed — they are unreliable across the
+    keyword/list/positional forms these scripts use. "(none)" when no formatter
+    is applied.
+    """
+    names = re.findall(r"\.(fmt_[a-z_]+)\s*\(", source)
+    if not names:
+        return "(none)"
+    return "|".join(sorted(names))
+
+
+def _round_sig(x: float, sig: int = 2) -> str:
+    """Format a float to `sig` significant figures with a compact exponent.
+
+    e.g. -20 -> "-20", 4786714716 -> "4.8e9", 100 -> "1e2", 0.045 -> "0.045".
+    The exponent is normalized (strip the sign's leading zeros: e+09 -> e9) so
+    the same magnitude always renders the same string across runs.
+    """
+    if x == 0:
+        return "0"
+    s = f"{x:.{sig}g}"
+    s = re.sub(
+        r"e([+-]?)0*(\d)",
+        lambda mm: "e" + ("-" if mm.group(1) == "-" else "") + mm.group(2),
+        s,
+    )
+    return s
+
+
+def _split_top_level(text: str, sep: str = ",") -> list[str]:
+    """Split `text` on `sep`, ignoring separators nested in (), [] or {}."""
+    parts: list[str] = []
+    depth = 0
+    cur: list[str] = []
+    for ch in text:
+        if ch in "([{":
+            depth += 1
+            cur.append(ch)
+        elif ch in ")]}":
+            depth -= 1
+            cur.append(ch)
+        elif ch == sep and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur))
+    return [p for p in (p.strip() for p in parts) if p != ""]
+
+
+def _fmt_domain_elem(text: str) -> str:
+    """Normalize one `domain=[...]` element to a stable token.
+
+    Numeric literal -> rounded to 2 sig figs; a `.min()`/`.max()` expression ->
+    "min"/"max" (so two data-driven runs converge); anything else -> its
+    whitespace-stripped source text.
+    """
+    t = text.strip()
+    try:
+        return _round_sig(float(t))
+    except ValueError:
+        low = t.lower()
+        if ".min(" in low:
+            return "min"
+        if ".max(" in low:
+            return "max"
+        return re.sub(r"\s+", "", t)
+
+
+def _domain_signature(source: str) -> str:
+    """Canonical signature of every `data_color(domain=[...])` (PP-6/PP-7).
+
+    One `[a,b]` group per data_color call (a call with no domain -> "(none)"),
+    sorted and joined with ";", e.g. "[-11,11];[0,4.8e9]". A balanced-bracket
+    scan is used because the list can contain `df['col'].min()` indexing. "(none)"
+    when there are no data_color calls at all (matches the palettes "no color"
+    convention).
+    """
+    sigs: list[str] = []
+    for block in _call_arg_blocks(source, "data_color"):
+        m = re.search(r"domain\s*=\s*\[", block)
+        if not m:
+            sigs.append("(none)")
+            continue
+        start = m.end() - 1  # index of the opening '['
+        depth = 0
+        inner: str | None = None
+        for j in range(start, len(block)):
+            ch = block[j]
+            if ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+                if depth == 0:
+                    inner = block[start + 1 : j]
+                    break
+        if inner is None:
+            sigs.append("(none)")
+            continue
+        elems = _split_top_level(inner)
+        sigs.append("[" + ",".join(_fmt_domain_elem(e) for e in elems) + "]")
+    if not sigs:
+        return "(none)"
+    return ";".join(sorted(sigs))
+
+
+# Subprocess body for the best-effort data-frame hash (PP-18/PP-29). Kept as a
+# `python -c` payload so it runs in a *fresh* interpreter we can hard-timeout and
+# kill — it never touches the reporting process. Reads the table.py path from
+# argv[1], stubs the harness Chrome shim + `gtsave`, execs the script with its
+# stdout swallowed, then hashes the frame the table renders. Any failure prints
+# an empty hash, which the parent maps to None.
+_DATA_HASH_RUNNER = r'''
+import sys, types, io, hashlib, contextlib
+
+
+def _is_frame(obj):
+    mod = type(obj).__module__ or ""
+    return type(obj).__name__ == "DataFrame" and (
+        mod.startswith("pandas") or mod.startswith("polars")
+    )
+
+
+def _size(df):
+    try:
+        s = getattr(df, "shape", None)
+        if s and len(s) == 2:
+            return int(s[0]) * int(s[1])
+    except Exception:
+        pass
+    return -1
+
+
+def _canon_and_hash(df):
+    mod = type(df).__module__ or ""
+    if mod.startswith("pandas"):
+        d = df
+        try:
+            d = d.round(6)          # stabilize float noise
+        except Exception:
+            pass
+        try:
+            d = d.reindex(sorted(d.columns, key=str), axis=1)  # sort columns
+        except Exception:
+            pass
+        try:
+            payload = d.to_csv(index=False)
+        except Exception:
+            payload = repr(d)
+    elif mod.startswith("polars"):
+        try:
+            payload = df.select(sorted(df.columns)).write_csv()
+        except Exception:
+            payload = repr(df)
+    else:
+        payload = repr(df)
+    return hashlib.sha256(payload.encode("utf-8", "replace")).hexdigest()[:12]
+
+
+def main():
+    path = sys.argv[1]
+    with open(path) as fh:
+        src = fh.read()
+
+    # Neutralize the harness Chrome shim / venv sidecar hook so importing them
+    # never launches a browser.
+    for name in ("gtskill_chrome", "_gtskill_sidecar"):
+        sys.modules[name] = types.ModuleType(name)
+
+    # Capture the frame(s) handed to GT(...) (the rendered data), and make
+    # gtsave a no-op so nothing tries to render.
+    captured = []
+    try:
+        import great_tables as _gt
+        _orig_init = _gt.GT.__init__
+
+        def _patched_init(self, data=None, *a, **k):
+            try:
+                if _is_frame(data):
+                    captured.append(data)
+            except Exception:
+                pass
+            return _orig_init(self, data, *a, **k)
+
+        _gt.GT.__init__ = _patched_init
+        _gt.GT.gtsave = lambda *a, **k: None
+    except Exception:
+        pass
+
+    ns = {"__name__": "__main__", "__file__": path}
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        exec(compile(src, path, "exec"), ns)
+
+    # Prefer the frame actually rendered (handed to GT); fall back to the
+    # largest DataFrame in the namespace. The raw input CSV is often the largest
+    # object, so a pure "largest" heuristic would hash the unchanged input and
+    # miss the divergent computations R5 is meant to catch (PP-18).
+    candidates = list(captured)
+    if not candidates:
+        candidates = [v for v in ns.values() if _is_frame(v)]
+    if not candidates:
+        return None
+    best = max(candidates, key=_size)
+    return _canon_and_hash(best)
+
+
+try:
+    _h = main()
+except Exception:
+    _h = None
+sys.stdout.write("DATAHASH:%s\n" % (_h if _h else ""))
+'''
+
+
+def _compute_data_hash(run_dir: Path, timeout: float = 30.0) -> str | None:
+    """Best-effort short hex hash of the frame `run_dir/table.py` renders.
+
+    Execs table.py in a hard-timed-out **subprocess** (fresh interpreter, cwd =
+    run_dir so relative data paths resolve) with `gtsave` stubbed to a no-op and
+    the Chrome shim neutralized, then hashes the canonicalized frame. Returns
+    None on ANY failure/timeout — the field is then simply skipped in the
+    convergence scoring, exactly like a missing choice. This never hangs (the
+    subprocess is killed on timeout) and never raises to the caller.
+
+    Limitation: scripts that import run-dir-local helper modules that are not
+    present, do network I/O, or otherwise fail to exec cleanly will yield None.
+    That is intentional — a None just means "not comparable for this run".
+    """
+    table_py = run_dir / "table.py"
+    if not table_py.exists():
+        return None
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _DATA_HASH_RUNNER, str(table_py)],
+            cwd=str(run_dir),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except Exception:  # TimeoutExpired (subprocess is killed) or spawn failure
+        return None
+    for line in proc.stdout.splitlines():
+        if line.startswith("DATAHASH:"):
+            val = line[len("DATAHASH:") :].strip()
+            return val or None
+    return None
+
+
+def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
     """Parse a `table.py` source string into the design choices the rules pin down.
 
     Heuristic (regex) parsing — it reads the choices the skill's flowchart makes
-    deterministic, not the full semantics of the script.
+    deterministic, not the full semantics of the script. The structural R5
+    fields (grouping/stub/columns/fmt/domain) are pure source regex; `data_hash`
+    needs `run_dir` (to exec the script against its data) and is None otherwise.
     """
     band_hex = _find_band_color(source)
     frame_present = bool(
@@ -221,6 +545,21 @@ def parse_design_choices(source: str) -> dict:
     source_present = bool(re.search(r"\.tab_source_note\s*\(", source))
 
     palettes = _extract_palettes(source)
+
+    # R5: grouping / stub are GT(...) constructor kwargs (PP-1 / PP-13).
+    gt_blocks = _gt_constructor_blocks(source)
+    grouping_present = any(re.search(r"\bgroupname_col\s*=", b) for b in gt_blocks)
+    stub_present = any(re.search(r"\browname_col\s*=", b) for b in gt_blocks)
+
+    # R5: best-effort computed-data hash (PP-18/PP-29); None-safe, off the
+    # critical path — a failure here must never break the report.
+    data_hash: str | None = None
+    if run_dir is not None:
+        try:
+            data_hash = _compute_data_hash(run_dir)
+        except Exception:
+            data_hash = None
+
     return {
         "heading_band_shade": _band_shade(band_hex) if band_hex else "none",
         "heading_band_hue": _classify_hue(band_hex) if band_hex else "none",
@@ -233,6 +572,13 @@ def parse_design_choices(source: str) -> dict:
         "caption_present": caption_present,
         "title_present": title_present,
         "source_present": source_present,
+        # R5 additions (PP-29):
+        "grouping_present": grouping_present,
+        "stub_present": stub_present,
+        "columns_signature": _columns_signature(source),
+        "fmt_signature": _fmt_signature(source),
+        "domain_signature": _domain_signature(source),
+        "data_hash": data_hash,
     }
 
 
@@ -242,7 +588,7 @@ def parse_table_dir(run_dir: Path) -> dict:
     if not table_py.exists():
         return {"status": "missing", "choices": None, "has_png": (run_dir / "table.png").exists()}
     try:
-        choices = parse_design_choices(table_py.read_text())
+        choices = parse_design_choices(table_py.read_text(), run_dir=run_dir)
     except Exception as e:  # never let a bad script kill the whole report
         return {"status": "error", "error": str(e), "choices": None,
                 "has_png": (run_dir / "table.png").exists()}
@@ -328,17 +674,31 @@ def build_contact_sheet(
 # convergence report
 # --------------------------------------------------------------------------- #
 def _value_signature(value):
-    """Make a design-choice value hashable/JSON-key-safe for counting."""
+    """Make a design-choice value hashable/JSON-key-safe for counting.
+
+    Lists (e.g. palettes) collapse to a joined signature; str / bool / None
+    (the R5 fields are str/bool, data_hash is str|None) pass through unchanged.
+    """
     if isinstance(value, list):
         return "|".join(value) if value else "(none)"
     return value
 
 
 def _field_convergence(field: str, baseline_choices: dict | None, repeat_choices: list[dict | None]) -> dict:
-    """Agreement stats for one field across the parsed with-skill repeats."""
-    vals = [_value_signature(c[field]) for c in repeat_choices if c is not None]
+    """Agreement stats for one field across the parsed with-skill repeats.
+
+    Repeats whose value for this field is None are skipped (not counted as an
+    agreeing "None"): this matters for `data_hash`, which is None whenever the
+    frame could not be computed — only runs where it *was* computable are scored.
+    Existing fields never carry None values, so their behavior is unchanged.
+    """
+    vals = [
+        _value_signature(c[field])
+        for c in repeat_choices
+        if c is not None and c.get(field) is not None
+    ]
     baseline_val = (
-        _value_signature(baseline_choices[field]) if baseline_choices is not None else None
+        _value_signature(baseline_choices.get(field)) if baseline_choices is not None else None
     )
     n = len(vals)
     if n == 0:
@@ -447,7 +807,7 @@ def _print_summary(report: dict, out_dir: Path) -> None:
     print(f"overall convergence: {report['overall_convergence']}")
     for field, c in report["convergence"].items():
         print(
-            f"  {field:22s} agree={c['agreement']:>5s}  "
+            f"  {field:24s} agree={c['agreement']:>5s}  "
             f"consensus={str(c['consensus'])!s:14.14}  baseline={str(c['baseline'])!s:.20}"
         )
     print(f"\ncontact sheet:  {out_dir / 'contact_sheet.png'}")
