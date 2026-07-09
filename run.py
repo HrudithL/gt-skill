@@ -46,9 +46,18 @@ SKILL_DIR = ROOT / ".claude" / "skills" / SKILL_NAME
 # evaluation against the promoted one in SKILL_DIR. See skill_creator_runner.py.
 CREATOR_SKILL_SRC = ROOT / ".claude-skill-creator"
 
-# The skill variants the harness can run a prompt under. See
-# _prepare_skill_root() for how each is physically realized.
-SKILL_VARIANTS = ("none", "prose", "scripted", "creator")
+# The *with-skill* variants the harness can run a prompt under. See
+# _prepare_skill_root() for how each is physically realized. The baseline
+# (below) is deliberately NOT in this tuple: it is realized by the *absence*
+# of a skill root, not by a skill variant.
+SKILL_VARIANTS = ("prose", "scripted", "creator")
+
+# Baseline config (R1): the agent sees NO `.claude` directory at all — no
+# skill, no settings.local.json — and is launched with `skills=[]`. Kept under
+# the historical token "none" so existing callers (consistency_runner.py) need
+# no change; `run()` short-circuits on it before any skill-root preparation, so
+# no ephemeral `.claude` is ever created for the baseline.
+BASELINE_VARIANT = "none"
 
 # Heading of the SKILL.md block that only ships in the "scripted" variant.
 # Stripped verbatim (heading through the next level-2 heading / EOF) to build
@@ -89,10 +98,6 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
     - ``prose`` → an ephemeral ``.claude`` copied under ``run_dir`` whose skill
       has ``scripts/`` deleted and the ``## Fast path`` section stripped from
       ``SKILL.md``. The model then hand-writes constants/frame from prose.
-    - ``none`` → an ephemeral ``.claude`` with an EMPTY ``skills/`` dir, so no
-      skill is discovered even under ``setting_sources=["project"]`` — the
-      baseline. Everything else (e.g. ``settings.local.json``) is copied so the
-      only thing that differs from the with-skill variants is the skill itself.
     - ``creator`` → like ``prose``'s scaffolding, but ``skills/great-tables`` is
       copied verbatim from ``CREATOR_SKILL_SRC`` (``.claude-skill-creator/``)
       instead of from ``SKILL_DIR``. Nothing is stripped: the candidate skill is
@@ -121,8 +126,6 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
 
     skills_dst = eph / "skills"
     skills_dst.mkdir()
-    if skill_variant == "none":
-        return eph  # empty skills/ = baseline
 
     dst_skill = skills_dst / SKILL_NAME
     if skill_variant == "creator":
@@ -339,15 +342,25 @@ async def run(
     if not data_link.is_symlink() and not data_link.exists():
         data_link.symlink_to(data_path)
 
-    # Point run_dir/.claude at the right skill root for this variant. For the
-    # default "scripted" variant this resolves to ROOT/.claude, preserving the
-    # original behavior; "prose"/"none" get an ephemeral copy under run_dir.
-    skill_root = _prepare_skill_root(run_dir, skill_variant)
+    # Baseline (BASELINE_VARIANT) sees NO .claude at all: skip skill-root prep
+    # and the symlink entirely, and remove any stale .claude a previous variant
+    # left in this run_dir. With-skill variants get their skill root symlinked
+    # in. For the default "scripted" variant the root resolves to ROOT/.claude,
+    # preserving the original behavior; "prose"/"creator" get an ephemeral copy.
+    is_baseline = skill_variant == BASELINE_VARIANT
     claude_link = run_dir / ".claude"
-    if claude_link.is_symlink():
-        claude_link.unlink()  # re-point a stale link from a previous variant
-    if not claude_link.exists():
-        claude_link.symlink_to(skill_root)
+    skill_root: Path | None = None
+    if is_baseline:
+        if claude_link.is_symlink():
+            claude_link.unlink()
+        elif claude_link.exists():
+            shutil.rmtree(claude_link)
+    else:
+        skill_root = _prepare_skill_root(run_dir, skill_variant)
+        if claude_link.is_symlink():
+            claude_link.unlink()  # re-point a stale link from a previous variant
+        if not claude_link.exists():
+            claude_link.symlink_to(skill_root)
 
     # Symlink the nokap monkey-patch shim into the run dir so the agent's
     # `table.py` can `import gtskill_chrome` and reuse the sidecar browser.
@@ -360,7 +373,7 @@ async def run(
     # skill's Python helpers into run_dir so `import gt_house_style` resolves
     # (same affordance the gtskill_chrome shim above gives). Creator-only; the
     # promoted skill's Fast path handles its own import.
-    if skill_variant == "creator":
+    if skill_variant == "creator" and skill_root is not None:
         creator_scripts = skill_root / "skills" / SKILL_NAME / "scripts"
         if creator_scripts.is_dir():
             for py in creator_scripts.glob("*.py"):
@@ -387,9 +400,9 @@ async def run(
             "preset": "claude_code",
             "append": _RENDER_INSTRUCTIONS,
         },
-        # "none" is the baseline: request no skill. The ephemeral .claude root
-        # for "none" also has an empty skills/, so nothing is auto-discovered.
-        skills=[] if skill_variant == "none" else [SKILL_NAME],
+        # Baseline requests no skill AND has no .claude at all (see above), so
+        # nothing is auto-discovered even under setting_sources=["project"].
+        skills=[] if is_baseline else [SKILL_NAME],
         setting_sources=["project"],
         # Allowed_tools in ClaudeAgentOptions doesn't shrink the CLIs inventory (this is why the transcript shows all tools), it gets translated into permission rules that are checked when the model tries to call a tool
         # There is a chance that in the system prompt for the agent it may see all available skills and the allowlist just limits running the tools (dependent on the SDK itself), luckily this doesnt happen rn, but could in future possibly
