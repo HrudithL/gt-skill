@@ -8,7 +8,12 @@ Apply `data_color` with a diverging palette to a signed numeric column so that n
 - Positive and negative carry **opposite meaning** (up = good and down = bad, or vice versa).
 - Zero (or another explicit midpoint) is the natural neutral.
 
-If the column is one-directional (only positive, only "more = more"), use `column_gradient_fill.md` instead.
+If the column is one-directional (only positive, only "more = more"), use `column_gradient_fill.md` instead. A diverging palette on **unsigned** data is WRONG (see the "Do NOT" block below).
+
+## Palette (pinned)
+
+- **`RdYlGn` — the default for any signed measure** (red = bad/negative, green = good/positive). This is the deterministic choice; do not substitute a custom hex list.
+- `RdBu` / `PuOr` — colorblind-safe alternatives; use one of these when accessibility is a hard requirement.
 
 ## Recipe
 
@@ -16,29 +21,42 @@ If the column is one-directional (only positive, only "more = more"), use `colum
 import numpy as np
 from great_tables import GT
 
-max_abs = float(np.nanmax(np.abs(df["return"])))    # symmetric around 0
+# SYMMETRIC, DATA-DRIVEN domain across ALL facet columns of this ONE measure.
+cols = ["return"]                                        # every column that IS this measure
+lo = float(np.nanmin(df[cols].to_numpy()))
+hi = float(np.nanmax(df[cols].to_numpy()))
+M  = max(abs(lo), abs(hi))                               # M = max(|min|, |max|)
 
 gt = (
     GT(df, rowname_col="period")
-    .fmt_percent(columns="return", decimals=1, force_sign=True)
+    .fmt_percent(columns=cols, decimals=1, force_sign=True)
     .data_color(
-        columns="return",
-        palette="RdYlGn",                            # red = bad, green = good
-        domain=[-max_abs, max_abs],                  # symmetric so 0 is the midpoint
+        columns=cols,
+        palette="RdYlGn",                            # signed default; RdBu / PuOr = colorblind-safe alts
+        domain=[-M, M],                              # SYMMETRIC so 0 sits at the palette midpoint
+        truncate=False,                              # extreme outliers keep the strongest hue
     )
 )
 ```
 
 ## Rules
 
-- **Symmetric domain**: always `[-max_abs, max_abs]` (or symmetric around whatever the neutral point is). An asymmetric domain visually shifts the midpoint off zero and makes similar-magnitude gains and losses look different.
+- **Symmetric, data-driven domain — always `[-M, M]` where `M = max(|min|, |max|)`**
+  computed over **all facet columns** of the measure. Compute it from the frame; never
+  hand-pick a round bound. The domain is symmetric so `0` lands exactly on the palette
+  midpoint and a +5% gain and a −5% loss render at equal saturation.
 - **`force_sign=True`** in the formatter so the `+`/`−` is part of the cell text — the reader shouldn't have to infer sign from color alone.
-- **Palette choice**:
-  - `"RdYlGn"` — canonical financial (red = loss, green = gain). Avoid if colorblind accessibility is a hard requirement.
-  - `"RdBu"` — anomalies, sentiment, thermal-style.
-  - `"PuOr"` — balanced, colorblind-safe.
 - **Do not also color the text** red/green on top of the fill. Redundant encoding on top of the fill adds no signal and crowds the cell. Pick fill *or* colored-bold-text, not both. (If you want colored bold text for outliers only, use `bold_colored_number.md` and skip the fill.)
 - **Leave `truncate=False`** (default) so extreme outliers still get the strongest hue.
+
+## Do NOT (these are WRONG — the two failure modes)
+
+- **Asymmetric domain** (e.g. `domain=[-30, 15]`) — WRONG. `0` must sit at the palette
+  midpoint; an off-center domain shifts the neutral point, so equal-magnitude gains and
+  losses render at different saturations and the red/green split lies about the data.
+- **A diverging palette on UNSIGNED data** (e.g. `RdYlGn` on a price or volume) — WRONG.
+  Diverging implies a good-vs-bad axis around a midpoint that does **not** exist for a
+  pure magnitude; use a **sequential** gradient (`column_gradient_fill.md`) instead.
 
 ## Counts as
 

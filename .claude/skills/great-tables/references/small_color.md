@@ -37,6 +37,38 @@ the dominant Big-Color hue — see the grey-budget rule):
 
 ---
 
+## Deterministic triggers — resolve these BEFORE you style
+
+Each is a decision the model **executes** on a computable condition, not a judgment
+call. Read the condition first; if it fires, the action is mandatory.
+
+### Stub default — a computable trigger (PP-13)
+
+**IF a column holds row identifiers (name / date / ID) ⇒ it IS the stub**
+(`rowname_col=…`) — **default ON, not optional.** Do not leave an obvious identifier
+as a plain value column. A `tab_stubhead(label=…)` **requires** that the stub already
+exist — **no orphan label** (setting a stubhead when there is no `rowname_col` is
+wrong, PP-25).
+
+### Grouping — a computable trigger (PP-1)
+
+**IF the user's prompt names a grouping dimension** ("grouped by X", "by country",
+"per region"), **OR the data has a low-cardinality categorical that is the organizing
+story ⇒ use `groupname_col=…`.** When the prompt says group, grouping is
+**MANDATORY** (Rule 0) — never render that dimension as a plain column. (Stub + groups
+may coexist.)
+
+### Ambiguous measures — pick ONE canonical definition (F-canonical-metric, PP-18)
+
+**IF a requested measure has more than one reasonable definition** (e.g. "highest
+single-day gain" = `close − open`? intraday `high − low`? day-over-day
+`close.diff()`?) **⇒ pick ONE canonical definition, compute it, and STATE the chosen
+definition** in the subtitle or a source note so the number is reproducible. Do **not**
+silently pick one — an unstated choice makes the same prompt yield different numbers
+across runs.
+
+---
+
 ## (a) Cell borders — ALWAYS
 
 **Gate:** every table.
@@ -202,31 +234,23 @@ Never fill a group header with a saturated color — that would make structural 
 compete with the data. Editorial weight belongs on the **column labels** (Step-4 band),
 not on group headers.
 
-## Sub-note — themed baseline (`opt_stylize`)
+## Sub-note — do NOT use `opt_stylize` as a whole-table styler (PP-17)
 
-An optional one-call starting point for a **categorical / textual grid** with no
-natural numeric column to color (the no-Big-Color branch — a top-N list, a small
-comparison table). `opt_stylize` ships a colored column-label band, striped body, and
-matching hairline dividers in a single call, giving a cohesive base you then reconcile
-with the checklist above.
+**Do NOT use `opt_stylize(...)` to theme the whole table** — it bypasses Steps 4–5.
+Build the heading **band (Step 4)** and the **Small-Color polish (Step 5)** explicitly
+from this checklist, so the band hue, stripes, and dividers are the pinned hexes and
+not a built-in theme. Escaping to `opt_stylize(style=N)` is exactly the off-flowchart
+drift that made "same-prompt" runs render as different products.
 
-```python
-gt = (
-    GT(df, groupname_col="Region")
-    .opt_stylize(style=2, color="gray")          # band + stripes + dividers in one call
-)
-```
+`opt_stylize` may be used for **one** thing only: the rounded-corner **container** per
+the **Frame** global constant (it is the documented way to get rounded corners) —
+**never** as the color / band / stripe / theme mechanism. If you use it for the
+container, reset any chrome it touches back to this checklist's pinned surfaces with a
+later `tab_options(...)` call (e.g. restore the `#CCCCCC`/2px bottom rule) — later
+`tab_options(...)` wins.
 
-`style=` 1–6 (2 = colored labels + stripes + light dividers, a good default);
-`color=` one of `"blue" "cyan" "pink" "green" "red" "gray"`. Later `tab_options(...)`
-calls win, so you can override any chrome piece afterward (e.g. reset the bottom rule
-to `#CCCCCC`/2px, or match the band color to the table's DA hue).
-
-- **Skip `opt_stylize` when the table commits to a strong Big Color story** (a
-  gradient/diverging fill, full-column fill, status pills) — its theme chrome doubles
-  up on and fights the data-driven fill.
-- **Do not stack `opt_stylize` with `opt_row_striping()`** — the theme already stripes;
-  layering produces darker-than-intended stripes.
+- **Do not stack `opt_stylize` with `opt_row_striping()`** — layering the two produces
+  darker-than-intended stripes; item (c) already owns striping.
 
 ## Frame & render parameters (the Global-constant values)
 
