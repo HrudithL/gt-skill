@@ -12,13 +12,10 @@ Gradient convention (per spec §13 Q1, decided in advance):
     signed; a sequential scale would conflate "no change" with one of
     the extremes.
 """
-import sys
 from pathlib import Path
 
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent.parent
-sys.path.insert(0, str(_ROOT))
-import gtskill_chrome  # noqa: F401
 
 import pandas as pd
 from great_tables import GT, html
