@@ -107,8 +107,10 @@ numeric values live in the references.
 - **Row indices in `loc.body()`** are 0-based display positions, not the DataFrame index.
 - **Method chaining.** Build the whole table in one chained expression; collect row
   indices into lists rather than looping `tab_style` per row.
-- **Renderer.** End with **`gt.gtsave("table.png")`** only. Never fall back to
-  `gt.save()` (deprecated), `.as_raw_html()` + a screenshot tool, PIL/Pillow,
+- **Renderer.** End with **`gt.gtsave("table.png")`** only. `gtsave()` renders
+  through headless Chrome, so a launchable **Chrome/Chromium is a prerequisite**
+  (assume one is installed; do not provision it). Never fall back to `gt.save()`
+  (deprecated), `.as_raw_html()` + a screenshot tool, PIL/Pillow,
   imgkit/wkhtmltoimage/weasyprint, Playwright/Selenium/headless-chrome, or writing
   `table.html`. If rendering fails, **stop and surface the error verbatim** — a
   fallback produces a fake table.

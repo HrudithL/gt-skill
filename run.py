@@ -35,6 +35,13 @@ from claude_agent_sdk import (
 )
 
 ROOT = Path(__file__).parent.resolve()
+VENV_DIR = ROOT / ".venv"
+# Source for the venv sidecar startup hook (R11). Installed into the venv's
+# site-packages so `gt.gtsave()` auto-attaches to the sidecar Chrome — see
+# gtskill_sidecar.py and _ensure_sidecar_hook() below.
+SIDECAR_HOOK_SRC = ROOT / "gtskill_sidecar.py"
+SIDECAR_MODULE_NAME = "_gtskill_sidecar"
+
 SKILL_NAME = "great-tables"            # prose skill dir + mounted name (prose/creator)
 SKILL_DIR = ROOT / ".claude" / "skills" / SKILL_NAME
 
@@ -127,17 +134,16 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
 _RENDER_INSTRUCTIONS = """\
 ## Rendering tables to PNG (this environment)
 
-A long-lived headless Chrome browser is already running for you. To
-attach to it, every `table.py` you write MUST follow these two rules:
+A launchable Chrome/Chromium is a prerequisite and is already provided: a
+long-lived headless Chrome is running for you outside the sandbox, and the
+project virtualenv has a startup hook that automatically points `nokap`
+(and therefore `gt.gtsave()`) at it over loopback CDP. So you do NOT need to
+import or configure anything for rendering — just:
 
-1. The first import in `table.py` must be `import gtskill_chrome`. This
-   module is already in the working directory; importing it rewires
-   `nokap` to talk to the running browser over loopback CDP. Without it,
-   `gt.gtsave()` will try to spawn its own Chrome and die inside the
-   sandbox.
-2. End the script with `gt.gtsave("table.png")`. Do NOT use the
-   deprecated `gt.save()` — it relies on Selenium/chromedriver and is
-   not wired up in this environment.
+- End the script with `gt.gtsave("table.png")`. Do NOT use the deprecated
+  `gt.save()` (Selenium/chromedriver, not wired up here). You do NOT need
+  `import gtskill_chrome` or any Chrome setup — the venv hook handles the
+  attach; the render section is simply `gt.gtsave("table.png")`.
 
 Run scripts with plain `python table.py`. The harness puts the
 project's virtualenv (which has `great_tables`, `nokap`, `pandas`,
@@ -308,6 +314,46 @@ def log_message(d: dict) -> None:
         )
 
 
+def _venv_site_packages() -> Path | None:
+    """Return the project venv's site-packages dir, or None if not found."""
+    for sp in sorted(VENV_DIR.glob("lib/python*/site-packages")):
+        if sp.is_dir():
+            return sp
+    return None
+
+
+def _ensure_sidecar_hook() -> None:
+    """Install the sidecar CDP-attach as a venv `.pth` startup hook (R11).
+
+    Copies ``gtskill_sidecar.py`` into the venv's site-packages as
+    ``_gtskill_sidecar.py`` and drops a one-line ``_gtskill_sidecar.pth`` next to
+    it (``import _gtskill_sidecar``). Python's ``site`` module runs that import at
+    interpreter startup for every ``python`` in the venv, so ``gt.gtsave()``
+    attaches to the sidecar with no per-file ``import`` in the generated
+    ``table.py``. A ``.pth`` is used rather than a venv ``sitecustomize.py``
+    because the base interpreter already ships a ``sitecustomize`` that would
+    shadow a venv one; ``.pth`` import lines are additive and never shadowed.
+
+    Idempotent (rewrites only when content differs) and best-effort — a failure
+    here must not abort a run; if the hook is missing, rendering surfaces its own
+    error, which is the intended fail-loud behavior.
+    """
+    try:
+        site = _venv_site_packages()
+        if site is None or not SIDECAR_HOOK_SRC.is_file():
+            return
+        module_dst = site / f"{SIDECAR_MODULE_NAME}.py"
+        src_text = SIDECAR_HOOK_SRC.read_text()
+        if not module_dst.exists() or module_dst.read_text() != src_text:
+            module_dst.write_text(src_text)
+        pth_dst = site / f"{SIDECAR_MODULE_NAME}.pth"
+        pth_line = f"import {SIDECAR_MODULE_NAME}\n"
+        if not pth_dst.exists() or pth_dst.read_text() != pth_line:
+            pth_dst.write_text(pth_line)
+    except Exception as e:  # never abort a run over the hook
+        print(f"warning: could not install sidecar hook: {e}", file=sys.stderr)
+
+
 async def run(
     user_prompt: str,
     data_path: Path,
@@ -315,6 +361,12 @@ async def run(
     chrome_ws: str,
     skill_variant: str = "scripted",
 ) -> None:
+    # Ensure the venv sidecar startup hook is installed (R11) so the agent's
+    # `gt.gtsave("table.png")` attaches to the out-of-sandbox Chrome with no
+    # per-file import. Idempotent; runs parent-side (this function is not
+    # sandboxed), so it can write into the venv.
+    _ensure_sidecar_hook()
+
     data_link = run_dir / data_path.name
     if not data_link.is_symlink() and not data_link.exists():
         data_link.symlink_to(data_path)
@@ -340,17 +392,15 @@ async def run(
         if not claude_link.exists():
             claude_link.symlink_to(skill_root)
 
-    # Symlink the nokap monkey-patch shim into the run dir so the agent's
-    # `table.py` can `import gtskill_chrome` and reuse the sidecar browser.
-    shim_link = run_dir / "gtskill_chrome.py"
-    if not shim_link.is_symlink() and not shim_link.exists():
-        shim_link.symlink_to(ROOT / "gtskill_chrome.py")
+    # (R11) No per-file Chrome shim is symlinked in anymore: the CDP attach lives
+    # in the venv `.pth` startup hook (_ensure_sidecar_hook above), so a generated
+    # `table.py` renders with a bare `gt.gtsave("table.png")` and no import.
 
     # The mounted skill's Python helpers live in its scripts/ dir, but the
     # agent's table.py runs with cwd=run_dir. Symlink every scripts/*.py into
     # run_dir so `import gt_consistency` and `python gt_check.py` (scripted) or
-    # `import gt_house_style` (creator) resolve — the same affordance the
-    # gtskill_chrome shim above gives. Prose ships no scripts/, so this no-ops.
+    # `import gt_house_style` (creator) resolve. Prose ships no scripts/, so this
+    # no-ops.
     if skill_root is not None and mounted_skill is not None:
         mounted_scripts = skill_root / "skills" / mounted_skill / "scripts"
         if mounted_scripts.is_dir():
@@ -389,11 +439,12 @@ async def run(
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         cwd=str(run_dir),
         # Sidecar Chrome runs in the parent process (outside sandbox-exec)
-        # and the agent's Python connects to it over loopback CDP. The shim
-        # `gtskill_chrome.py` (symlinked into run_dir) picks up the WS URL
-        # from GTSKILL_CHROME_WS and monkey-patches `nokap._api._browser` so
-        # `gt.gtsave("table.png")` attaches to it instead of trying to spawn
-        # a new Chrome (which would die inside the sandbox).
+        # and the agent's Python connects to it over loopback CDP. The venv
+        # startup hook `_gtskill_sidecar` (installed by _ensure_sidecar_hook)
+        # picks up the WS URL from GTSKILL_CHROME_WS and monkey-patches
+        # `nokap._api._browser` so `gt.gtsave("table.png")` attaches to it
+        # instead of trying to spawn a new Chrome (which would die inside the
+        # sandbox). No per-file import is needed in the generated table.py.
         #
         # Forcing TMPDIR=<run_dir> keeps `nokap.from_html`'s temp HTML files
         # inside the cwd that the sandbox already grants write access to, so
