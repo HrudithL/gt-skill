@@ -26,15 +26,18 @@ colored-text anchors. **White text on all solid members.**
 
 ### DA hue-selection rule (applies to any solid DA use, including the dark band)
 
-Default **Navy**. Otherwise harmonize with the table's theme, in priority order:
+Resolve to **exactly one** hue — this is a deterministic lookup, **not** a
+harmonization. **Default Navy.** Otherwise walk this priority order and **pick the
+FIRST that applies**, then stop (do not blend hues):
 
-1. any heatmap/gradient palette hues already present in the table,
-2. the data source's subject,
-3. any other colors already used in the table.
+1. any heatmap/gradient palette hue already present in the table — match its family,
+2. the data source's subject — per the "Use when…" column of the table above,
+3. any other color already used in the table.
 
-One coherent theme per table. *(For the dark heading-band case specifically — which
-only occurs when there is **no** Big Color — priority (1) never applies, so it
-resolves to subject/theme, i.e. usually Navy.)*
+If none applies, the hue **is Navy**. One coherent theme per table — the same table
+cues resolve to the same hue on every run. *(For the dark heading-band case
+specifically — which only occurs when there is **no** Big Color — priority (1) never
+applies, so it resolves to subject/theme, i.e. usually Navy.)*
 
 ---
 
@@ -78,14 +81,28 @@ Example: grey band + grey stripes + grey stub with `Blues` fills → recolor the
 Used when a measure is a magnitude / trend / signed story. These are matplotlib /
 brewer palette **names** passed to `data_color(palette=…)`, not fixed hexes.
 
-- **Sequential (by semantic meaning):**
-  - `Greens` = positive / growth ("more is better")
-  - `Reds` / `Oranges` = warning / worse ("more is worse")
-  - `Blues` = neutral (volume, count, price, population — no inherent direction)
-- **Diverging (signed values):** `RdYlGn` **default** (red = bad, green = good);
-  `RdBu` / `PuOr` colorblind-safe alternatives.
+### Sequential — fixed hue per semantic (F-deterministic-branch)
 
-Rules for the colored measures:
+This is a **lookup, not a menu.** Read the measure's semantic, take that row's
+palette. There is **no choice** and no coin-flip — the same semantic resolves to the
+same hue on every run.
+
+| Measure semantic | Palette |
+|---|---|
+| money · price · revenue · cost · volume · count · population · size — any **neutral magnitude** with no inherent good/bad direction | **`Blues`** — always |
+| growth · gain · improvement · "more is better" | **`Greens`** |
+| loss · risk · warning · worse · error rate — "more is worse" | **`Reds`** (`Oranges` = documented alternate only, when `Reds` clashes with another hue already in the table) |
+
+A neutral magnitude (money/price/volume/count/population) is **always `Blues`** —
+**never** Greens. `Greens`/`Reds` are reserved for measures that carry an explicit
+direction. This removes the Blues-vs-Greens coin-flip.
+
+### Diverging (signed values)
+
+`RdYlGn` **default** (red = bad, green = good); `RdBu` / `PuOr` colorblind-safe
+alternatives.
+
+### Rules for the colored measures
 
 - **Consistency within a measure:** every column of a measure shares the **same
   palette and the same `domain`** — one `data_color` domain spanning all facet
