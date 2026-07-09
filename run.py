@@ -39,9 +39,16 @@ ROOT = Path(__file__).parent.resolve()
 SKILL_NAME = "great-tables"
 SKILL_DIR = ROOT / ".claude" / "skills" / SKILL_NAME
 
-# The three skill variants the harness can run a prompt under. See
+# A *candidate* skill produced by the skill-creator workflow. Its SKILL.md /
+# references/ / scripts/ live directly at the top level of this dir (not under
+# a skills/<name>/ layout), and its frontmatter name is also "great-tables", so
+# the "creator" variant mounts it verbatim as the great-tables skill for A/B
+# evaluation against the promoted one in SKILL_DIR. See skill_creator_runner.py.
+CREATOR_SKILL_SRC = ROOT / ".claude-skill-creator"
+
+# The skill variants the harness can run a prompt under. See
 # _prepare_skill_root() for how each is physically realized.
-SKILL_VARIANTS = ("none", "prose", "scripted")
+SKILL_VARIANTS = ("none", "prose", "scripted", "creator")
 
 # Heading of the SKILL.md block that only ships in the "scripted" variant.
 # Stripped verbatim (heading through the next level-2 heading / EOF) to build
@@ -86,6 +93,10 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
       skill is discovered even under ``setting_sources=["project"]`` — the
       baseline. Everything else (e.g. ``settings.local.json``) is copied so the
       only thing that differs from the with-skill variants is the skill itself.
+    - ``creator`` → like ``prose``'s scaffolding, but ``skills/great-tables`` is
+      copied verbatim from ``CREATOR_SKILL_SRC`` (``.claude-skill-creator/``)
+      instead of from ``SKILL_DIR``. Nothing is stripped: the candidate skill is
+      mounted exactly as authored so its outputs can be judged as-is.
     """
     if skill_variant not in SKILL_VARIANTS:
         raise ValueError(
@@ -113,8 +124,14 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
     if skill_variant == "none":
         return eph  # empty skills/ = baseline
 
-    # prose: copy the skill, drop scripts/, strip the Fast-path block.
     dst_skill = skills_dst / SKILL_NAME
+    if skill_variant == "creator":
+        # Mount the candidate skill verbatim (SKILL.md + references/ + scripts/
+        # live at the top level of CREATOR_SKILL_SRC → become the skill dir).
+        shutil.copytree(CREATOR_SKILL_SRC, dst_skill, symlinks=False)
+        return eph
+
+    # prose: copy the skill, drop scripts/, strip the Fast-path block.
     shutil.copytree(SKILL_DIR, dst_skill, symlinks=False)
     scripts_dir = dst_skill / "scripts"
     if scripts_dir.exists():
@@ -337,6 +354,19 @@ async def run(
     shim_link = run_dir / "gtskill_chrome.py"
     if not shim_link.is_symlink() and not shim_link.exists():
         shim_link.symlink_to(ROOT / "gtskill_chrome.py")
+
+    # The candidate skill's helper (gt_house_style.py) sits in the skill's
+    # scripts/ dir, but the agent's table.py runs with cwd=run_dir. Symlink the
+    # skill's Python helpers into run_dir so `import gt_house_style` resolves
+    # (same affordance the gtskill_chrome shim above gives). Creator-only; the
+    # promoted skill's Fast path handles its own import.
+    if skill_variant == "creator":
+        creator_scripts = skill_root / "skills" / SKILL_NAME / "scripts"
+        if creator_scripts.is_dir():
+            for py in creator_scripts.glob("*.py"):
+                link = run_dir / py.name
+                if not link.is_symlink() and not link.exists():
+                    link.symlink_to(py)
 
     full_prompt = (
         f"{user_prompt}\n\n"
