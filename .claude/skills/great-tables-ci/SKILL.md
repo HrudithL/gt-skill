@@ -1,6 +1,6 @@
 ---
-name: great-tables
-description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Drives every table through one deterministic 7-step flowchart — understand data, organize columns, Big Color (≤2 colored measures), heading band, Small-Color checklist, titles/annotations, render+verify — so the same input characteristics always produce the same publication-ready design. Before writing any Python, read `references/REFERENCE.md`: it routes every color, band, polish, and API decision to the exact reference file that pins its value. The mandatory renderer is `gt.gtsave("table.png")`. Invoke before reading the data or writing any Python — the flowchart shapes the whole script.
+name: great-tables-ci
+description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Drives every table through one deterministic 7-step flowchart — understand data, organize columns, Big Color (≤2 colored measures), heading band, Small-Color checklist, titles/annotations, render+verify — so the same input characteristics always produce the same publication-ready design. Before writing any Python, read `references/REFERENCE.md`: it routes every color, band, polish, and API decision to the exact reference file that pins its value. The mandatory renderer is `gt.gtsave("table.png")`. Invoke before reading the data or writing any Python — the flowchart shapes the whole script. (CI-checked variant.)
 ---
 
 # Great Tables Skill
@@ -107,3 +107,25 @@ numeric values live in the references.
   `table.html`. If rendering fails, **stop and surface the error verbatim** — a
   fallback produces a fake table.
 - **Imports.** `from great_tables import GT, md, html, style, loc`.
+
+## Checker loop (required)
+
+This is the **CI-checked variant**. It adds two mechanical steps to the flowchart
+above; every **design** decision is still yours.
+
+- **Bind the final table to a top-level module variable named `gt`** in `table.py`.
+  This convention is not optional: the checker imports `table.py`, reads `gt`, and calls
+  `gt.as_raw_html()` to inspect the rendered DOM. If the table is bound to any other
+  name the checker cannot run.
+- **After writing `table.py`, run `python gt_check.py table.py`.** It prints a loud
+  `PASS`/`FAIL` banner. On `FAIL` it prints **one line per violation**, each naming the
+  exact `references/<file>` that documents the fix. **Open those files, fix `table.py`,
+  and re-run until it prints `PASS`.** Only then render and finish.
+- **Prefer the thin execution helpers** so the *mechanics* of a decision cannot drift
+  between runs: `from gt_consistency import PALETTE, frame, finalize, heatmap, band,
+  stripe, stub_tint`. `heatmap` computes the domain and looks up the palette; `band`
+  applies the exact band hex + the mandatory bottom rule; `frame`/`finalize` apply the
+  boxed border and the `gtsave` margin/zoom; `stripe`/`stub_tint` apply the pinned
+  surfaces; `PALETTE` holds every hex. **They choose nothing** — you still make every
+  design decision (which columns, sequential vs diverging, which hue, light vs dark
+  band) and pass it in as an argument. This is the only place scripts enter the flow.

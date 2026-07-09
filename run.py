@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import shutil
 import sys
 from datetime import datetime
@@ -36,8 +35,16 @@ from claude_agent_sdk import (
 )
 
 ROOT = Path(__file__).parent.resolve()
-SKILL_NAME = "great-tables"
+SKILL_NAME = "great-tables"            # prose skill dir + mounted name (prose/creator)
 SKILL_DIR = ROOT / ".claude" / "skills" / SKILL_NAME
+
+# The scripted, CI-checked skill (R2). A real, separate skill directory — no
+# runtime stripping. Its SKILL.md is the minimal skeleton plus one checker-loop
+# section; its scripts/ ship gt_check.py + gt_consistency.py; its references/
+# and assets/ are relative symlinks to the prose skill's (single source of
+# truth), materialized into the run dir by copytree(symlinks=False).
+SKILL_CI_NAME = "great-tables-ci"
+SKILL_CI_DIR = ROOT / ".claude" / "skills" / SKILL_CI_NAME
 
 # A *candidate* skill produced by the skill-creator workflow. Its SKILL.md /
 # references/ / scripts/ live directly at the top level of this dir (not under
@@ -59,56 +66,39 @@ SKILL_VARIANTS = ("prose", "scripted", "creator")
 # no ephemeral `.claude` is ever created for the baseline.
 BASELINE_VARIANT = "none"
 
-# Heading of the SKILL.md block that only ships in the "scripted" variant.
-# Stripped verbatim (heading through the next level-2 heading / EOF) to build
-# the "prose" variant.
-_FAST_PATH_HEADING = "Fast path"
-
-
-def _strip_fast_path(text: str) -> str:
-    """Return SKILL.md text with the `## Fast path` section removed.
-
-    Deletes from the `## Fast path` heading up to (but not including) the next
-    level-2 `## ` heading, or end-of-file. Level-3+ headings (`### …`) inside
-    the block do not terminate it. If no such section exists this is a no-op,
-    so it is safe to run against a SKILL.md that predates the Fast-path block.
-    """
-    lines = text.splitlines(keepends=True)
-    out: list[str] = []
-    i, n = 0, len(lines)
-    heading_re = re.compile(rf"^##\s+{re.escape(_FAST_PATH_HEADING)}\s*$")
-    next_h2_re = re.compile(r"^##\s+\S")
-    while i < n:
-        if heading_re.match(lines[i]):
-            i += 1  # drop the heading
-            while i < n and not next_h2_re.match(lines[i]):
-                i += 1  # drop the body up to the next level-2 heading / EOF
-            continue
-        out.append(lines[i])
-        i += 1
-    return "".join(out)
+# Per with-skill variant: (source skill directory, mounted skill name). The
+# source is copied verbatim into an ephemeral `.claude/skills/<mounted name>/`
+# so every run presents EXACTLY ONE skill and the variants can't leak into each
+# other. `_strip_fast_path` and runtime SKILL.md munging are gone (R2): the two
+# skills are real, hand-authored directories.
+_VARIANT_SOURCES: dict[str, tuple[Path, str]] = {
+    "prose": (SKILL_DIR, SKILL_NAME),
+    "scripted": (SKILL_CI_DIR, SKILL_CI_NAME),
+    "creator": (CREATOR_SKILL_SRC, SKILL_NAME),
+}
 
 
 def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
-    """Return the `.claude` root the SDK should load for this variant.
+    """Build an ephemeral `.claude` root mounting exactly one skill for this variant.
 
-    - ``scripted`` → the repo's own ``.claude`` as-is (with ``scripts/`` and the
-      ``## Fast path`` block if present). No copy is made, so existing callers
-      that never pass a variant behave exactly as before.
-    - ``prose`` → an ephemeral ``.claude`` copied under ``run_dir`` whose skill
-      has ``scripts/`` deleted and the ``## Fast path`` section stripped from
-      ``SKILL.md``. The model then hand-writes constants/frame from prose.
-    - ``creator`` → like ``prose``'s scaffolding, but ``skills/great-tables`` is
-      copied verbatim from ``CREATOR_SKILL_SRC`` (``.claude-skill-creator/``)
-      instead of from ``SKILL_DIR``. Nothing is stripped: the candidate skill is
-      mounted exactly as authored so its outputs can be judged as-is.
+    Every with-skill variant gets its own copied `.claude` under ``run_dir`` (no
+    variant returns the repo `.claude` as-is, so a run never sees more than the
+    one skill it is testing). The repo `.claude` contents *other than* ``skills/``
+    (e.g. ``settings.local.json``) are mirrored so permissions match the project;
+    ``skills/`` then holds only ``<mounted name>/``, copied verbatim from the
+    variant's source directory:
+
+    - ``prose`` → the minimal, script-free ``great-tables`` skill.
+    - ``scripted`` → the ``great-tables-ci`` skill (same skeleton + the checker
+      loop + ``scripts/``). Its symlinked references/assets are materialized by
+      ``copytree(symlinks=False)``.
+    - ``creator`` → the candidate skill mounted verbatim as ``great-tables``.
     """
     if skill_variant not in SKILL_VARIANTS:
         raise ValueError(
             f"skill_variant must be one of {SKILL_VARIANTS}, got {skill_variant!r}"
         )
-    if skill_variant == "scripted":
-        return ROOT / ".claude"
+    src, mounted = _VARIANT_SOURCES[skill_variant]
 
     eph = run_dir / f".claude-{skill_variant}"
     if eph.exists():
@@ -126,22 +116,9 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
 
     skills_dst = eph / "skills"
     skills_dst.mkdir()
-
-    dst_skill = skills_dst / SKILL_NAME
-    if skill_variant == "creator":
-        # Mount the candidate skill verbatim (SKILL.md + references/ + scripts/
-        # live at the top level of CREATOR_SKILL_SRC → become the skill dir).
-        shutil.copytree(CREATOR_SKILL_SRC, dst_skill, symlinks=False)
-        return eph
-
-    # prose: copy the skill, drop scripts/, strip the Fast-path block.
-    shutil.copytree(SKILL_DIR, dst_skill, symlinks=False)
-    scripts_dir = dst_skill / "scripts"
-    if scripts_dir.exists():
-        shutil.rmtree(scripts_dir)
-    skill_md = dst_skill / "SKILL.md"
-    if skill_md.exists():
-        skill_md.write_text(_strip_fast_path(skill_md.read_text()))
+    # Copy the selected skill verbatim as the mounted skill. symlinks=False
+    # follows the CI skill's references/assets symlinks and copies real files.
+    shutil.copytree(src, skills_dst / mounted, symlinks=False)
     return eph
 
 # Harness-specific rendering instructions appended to the claude_code system
@@ -344,10 +321,11 @@ async def run(
 
     # Baseline (BASELINE_VARIANT) sees NO .claude at all: skip skill-root prep
     # and the symlink entirely, and remove any stale .claude a previous variant
-    # left in this run_dir. With-skill variants get their skill root symlinked
-    # in. For the default "scripted" variant the root resolves to ROOT/.claude,
-    # preserving the original behavior; "prose"/"creator" get an ephemeral copy.
+    # left in this run_dir. With-skill variants each get their own ephemeral
+    # skill root symlinked in (see _prepare_skill_root), mounting exactly one
+    # skill under its name.
     is_baseline = skill_variant == BASELINE_VARIANT
+    mounted_skill = None if is_baseline else _VARIANT_SOURCES[skill_variant][1]
     claude_link = run_dir / ".claude"
     skill_root: Path | None = None
     if is_baseline:
@@ -368,15 +346,15 @@ async def run(
     if not shim_link.is_symlink() and not shim_link.exists():
         shim_link.symlink_to(ROOT / "gtskill_chrome.py")
 
-    # The candidate skill's helper (gt_house_style.py) sits in the skill's
-    # scripts/ dir, but the agent's table.py runs with cwd=run_dir. Symlink the
-    # skill's Python helpers into run_dir so `import gt_house_style` resolves
-    # (same affordance the gtskill_chrome shim above gives). Creator-only; the
-    # promoted skill's Fast path handles its own import.
-    if skill_variant == "creator" and skill_root is not None:
-        creator_scripts = skill_root / "skills" / SKILL_NAME / "scripts"
-        if creator_scripts.is_dir():
-            for py in creator_scripts.glob("*.py"):
+    # The mounted skill's Python helpers live in its scripts/ dir, but the
+    # agent's table.py runs with cwd=run_dir. Symlink every scripts/*.py into
+    # run_dir so `import gt_consistency` and `python gt_check.py` (scripted) or
+    # `import gt_house_style` (creator) resolve — the same affordance the
+    # gtskill_chrome shim above gives. Prose ships no scripts/, so this no-ops.
+    if skill_root is not None and mounted_skill is not None:
+        mounted_scripts = skill_root / "skills" / mounted_skill / "scripts"
+        if mounted_scripts.is_dir():
+            for py in mounted_scripts.glob("*.py"):
                 link = run_dir / py.name
                 if not link.is_symlink() and not link.exists():
                     link.symlink_to(py)
@@ -402,7 +380,9 @@ async def run(
         },
         # Baseline requests no skill AND has no .claude at all (see above), so
         # nothing is auto-discovered even under setting_sources=["project"].
-        skills=[] if is_baseline else [SKILL_NAME],
+        # With-skill runs request exactly the one mounted skill for the variant.
+        # (mounted_skill is None iff is_baseline, so this also narrows the type.)
+        skills=[] if mounted_skill is None else [mounted_skill],
         setting_sources=["project"],
         # Allowed_tools in ClaudeAgentOptions doesn't shrink the CLIs inventory (this is why the transcript shows all tools), it gets translated into permission rules that are checked when the model tries to call a tool
         # There is a chance that in the system prompt for the agent it may see all available skills and the allowlist just limits running the tools (dependent on the SDK itself), luckily this doesnt happen rn, but could in future possibly
