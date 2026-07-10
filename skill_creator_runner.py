@@ -172,6 +172,12 @@ async def _test_all(prompts: list[dict], test_run_dir: Path, repeat: int, chrome
 
 
 def cmd_test(args: argparse.Namespace) -> int:
+    if args.repeat < 1:
+        # Same guard as cmd_consistency: without it, `--repeat 0` (or negative)
+        # makes _test_all's `range(1, repeat + 1)` run zero iterations, writes an
+        # empty summary, and exits 0 — a false-green candidate evaluation.
+        print("error: --repeat must be >= 1", file=sys.stderr)
+        return 2
     if args.model:
         os.environ["GTSKILL_AGENT_MODEL"] = args.model
 

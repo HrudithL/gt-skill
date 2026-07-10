@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import shutil
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -127,6 +128,51 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
     # follows the CI skill's references/assets symlinks and copies real files.
     shutil.copytree(src, skills_dst / mounted, symlinks=False)
     return eph
+
+
+def _clear_mounted_helpers(run_dir: Path) -> None:
+    """Remove helper-script symlinks a PREVIOUS variant mounted into ``run_dir``.
+
+    The mount block below symlinks each mounted skill's ``scripts/*.py`` directly
+    into ``run_dir`` (so ``import gt_consistency`` / ``python gt_check.py`` /
+    ``import gt_house_style`` resolve with ``cwd=run_dir``). Those links are only
+    ever ADDED, so when a ``run_dir`` is reused for a DIFFERENT variant they
+    linger — a prior ``scripted`` run's ``gt_check.py``/``gt_consistency.py``
+    would stay importable in a later ``prose`` or baseline ``none`` run and
+    contaminate the "no-script" condition (a critical variant-isolation bug).
+
+    Every harness helper link resolves into one of this harness's ephemeral
+    ``.claude-<variant>`` skill roots under ``run_dir``, so we identify them by
+    that target lineage and unlink them. The ``.claude`` mount symlink is skipped
+    (re-pointed separately) and the data-file symlink (target has no
+    ``.claude-*`` component) is never touched.
+    """
+    for entry in run_dir.iterdir():
+        if entry.name == ".claude":
+            continue  # the mount symlink itself; re-pointed by the caller
+        if not entry.is_symlink():
+            continue
+        target = os.readlink(entry)
+        if any(part.startswith(".claude-") for part in Path(target).parts):
+            entry.unlink()
+
+
+def _clear_stale_skill_roots(run_dir: Path, keep: str | None) -> None:
+    """Remove ephemeral ``.claude-<variant>`` roots left by OTHER variants.
+
+    ``_prepare_skill_root`` only rmtree's the CURRENT variant's ``.claude-<v>``
+    dir, so a prior variant's materialized ``scripts/`` (the real files the stale
+    helper links pointed at) survive a ``run_dir`` reuse. ``keep`` is the current
+    variant's dir name to preserve (``None`` for the baseline, which keeps none),
+    so a reused ``run_dir`` exposes ONLY the current variant's mechanics.
+    """
+    for entry in run_dir.glob(".claude-*"):
+        if entry.is_symlink() or not entry.is_dir():
+            continue
+        if keep is not None and entry.name == keep:
+            continue
+        shutil.rmtree(entry, ignore_errors=True)
+
 
 # Harness-specific rendering instructions appended to the claude_code system
 # prompt. Kept here (not in the skill) because they describe THIS environment's
@@ -315,7 +361,33 @@ def log_message(d: dict) -> None:
 
 
 def _venv_site_packages() -> Path | None:
-    """Return the project venv's site-packages dir, or None if not found."""
+    """Return the project venv's site-packages dir, or None if not found.
+
+    Derives the path from the venv's OWN interpreter — ``sysconfig.get_path(
+    'purelib')`` under ``<VENV_DIR>/bin/python`` — rather than globbing
+    ``lib/python*/site-packages`` and taking the first hit. After a Python
+    upgrade or recreate, several ``python*`` dirs can coexist and the glob can
+    return a dir the real ``.venv/bin/python`` does NOT import from, so the
+    sidecar hook would install where it never loads (gtsave then falls back to
+    spawning Chrome in the sandbox). Falls back to the glob if the interpreter
+    can't be invoked.
+    """
+    for name in ("python", "python3"):
+        interp = VENV_DIR / "bin" / name
+        if not interp.exists():
+            continue
+        try:
+            out = subprocess.run(
+                [str(interp), "-c",
+                 "import sysconfig; print(sysconfig.get_path('purelib'))"],
+                capture_output=True, text=True, timeout=30, check=True,
+            )
+        except Exception:
+            continue
+        candidate = Path(out.stdout.strip())
+        if candidate.is_dir():
+            return candidate
+    # Fallback: the interpreter couldn't be run — best-effort glob.
     for sp in sorted(VENV_DIR.glob("lib/python*/site-packages")):
         if sp.is_dir():
             return sp
@@ -380,6 +452,16 @@ async def run(
     mounted_skill = None if is_baseline else _VARIANT_SOURCES[skill_variant][1]
     claude_link = run_dir / ".claude"
     skill_root: Path | None = None
+
+    # Variant isolation (critical): before mounting the current variant, strip
+    # any helper-script symlinks AND materialized `.claude-<other>` roots a prior
+    # variant left in this reused run_dir, so it exposes ONLY the current
+    # variant's mechanics. For prose and baseline `none` this guarantees NO
+    # helper scripts remain importable in the run cwd.
+    current_eph_name = None if is_baseline else f".claude-{skill_variant}"
+    _clear_mounted_helpers(run_dir)
+    _clear_stale_skill_roots(run_dir, keep=current_eph_name)
+
     if is_baseline:
         if claude_link.is_symlink():
             claude_link.unlink()
