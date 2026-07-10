@@ -136,6 +136,29 @@ RULE_REFS: dict[str, str] = {
 FAIL = "FAIL"
 INFO = "INFO"
 
+# --------------------------------------------------------------------------- #
+# Readable reference paths. Only ``gt_check.py`` is symlinked into the run cwd,
+# so a bare ``references/<file>`` does not exist there. Resolve the checker's
+# real location (``Path(__file__).resolve()`` follows the symlink into the
+# skill's ``scripts/``); the reference docs are its sibling ``../references/``.
+# --------------------------------------------------------------------------- #
+_REFERENCES_DIR = Path(__file__).resolve().parent.parent / "references"
+
+
+def _reference_display(ref: str) -> str:
+    """Return an openable path for reference file ``ref``.
+
+    Prefers the absolute path next to the (symlink-resolved) checker if it
+    exists on disk; falls back to the plain ``references/<file>`` token so the
+    output is never empty even if the layout changes."""
+    candidate = _REFERENCES_DIR / ref
+    try:
+        if candidate.exists():
+            return str(candidate)
+    except OSError:  # pragma: no cover - defensive
+        pass
+    return f"references/{ref}"
+
 
 @dataclass
 class Finding:
@@ -156,7 +179,7 @@ class Finding:
         tag = "" if self.level == FAIL else " (info)"
         return (
             f"  [{self.rule_id}]{tag} {self.missed} "
-            f"— expected: {self.expected} — read references/{self.ref}"
+            f"— expected: {self.expected} — read {_reference_display(self.ref)}"
         )
 
     def as_dict(self) -> dict[str, str]:
@@ -166,6 +189,7 @@ class Finding:
             "missed": self.missed,
             "expected": self.expected,
             "reference": f"references/{self.ref}",
+            "reference_path": _reference_display(self.ref),
         }
 
 
@@ -283,6 +307,38 @@ def _find_band_color(source: str) -> Optional[str]:
     return None
 
 
+def _band_helper(source: str) -> Optional[tuple[str, str]]:
+    """Parse a ``band(gt, *, shade, hue)`` helper call → ``(shade, hue)``.
+
+    The helper sets no literal ``column_labels_background_color=`` token in the
+    source (it is applied at runtime), so this recovers the band intent from the
+    call itself."""
+    for block in _call_arg_blocks(source, "band", dotted=False):
+        shade_m = re.search(r"shade\s*=\s*['\"]([^'\"]+)['\"]", block)
+        hue_m = re.search(r"hue\s*=\s*['\"]([^'\"]+)['\"]", block)
+        if shade_m:
+            return (shade_m.group(1), hue_m.group(1) if hue_m else "")
+    return None
+
+
+def _band_hex_from_helper(source: str) -> Optional[str]:
+    """The band background hex a ``band(shade=, hue=)`` call would apply.
+
+    Resolves the same way ``gt_consistency.band`` does: light → washed tint (or
+    the neutral grey label band for ``hue='grey'``); dark → the DA solid."""
+    parsed = _band_helper(source)
+    if parsed is None:
+        return None
+    shade, hue = parsed
+    if shade == "light":
+        if hue == "grey":
+            return NEUTRAL["label_band"]
+        return WASHED.get(hue)
+    if shade == "dark":
+        return SOLID.get(hue)
+    return None
+
+
 def _palette_name(block: str) -> str:
     """The palette of one ``data_color`` arg block: a name, ``'custom'`` (list
     literal) or ``'default'`` (no palette arg)."""
@@ -342,8 +398,12 @@ def _extract_domain(block: str) -> tuple[str, Optional[tuple[float, float]]]:
                 break
         j += 1
     content = block[i + 1 : j]
-    # Standalone numeric literals only — a token inside df['x'] or .min() is skipped.
-    nums = re.findall(r"(?<![\w.'\"])-?\d+(?:\.\d+)?(?![\w'\"])", content)
+    # Standalone numeric literals only — a token inside df['x'] or .min() is
+    # skipped. Accepts scientific/exponent notation (e.g. -1e3, 1.5E-3) so a
+    # domain=[-1e3, 2e3] is parsed instead of falling through to "unknown".
+    nums = re.findall(
+        r"(?<![\w.'\"])[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?(?![\w'\"])", content
+    )
     if len(nums) == 2:
         return ("literal", (float(nums[0]), float(nums[1])))
     return ("unknown", None)
@@ -351,20 +411,77 @@ def _extract_domain(block: str) -> tuple[str, Optional[tuple[float, float]]]:
 
 @dataclass
 class ColorCall:
-    """One parsed ``data_color(...)`` call."""
+    """One parsed value-coloring call — a literal ``data_color(...)`` or a
+    ``heatmap(...)`` helper call (both apply per-value fills)."""
 
     columns: str
     palette: str
     domain_status: str
     domain: Optional[tuple[float, float]]
+    source_kind: str = "data_color"        # "data_color" | "heatmap"
+    diverging: Optional[bool] = None        # set for heatmap (kind=); None => infer
 
     @property
     def is_diverging(self) -> bool:
+        if self.diverging is not None:
+            return self.diverging
         return self.palette in DIVERGING_NAMES
 
 
+def _split_top_args(block: str) -> list[str]:
+    """Split a call's argument text on top-level commas (depth- and quote-aware)."""
+    args: list[str] = []
+    cur: list[str] = []
+    depth = 0
+    quote: Optional[str] = None
+    for ch in block:
+        if quote is not None:
+            cur.append(ch)
+            if ch == quote:
+                quote = None
+            continue
+        if ch in ("'", '"'):
+            quote = ch
+            cur.append(ch)
+        elif ch in "([{":
+            depth += 1
+            cur.append(ch)
+        elif ch in ")]}":
+            depth -= 1
+            cur.append(ch)
+        elif ch == "," and depth == 0:
+            args.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    tail = "".join(cur)
+    if tail.strip():
+        args.append(tail)
+    return [a.strip() for a in args]
+
+
+def _heatmap_columns(block: str) -> str:
+    """The normalised ``columns`` argument of a ``heatmap(gt, columns, ...)`` call.
+
+    Accepts either the keyword form (``columns=...``) or the second positional
+    argument (the first positional is the ``gt`` object)."""
+    args = _split_top_args(block)
+    for a in args:
+        if re.match(r"columns\s*=", a):
+            return re.sub(r"\s+", "", a.split("=", 1)[1])
+    positional = [a for a in args if not re.match(r"[A-Za-z_]\w*\s*=", a)]
+    if len(positional) >= 2:
+        return re.sub(r"\s+", "", positional[1])
+    return re.sub(r"\s+", "", block)
+
+
 def _parse_color_calls(source: str) -> list[ColorCall]:
-    """Every ``data_color(...)`` call parsed into a ``ColorCall``."""
+    """Every value-coloring call — ``data_color(...)`` and ``heatmap(...)`` — as
+    a ``ColorCall``.
+
+    Recognising ``heatmap(...)`` at source level is what lets the argument-driven
+    checks (signedness / domain) read intent on the helper path, where no literal
+    ``data_color(`` token exists."""
     calls: list[ColorCall] = []
     for block in _call_arg_blocks(source, "data_color"):
         status, bounds = _extract_domain(block)
@@ -374,6 +491,29 @@ def _parse_color_calls(source: str) -> list[ColorCall]:
                 palette=_palette_name(block),
                 domain_status=status,
                 domain=bounds,
+                source_kind="data_color",
+            )
+        )
+    # heatmap(gt, columns, *, kind, hue, domain=None) — a diverging/sequential
+    # fill applied at runtime. A computed (absent/None) domain is NOT the
+    # data_color "missing domain" problem: the helper derives a full/symmetric
+    # domain from the data, so only an EXPLICIT literal domain is check-worthy.
+    for block in _call_arg_blocks(source, "heatmap", dotted=False):
+        status, bounds = _extract_domain(block)
+        kind_m = re.search(r"kind\s*=\s*['\"]([^'\"]+)['\"]", block)
+        hue_m = re.search(r"hue\s*=\s*['\"]([^'\"]+)['\"]", block)
+        kind = kind_m.group(1) if kind_m else ""
+        hue = hue_m.group(1) if hue_m else ""
+        diverging = kind == "diverging"
+        palette_label = f"{kind or 'heatmap'} palette (hue={hue or '?'})"
+        calls.append(
+            ColorCall(
+                columns=_heatmap_columns(block),
+                palette=palette_label,
+                domain_status=status,
+                domain=bounds,
+                source_kind="heatmap",
+                diverging=diverging,
             )
         )
     return calls
@@ -432,6 +572,120 @@ def _dom_fill_fraction(dom: str) -> float:
         return 0.0
     filled = sum(1 for c in cells if "background-color" in c.lower())
     return filled / len(cells)
+
+
+def _dom_colored_columns(dom: Optional[str]) -> int:
+    """Number of distinct body columns whose ``<td>`` cells carry an inline
+    ``background-color`` (a helper-agnostic count of colored measures).
+
+    Position within a row identifies the column (stub cells are ``<th>`` and do
+    not shift the ``<td>`` index). Row striping paints via the ``gt_striped``
+    CSS *class*, not an inline style, so stripes are never miscounted as fills."""
+    body = _dom_tbody(dom or "")
+    if not body:
+        return 0
+    colored: set[int] = set()
+    for row in re.findall(r"<tr\b.*?</tr>", body, re.DOTALL | re.IGNORECASE):
+        if "gt_row" not in row:
+            continue
+        for idx, cell in enumerate(re.findall(r"<td\b[^>]*>", row, re.IGNORECASE)):
+            if "background-color" in cell.lower():
+                colored.add(idx)
+    return len(colored)
+
+
+def _dom_has_colored_body(dom: Optional[str]) -> bool:
+    """True if any body data cell carries an inline ``background-color`` (a
+    DOM-level Big-Color signal, independent of how the fill was applied)."""
+    return _dom_colored_columns(dom) > 0
+
+
+def _dom_col_heading_bg(dom: Optional[str]) -> Optional[str]:
+    """The rendered column-label band background hex, or ``None`` for the default.
+
+    ``tab_options(column_labels_background_color=...)`` — whether typed directly
+    or applied by ``band()`` — compiles to the ``.gt_col_heading`` CSS rule. A
+    default (unbanded) heading is white, which is reported as no band."""
+    if not dom:
+        return None
+    m = re.search(r"\.gt_col_heading\s*\{([^}]*)\}", dom)
+    if not m:
+        return None
+    bg = re.search(r"background-color:\s*([^;]+);", m.group(1))
+    if not bg:
+        return None
+    hexv = bg.group(1).strip()
+    if hexv.upper() in ("#FFFFFF", "#FFF", "WHITE", "TRANSPARENT"):
+        return None
+    return hexv
+
+
+def _dom_col_heading_text_white(dom: Optional[str]) -> bool:
+    """True if the column labels render with white text.
+
+    ``band(shade='dark')`` applies this via ``tab_style(style.text(color='white'),
+    loc.column_labels())``; Great Tables also auto-contrasts label text to white
+    on a dark band. An inline ``color`` on the heading ``<th>`` cells overrides
+    the ``.gt_col_heading`` CSS rule, so inline colors are authoritative when
+    present (this catches a band that forces DARK text over the auto-white CSS);
+    only when no heading cell sets an inline color do we read the CSS rule."""
+    if not dom:
+        return False
+    color_re = re.compile(r"(?<!background-)color:\s*([^;]+)", re.I)
+
+    def _is_white(val: str) -> bool:
+        return val.strip().lower() in ("white", "#fff", "#ffffff")
+
+    thead = re.search(r"<thead\b.*?</thead>", dom, re.DOTALL | re.IGNORECASE)
+    inline_colors: list[str] = []
+    if thead:
+        for th in re.findall(r"<th\b[^>]*>", thead.group(0), re.IGNORECASE):
+            if "gt_col_heading" not in th.lower():
+                continue
+            style_m = re.search(r"style\s*=\s*\"([^\"]*)\"", th, re.IGNORECASE)
+            if not style_m:
+                continue
+            cm = color_re.search(style_m.group(1))
+            if cm:
+                inline_colors.append(cm.group(1))
+    if inline_colors:
+        # Inline overrides the class rule: white iff any label cell is white.
+        return any(_is_white(c) for c in inline_colors)
+    css = re.search(r"\.gt_col_heading\s*\{([^}]*)\}", dom)
+    if css:
+        cm = color_re.search(css.group(1))
+        return bool(cm) and _is_white(cm.group(1))
+    return False
+
+
+def _dom_has_stripes(dom: Optional[str]) -> bool:
+    """True if striping is actually rendered (body rows carry ``gt_striped``).
+
+    The ``.gt_striped`` CSS rule is always emitted, so only its use as a *class*
+    on ``<tbody>`` rows proves striping was enabled (via ``opt_row_striping()``
+    or ``row_striping_include_table_body=True``)."""
+    body = _dom_tbody(dom or "")
+    return bool(body) and "gt_striped" in body
+
+
+def _dom_frame_ok(dom: Optional[str]) -> Optional[bool]:
+    """Whether the table renders visible LEFT and RIGHT side borders.
+
+    Reads the compiled ``.gt_table`` CSS rule. Great Tables defaults the side
+    border style to ``none``; ``frame()`` / ``opt_table_outline()`` / genuine
+    per-side style options set it to a visible style. Returns ``None`` when the
+    rule cannot be found so the caller can fall back to source parsing."""
+    if not dom:
+        return None
+    m = re.search(r"\.gt_table\s*\{([^}]*)\}", dom)
+    if not m:
+        return None
+    css = m.group(1)
+    for side in ("left", "right"):
+        s = re.search(rf"border-{side}-style:\s*([^;]+);", css)
+        if s is None or s.group(1).strip().lower() in ("none", "hidden"):
+            return False
+    return True
 
 
 # --------------------------------------------------------------------------- #
@@ -561,16 +815,27 @@ def _render_from_source(source: str) -> Optional[dict[str, float]]:
 # --------------------------------------------------------------------------- #
 # The rule checks. Each takes the parsed context and returns a list[Finding].
 # --------------------------------------------------------------------------- #
-def check_too_many_measures(source: str, calls: list[ColorCall]) -> list[Finding]:
-    """PP-2/PP-3: at most 2 colored measures (distinct data_color targets)."""
+def check_too_many_measures(
+    source: str, calls: list[ColorCall], exec_res: "ExecResult"
+) -> list[Finding]:
+    """PP-2/PP-3: at most 2 colored measures.
+
+    Counts distinct value-coloring targets across ``data_color(...)`` AND
+    ``heatmap(...)`` calls (one call over several facet columns is one measure).
+    When no color call is recognised at source at all, falls back to the number
+    of distinct DOM-colored columns so an unrecognised fill path is still gated."""
     distinct = {c.columns for c in calls}
     n = len(distinct)
+    source_label = "distinct data_color/heatmap targets"
+    if not calls and exec_res.dom is not None:
+        n = _dom_colored_columns(exec_res.dom)
+        source_label = "distinct color-filled columns in the rendered DOM"
     if n > 2:
         return [
             Finding(
                 "too-many-measures",
                 FAIL,
-                f"{n} colored measures ({n} distinct data_color targets)",
+                f"{n} colored measures ({n} {source_label})",
                 "at most 2 colored measures; drop color from all but the 1-2 hero measures",
             )
         ]
@@ -582,8 +847,11 @@ def check_palettes_and_domains(source: str, calls: list[ColorCall]) -> list[Find
     ``data_color`` calls."""
     findings: list[Finding] = []
     for call in calls:
-        # PP-7 — every data_color needs an explicit domain.
-        if call.domain_status == "missing":
+        # PP-7 — every literal data_color needs an explicit domain. A heatmap()
+        # with a computed (absent/None) domain is exempt: the helper derives a
+        # proper full/symmetric domain from the data, so it is not the
+        # arbitrary-default problem PP-7 targets.
+        if call.domain_status == "missing" and call.source_kind == "data_color":
             findings.append(
                 Finding(
                     "domain-present",
@@ -633,26 +901,78 @@ def check_palettes_and_domains(source: str, calls: list[ColorCall]) -> list[Find
     return findings
 
 
-def check_frame(source: str) -> list[Finding]:
-    """PP-10: the mandatory enclosing boxed frame."""
+def _frame_style_set(source: str, side: str) -> bool:
+    """True if ``table_border_<side>_style`` is set to a visible (non-none) value.
+
+    Great Tables defaults the side border *style* to ``none``, so setting only
+    the color/width leaves the border invisible; a real box needs the style."""
+    m = re.search(rf"table_border_{side}_style\s*=\s*['\"]([^'\"]+)['\"]", source)
+    return bool(m) and m.group(1).strip().lower() not in ("none", "hidden")
+
+
+def check_frame(source: str, exec_res: "ExecResult") -> list[Finding]:
+    """PP-10: the mandatory enclosing boxed frame.
+
+    When the DOM is available it is authoritative — the ``.gt_table`` rule must
+    carry visible LEFT and RIGHT border styles (defaults are ``none``). Source
+    parsing is the fallback: ``frame(gt)`` (the helper that sets all four border
+    *styles*), ``opt_table_outline(...)``, or explicit left/right border *style*
+    options. ``finalize(...)`` is NOT accepted — it only calls ``gtsave`` and
+    adds no border. Setting only ``*_color`` / ``*_width`` is NOT accepted —
+    without the style the side borders never render."""
+    dom_ok = _dom_frame_ok(exec_res.dom)
+    if dom_ok is True:
+        return []
+
     has_outline = bool(re.search(r"opt_table_outline\s*\(", source))
-    has_side_borders = bool(
-        re.search(r"table_border_left_(?:style|width|color)\s*=", source)
-    ) and bool(re.search(r"table_border_right_(?:style|width|color)\s*=", source))
-    has_frame_helper = bool(re.search(r"\b(?:frame|finalize)\s*\(", source))
-    if has_outline or has_side_borders or has_frame_helper:
+    has_frame_helper = bool(re.search(r"\bframe\s*\(", source))
+    has_side_border_styles = _frame_style_set(source, "left") and _frame_style_set(
+        source, "right"
+    )
+    source_ok = has_outline or has_frame_helper or has_side_border_styles
+
+    # If the DOM says the frame is missing, trust it even if a source token
+    # looked present (e.g. an overridden/none style); otherwise honour source.
+    if dom_ok is False:
+        if has_outline or has_frame_helper or has_side_border_styles:
+            # A recognised frame mechanism is present but did not render a visible
+            # box — report the visible-style requirement rather than "missing".
+            return [
+                Finding(
+                    "frame-missing",
+                    FAIL,
+                    "side borders do not render (left/right border-style is none)",
+                    "set the LEFT and RIGHT border STYLE (frame() does this), not just color/width",
+                )
+            ]
+        return [
+            Finding(
+                "frame-missing",
+                FAIL,
+                "no enclosing boxed frame",
+                "add frame(gt) or opt_table_outline(); set left/right border STYLE, not just color/width",
+            )
+        ]
+
+    # DOM unavailable — decide from source alone.
+    if source_ok:
         return []
     return [
         Finding(
             "frame-missing",
             FAIL,
             "no enclosing boxed frame",
-            "add opt_table_outline(), or set table_border_left/right_* on all four sides",
+            "add frame(gt) or opt_table_outline(); set left/right border STYLE, not just color/width",
         )
     ]
 
 
-def check_heading_band(source: str, band_hex: Optional[str], big_color: bool) -> list[Finding]:
+def check_heading_band(
+    source: str,
+    band_hex: Optional[str],
+    big_color: bool,
+    exec_res: "ExecResult",
+) -> list[Finding]:
     """PP-8/PP-9: heading band present and correct for the Big-Color state."""
     if band_hex is None:
         expected = (
@@ -698,7 +1018,41 @@ def check_heading_band(source: str, band_hex: Optional[str], big_color: bool) ->
                 "use a DARK saturated Dark-Academia solid band (white text) when there is no Big Color",
             )
         ]
+
+    # PP-9 completeness: a dark no-Big-Color anchor band needs WHITE column-label
+    # text for contrast. band(shade='dark') applies it; otherwise verify it in
+    # the DOM or in a tab_style(... loc.column_labels()) that sets white text.
+    if (not big_color) and shade == "dark":
+        dark_helper = _band_helper(source)
+        helper_dark = bool(dark_helper and dark_helper[0] == "dark")
+        white_text = (
+            helper_dark
+            or _dom_col_heading_text_white(exec_res.dom)
+            or _source_white_column_labels(source)
+        )
+        if not white_text:
+            return [
+                Finding(
+                    "heading-band",
+                    FAIL,
+                    f"dark band {band_hex} but column-label text is not white",
+                    "set white column-label text (band(shade='dark') does this, or "
+                    "tab_style(style.text(color='white'), loc.column_labels()))",
+                )
+            ]
     return []
+
+
+def _source_white_column_labels(source: str) -> bool:
+    """True if a ``tab_style(...)`` sets white text on the column labels."""
+    for block in _call_arg_blocks(source, "tab_style"):
+        if "column_labels" not in block:
+            continue
+        if re.search(
+            r"color\s*=\s*['\"](?:white|#fff(?:fff)?)['\"]", block, re.IGNORECASE
+        ):
+            return True
+    return False
 
 
 def check_render_params(
@@ -736,11 +1090,13 @@ def check_render_params(
                 "keep zoom >= 2.0; give the table room with vwidth/vheight before lowering crispness",
             )
         )
-    # expand may be an int or a 4-tuple; take the max when it is a tuple.
+    # expand may be an int or a per-side tuple. For a tuple, EVERY side must
+    # exceed the 5px default — the weakest side gates, so use the minimum (this
+    # rejects e.g. expand=(15, 0, 0, 0), where three sides keep the default).
     expand_val: Optional[float] = None
     if isinstance(expand, (list, tuple)) and expand:
         try:
-            expand_val = max(float(x) for x in expand)
+            expand_val = min(float(x) for x in expand)
         except (TypeError, ValueError):
             expand_val = None
     else:
@@ -749,12 +1105,17 @@ def check_render_params(
         except (TypeError, ValueError):
             expand_val = None
     if expand_val is not None and expand_val <= 5:
+        smallest = (
+            f"smallest side expand={expand_val:g}"
+            if isinstance(expand, (list, tuple))
+            else f"expand={expand_val:g}"
+        )
         findings.append(
             Finding(
                 "render-params",
                 FAIL,
-                f"gtsave expand={expand_val:g} is not raised above the 5px default",
-                "raise expand to ~15-20 so the boxed frame has an outer margin",
+                f"gtsave {smallest} is not raised above the 5px default",
+                "raise expand on EVERY side to ~15-20 so the boxed frame has an outer margin",
             )
         )
     return findings
@@ -771,11 +1132,14 @@ def check_striping_gate(
     if rows < 10:
         return []  # under 10 rows: striping optional either way.
 
+    # Striping must be ENABLED, not merely styled. A bare
+    # ``row_striping_background_color=`` (color only) does NOT turn striping on,
+    # so it no longer counts. Accept an actual ``opt_row_striping()`` /
+    # ``stripe()`` call, or stripes verified in the rendered DOM.
     has_striping = bool(
         re.search(r"opt_row_striping\s*\(", source)
-        or re.search(r"row_striping_background_color\s*=", source)
-        or re.search(r"row_striping_include_table_body\s*=\s*True", source)
-    )
+        or re.search(r"\bstripe\s*\(", source)
+    ) or _dom_has_stripes(exec_res.dom)
     if has_striping:
         return []
 
@@ -787,8 +1151,8 @@ def check_striping_gate(
         Finding(
             "striping-gate",
             FAIL,
-            f"{rows} body rows, body not fully color-filled, but no row striping",
-            "add opt_row_striping() for a >=10-row table whose body is not fully filled",
+            f"{rows} body rows, body not fully color-filled, but striping is not enabled",
+            "call opt_row_striping() (or stripe()) for a >=10-row table whose body is not fully filled",
         )
     ]
 
@@ -891,8 +1255,32 @@ def run_checks(path: Path) -> tuple[list[Finding], dict[str, Any]]:
 
     # --- Source-level parse (always available). ---
     calls = _parse_color_calls(source)
-    band_hex = _find_band_color(source)
-    big_color = _has_big_color(source, band_hex)
+
+    # --- Exec + DOM (degrade gracefully). Run first so the band / Big-Color /
+    # measure detection below can judge the RENDERED output, not just tokens. ---
+    exec_res = run_table(path)
+    meta["exec_ok"] = exec_res.exec_error is None and exec_res.gt is not None
+    meta["dom_ok"] = exec_res.dom is not None
+    meta["gtsave_kwargs"] = exec_res.gtsave_kwargs
+    if exec_res.dom is not None:
+        meta["body_rows"] = _dom_body_rows(exec_res.dom)
+
+    # --- Band + Big-Color detection (helper-agnostic). ---
+    # Band hex: explicit tab_options token, else the band() helper's intent, else
+    # the rendered .gt_col_heading background. Any of these judges the OUTPUT so
+    # a helper-only table is no longer seen as "no band".
+    band_hex = (
+        _find_band_color(source)
+        or _band_hex_from_helper(source)
+        or _dom_col_heading_bg(exec_res.dom)
+    )
+    # Big Color: any data_color/heatmap call, a solid DA hex used off-band, or
+    # any inline-filled body cell in the DOM (covers the helper path).
+    big_color = (
+        bool(calls)
+        or _has_big_color(source, band_hex)
+        or _dom_has_colored_body(exec_res.dom)
+    )
     meta.update(
         {
             "n_color_measures": len({c.columns for c in calls}),
@@ -902,14 +1290,6 @@ def run_checks(path: Path) -> tuple[list[Finding], dict[str, Any]]:
             "big_color": big_color,
         }
     )
-
-    # --- Exec + DOM (degrade gracefully). ---
-    exec_res = run_table(path)
-    meta["exec_ok"] = exec_res.exec_error is None and exec_res.gt is not None
-    meta["dom_ok"] = exec_res.dom is not None
-    meta["gtsave_kwargs"] = exec_res.gtsave_kwargs
-    if exec_res.dom is not None:
-        meta["body_rows"] = _dom_body_rows(exec_res.dom)
 
     # Meta findings for exec / DOM problems.
     if exec_res.exec_error is not None:
@@ -942,10 +1322,10 @@ def run_checks(path: Path) -> tuple[list[Finding], dict[str, Any]]:
         )
 
     # --- Rule checks (each isolated). ---
-    findings += _run_safe("too-many-measures", lambda: check_too_many_measures(source, calls))
+    findings += _run_safe("too-many-measures", lambda: check_too_many_measures(source, calls, exec_res))
     findings += _run_safe("palettes-domains", lambda: check_palettes_and_domains(source, calls))
-    findings += _run_safe("frame-missing", lambda: check_frame(source))
-    findings += _run_safe("heading-band", lambda: check_heading_band(source, band_hex, big_color))
+    findings += _run_safe("frame-missing", lambda: check_frame(source, exec_res))
+    findings += _run_safe("heading-band", lambda: check_heading_band(source, band_hex, big_color, exec_res))
     findings += _run_safe("render-params", lambda: check_render_params(source, exec_res.gtsave_kwargs))
     findings += _run_safe("striping-gate", lambda: check_striping_gate(source, exec_res, big_color))
     findings += _run_safe("orphan-stub", lambda: check_orphan_stub(source))
@@ -996,7 +1376,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"===== gt_check: FAIL (1 issue(s)) =====")
         print(
             f"  [check-error] file not found: {path} "
-            f"— expected: a path to an existing table.py — read references/small_color.md"
+            f"— expected: a path to an existing table.py "
+            f"— read {_reference_display('small_color.md')}"
         )
         if args.json:
             print(
