@@ -67,6 +67,7 @@ CONVERGENCE_FIELDS = [
     "columns_signature",
     "fmt_signature",
     "domain_signature",
+    "color_signature",
     "data_hash",
 ]
 
@@ -188,6 +189,61 @@ def _gt_constructor_blocks(source: str) -> list[str]:
     return blocks
 
 
+def _bare_call_blocks(source: str, func: str) -> list[str]:
+    """Return the argument text of every bare `func(...)` call in `source`.
+
+    Like `_gt_constructor_blocks` but for an arbitrary top-level function name —
+    used to recognize the runtime helper calls the scripted skill PREFERS
+    (`heatmap(...)`, `band(...)`, `stripe(...)`, `stub_tint(...)`) rather than
+    the literal `.data_color(...)` / `tab_options(...)` equivalents. An optional
+    single module qualifier is allowed so both the documented bare import
+    (`heatmap(`) and an attribute call (`gtc.heatmap(` / `gt_consistency.heatmap(`)
+    are caught — matching `gt_check.py`'s leniency so the two enforcement layers
+    agree. The leading `(?<![\\w.])` still means `heatmap` never matches inside
+    `add_heatmap` (a longer identifier), and the qualifier is a single level so a
+    chained `df.x.stripe(` is not caught.
+    """
+    blocks: list[str] = []
+    for m in re.finditer(rf"(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
+        open_idx = m.end() - 1
+        depth = 0
+        for j in range(open_idx, len(source)):
+            c = source[j]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    blocks.append(source[open_idx + 1 : j])
+                    break
+    return blocks
+
+
+def _unquote(text: str | None) -> str | None:
+    """Strip one layer of surrounding quotes from a token, else return as-is."""
+    if text is None:
+        return None
+    t = text.strip()
+    if len(t) >= 2 and t[0] in "'\"" and t[-1] == t[0]:
+        return t[1:-1]
+    return t
+
+
+def _kwarg_value(block: str, name: str) -> str | None:
+    """Raw source text of the top-level `name=<value>` kwarg in a call's args.
+
+    Splits on top-level commas (so `columns=['a','b']` / `domain=[x, y]` stay
+    intact) and returns the value text of the first arg that *starts* with
+    `name=`. None if the kwarg is absent. Whitespace/newlines inside the value
+    are preserved for the caller to normalize.
+    """
+    for part in _split_top_level(block):
+        m = re.match(rf"{re.escape(name)}\s*=\s*(.+)", part, re.S)
+        if m:
+            return m.group(1).strip()
+    return None
+
+
 def _find_band_color(source: str) -> str | None:
     """Extract the heading-band background hex, if the script sets one.
 
@@ -201,21 +257,36 @@ def _find_band_color(source: str) -> str | None:
     return None
 
 
-def _extract_palettes(source: str) -> list[str]:
-    """Palette name of each `data_color(...)` call (one per colored measure).
+def _palette_of_block(block: str) -> str:
+    """Palette name for one `data_color(...)` arg block.
 
     A quoted string -> its name; a list literal -> 'custom'; no palette arg ->
-    'default'. Returned sorted so ordering never breaks the agreement check.
+    'default'. Shared by `_extract_palettes` and `_color_signature`.
+    """
+    m = re.search(r"palette\s*=\s*(\[[^\]]*\]|['\"]([^'\"]+)['\"])", block)
+    if not m:
+        return "default"
+    if m.group(2):
+        return m.group(2)
+    return "custom"
+
+
+def _extract_palettes(source: str) -> list[str]:
+    """Palette name of each colored measure (one per `data_color`/`heatmap`).
+
+    Literal `.data_color(...)`: a quoted `palette=` -> its name, a list literal
+    -> 'custom', no palette -> 'default' (unchanged behavior). The runtime
+    helper `heatmap(gt, columns, *, kind, hue, ...)` the scripted skill prefers
+    contributes its `hue=` family as the palette (else 'default'), so a
+    helper-based run scores palettes the SAME as its literal equivalent instead
+    of reading as no-color. Returned sorted so ordering never breaks agreement.
     """
     palettes: list[str] = []
     for block in _call_arg_blocks(source, "data_color"):
-        m = re.search(r"palette\s*=\s*(\[[^\]]*\]|['\"]([^'\"]+)['\"])", block)
-        if not m:
-            palettes.append("default")
-        elif m.group(2):
-            palettes.append(m.group(2))
-        else:
-            palettes.append("custom")
+        palettes.append(_palette_of_block(block))
+    for block in _bare_call_blocks(source, "heatmap"):
+        hue = _unquote(_kwarg_value(block, "hue"))
+        palettes.append(hue or "default")
     return sorted(palettes)
 
 
@@ -247,15 +318,18 @@ def _columns_signature(source: str) -> str:
     tokens: list[str] = []
     for block in _call_arg_blocks(source, "cols_label"):
         # keyword form:  ident = "Label"   (label optionally wrapped in md()/html())
+        # The SOURCE key is retained alongside the display label so that
+        # `revenue="Value"` and `profit="Value"` no longer collide as a bare
+        # `label:Value` and falsely converge (they differ on the source column).
         for m in re.finditer(
-            r"\b[A-Za-z_]\w*\s*=\s*(?:md|html)?\s*\(?\s*['\"]([^'\"]+)['\"]", block
+            r"\b([A-Za-z_]\w*)\s*=\s*(?:md|html)?\s*\(?\s*['\"]([^'\"]+)['\"]", block
         ):
-            tokens.append("label:" + m.group(1))
+            tokens.append(f"label:{m.group(1)}={m.group(2)}")
         # dict form:  "key": "Label"
         for m in re.finditer(
-            r"['\"][^'\"]+['\"]\s*:\s*(?:md|html)?\s*\(?\s*['\"]([^'\"]+)['\"]", block
+            r"['\"]([^'\"]+)['\"]\s*:\s*(?:md|html)?\s*\(?\s*['\"]([^'\"]+)['\"]", block
         ):
-            tokens.append("label:" + m.group(1))
+            tokens.append(f"label:{m.group(1)}={m.group(2)}")
     for block in _call_arg_blocks(source, "cols_hide"):
         for m in re.finditer(r"['\"]([^'\"]+)['\"]", block):
             tokens.append("hide:" + m.group(1))
@@ -264,19 +338,62 @@ def _columns_signature(source: str) -> str:
     return "|".join(sorted(set(tokens)))
 
 
-def _fmt_signature(source: str) -> str:
-    """Sorted multiset of the `fmt_*` formatters applied (PP-14/15/16).
+# Formatter kwargs that change the RENDERED value (so they belong in the
+# signature). Column targets are deliberately excluded — they are unreliable
+# across the keyword/list/positional forms these scripts use.
+_FMT_KWARGS = (
+    "accounting",
+    "compact",
+    "currency",
+    "decimals",
+    "force_sign",
+    "n_sigfig",
+    "pattern",
+    "scale_by",
+    "scale_values",
+    "suffixing",
+)
 
-    Function-name multiset only (duplicates kept, so two `fmt_currency` calls
-    read as two): captures currency-vs-plain and percent divergence. Column
-    targets are intentionally not parsed — they are unreliable across the
-    keyword/list/positional forms these scripts use. "(none)" when no formatter
-    is applied.
+
+def _fmt_calls(source: str) -> list[tuple[str, str]]:
+    """Every `.fmt_*(...)` call as (name, arg-block), via a balanced-paren scan."""
+    out: list[tuple[str, str]] = []
+    for m in re.finditer(r"\.(fmt_[a-z_]+)\s*\(", source):
+        name = m.group(1)
+        open_idx = m.end() - 1
+        depth = 0
+        for j in range(open_idx, len(source)):
+            c = source[j]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    out.append((name, source[open_idx + 1 : j]))
+                    break
+    return out
+
+
+def _fmt_signature(source: str) -> str:
+    """Sorted multiset of the `fmt_*` formatters applied, WITH their kwargs.
+
+    Each call becomes `fmt_number(decimals=0)` / `fmt_percent(scale_values=False)`
+    — the value-affecting kwargs in `_FMT_KWARGS` are captured and sorted so that
+    `fmt_number(decimals=0)` != `decimals=2` and a non-default `scale_values` no
+    longer collapses onto the default. Duplicates kept (two `fmt_currency` read
+    as two). "(none)" when no formatter is applied.
     """
-    names = re.findall(r"\.(fmt_[a-z_]+)\s*\(", source)
-    if not names:
+    tokens: list[str] = []
+    for name, block in _fmt_calls(source):
+        kvs: list[str] = []
+        for kw in _FMT_KWARGS:
+            v = _kwarg_value(block, kw)
+            if v is not None:
+                kvs.append(f"{kw}=" + re.sub(r"\s+", "", v))
+        tokens.append(name + ("(" + ",".join(sorted(kvs)) + ")" if kvs else ""))
+    if not tokens:
         return "(none)"
-    return "|".join(sorted(names))
+    return "|".join(sorted(tokens))
 
 
 def _round_sig(x: float, sig: int = 2) -> str:
@@ -337,41 +454,148 @@ def _fmt_domain_elem(text: str) -> str:
         return re.sub(r"\s+", "", t)
 
 
-def _domain_signature(source: str) -> str:
-    """Canonical signature of every `data_color(domain=[...])` (PP-6/PP-7).
+def _parse_domain_value(val: str | None, default: str) -> str:
+    """Normalize a `domain=` value to a stable token.
 
-    One `[a,b]` group per data_color call (a call with no domain -> "(none)"),
-    sorted and joined with ";", e.g. "[-11,11];[0,4.8e9]". A balanced-bracket
-    scan is used because the list can contain `df['col'].min()` indexing. "(none)"
-    when there are no data_color calls at all (matches the palettes "no color"
-    convention).
+    An inline list `[a, b]` -> the canonical `[a,b]` group (each element via
+    `_fmt_domain_elem`). A NON-list expression (a variable, e.g.
+    `domain=domain`) -> `var:<expr>` so a variable domain is no longer
+    indistinguishable from "no explicit domain". `val is None` (no `domain=` at
+    all) -> the caller's `default` ("(none)" for data_color, "computed" for
+    heatmap, which auto-derives its domain from the data).
     """
-    sigs: list[str] = []
-    for block in _call_arg_blocks(source, "data_color"):
-        m = re.search(r"domain\s*=\s*\[", block)
-        if not m:
-            sigs.append("(none)")
-            continue
-        start = m.end() - 1  # index of the opening '['
+    if val is None:
+        return default
+    v = val.strip()
+    if v.startswith("["):
         depth = 0
         inner: str | None = None
-        for j in range(start, len(block)):
-            ch = block[j]
+        for j, ch in enumerate(v):
             if ch == "[":
                 depth += 1
             elif ch == "]":
                 depth -= 1
                 if depth == 0:
-                    inner = block[start + 1 : j]
+                    inner = v[1:j]
                     break
         if inner is None:
-            sigs.append("(none)")
-            continue
+            return default
         elems = _split_top_level(inner)
-        sigs.append("[" + ",".join(_fmt_domain_elem(e) for e in elems) + "]")
+        return "[" + ",".join(_fmt_domain_elem(e) for e in elems) + "]"
+    return "var:" + re.sub(r"\s+", "", v)
+
+
+def _domain_signature(source: str) -> str:
+    """Canonical signature of every color domain (PP-6/PP-7).
+
+    One token per colored measure — from a literal `data_color(domain=...)` OR a
+    runtime `heatmap(..., domain=...)` — sorted and joined with ";", e.g.
+    "[-11,11];[0,4.8e9]". An inline list yields its `[a,b]` group; a variable
+    domain yields `var:<expr>` (fix 3); a `data_color` with no domain yields
+    "(none)" and a `heatmap` with no domain yields "computed" (it derives the
+    domain from the data). "(none)" when there is no coloring at all (matches
+    the palettes "no color" convention).
+    """
+    sigs: list[str] = []
+    for block in _call_arg_blocks(source, "data_color"):
+        sigs.append(_parse_domain_value(_kwarg_value(block, "domain"), "(none)"))
+    for block in _bare_call_blocks(source, "heatmap"):
+        sigs.append(_parse_domain_value(_kwarg_value(block, "domain"), "computed"))
     if not sigs:
         return "(none)"
     return ";".join(sorted(sigs))
+
+
+def _columns_token(value_text: str | None) -> str:
+    """Normalize a `columns=` value (or positional) to a stable token.
+
+    Any quoted column names are collected and sorted (`['b','a']` -> "a,b"); a
+    bare expression (e.g. a `cs.*` selector) collapses to its whitespace-free
+    text. "(cols?)" when nothing is parseable.
+    """
+    if value_text is None:
+        return "(cols?)"
+    quoted = re.findall(r"['\"]([^'\"]+)['\"]", value_text)
+    if quoted:
+        return ",".join(sorted(quoted))
+    stripped = re.sub(r"\s+", "", value_text)
+    return stripped or "(cols?)"
+
+
+def _heatmap_columns(block: str) -> str:
+    """Colored-column token for a `heatmap(gt, columns, ...)` call.
+
+    `columns` may be the 2nd positional arg or a `columns=` kwarg.
+    """
+    val = _kwarg_value(block, "columns")
+    if val is None:
+        positionals = [
+            p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+        ]
+        if len(positionals) >= 2:  # positionals[0] is the gt object
+            val = positionals[1]
+    return _columns_token(val)
+
+
+def _color_signature(source: str) -> str:
+    """Canonical signature pairing each colored measure's TARGET columns with its
+    palette/hue (PP-6..8).
+
+    Coloring `sales` vs `profit` with the same palette + domain otherwise
+    converges (palettes/domain are column-blind). Each `data_color(...)` becomes
+    `<cols>::<palette>` and each runtime `heatmap(gt, cols, hue=...)` becomes
+    `<cols>::<hue>`, so a different colored target no longer reads as agreement.
+    "(none)" when there is no coloring at all.
+    """
+    tokens: list[str] = []
+    for block in _call_arg_blocks(source, "data_color"):
+        cols = _columns_token(_kwarg_value(block, "columns"))
+        tokens.append(f"{cols}::{_palette_of_block(block)}")
+    for block in _bare_call_blocks(source, "heatmap"):
+        hue = _unquote(_kwarg_value(block, "hue")) or "default"
+        tokens.append(f"{_heatmap_columns(block)}::{hue}")
+    if not tokens:
+        return "(none)"
+    return ";".join(sorted(tokens))
+
+
+def _find_band_helper(source: str) -> tuple[str, str] | None:
+    """(shade, hue) of a runtime `band(gt, *, shade, hue)` heading-band call.
+
+    None when there is no `band(...)` call. Lets a helper-based run score the
+    heading band the SAME as the literal `column_labels_background_color=`.
+    """
+    blocks = _bare_call_blocks(source, "band")
+    if not blocks:
+        return None
+    b = blocks[0]
+    shade = _unquote(_kwarg_value(b, "shade")) or "unknown"
+    hue = _unquote(_kwarg_value(b, "hue")) or "unknown"
+    return shade, hue
+
+
+def _find_stub_tint_hue(source: str) -> str | None:
+    """`hue` of a runtime `stub_tint(gt, *, hue)` call, else None."""
+    blocks = _bare_call_blocks(source, "stub_tint")
+    if not blocks:
+        return None
+    return _unquote(_kwarg_value(blocks[0], "hue")) or "unknown"
+
+
+def _constructor_col_present(gt_blocks: list[str], kw: str) -> bool:
+    """True if any GT(...) block sets `kw=<an actual column>` (not None).
+
+    `groupname_col=None` / `rowname_col=None` — the explicit default — must count
+    as ABSENT: a stub/group is only present when a real column value is given
+    (a quoted name or a variable holding one).
+    """
+    for b in gt_blocks:
+        m = re.search(rf"\b{re.escape(kw)}\s*=\s*([^\s,)]+)", b)
+        if m:
+            val = m.group(1).strip()
+            if val and val != "None":
+                return True
+    return False
 
 
 # Subprocess body for the best-effort data-frame hash (PP-18/PP-29). Kept as a
@@ -382,6 +606,11 @@ def _domain_signature(source: str) -> str:
 # an empty hash, which the parent maps to None.
 _DATA_HASH_RUNNER = r'''
 import sys, types, io, hashlib, contextlib
+
+# Columns hidden via a parsed cols_hide(...) in the source (argv[2:]). Dropped
+# before hashing so "full frame then hide" and "preselect only the visible
+# columns" hash identically — the hash reflects the VISIBLE table.
+HIDDEN = list(sys.argv[2:])
 
 
 def _is_frame(obj):
@@ -409,17 +638,23 @@ def _canon_and_hash(df):
             d = d.round(6)          # stabilize float noise
         except Exception:
             pass
-        try:
-            d = d.reindex(sorted(d.columns, key=str), axis=1)  # sort columns
+        try:                        # exclude cols_hide(...) columns
+            drop = [c for c in HIDDEN if c in d.columns]
+            if drop:
+                d = d.drop(columns=drop)
         except Exception:
             pass
+        # NB: columns are intentionally NOT sorted — the rendered column order is
+        # preserved so column-order drift shows up as a differing hash instead of
+        # being normalized away into false convergence.
         try:
             payload = d.to_csv(index=False)
         except Exception:
             payload = repr(d)
     elif mod.startswith("polars"):
         try:
-            payload = df.select(sorted(df.columns)).write_csv()
+            keep = [c for c in df.columns if c not in HIDDEN]  # preserve order
+            payload = df.select(keep).write_csv()
         except Exception:
             payload = repr(df)
     else:
@@ -483,13 +718,17 @@ sys.stdout.write("DATAHASH:%s\n" % (_h if _h else ""))
 '''
 
 
-def _compute_data_hash(run_dir: Path, timeout: float = 30.0) -> str | None:
+def _compute_data_hash(
+    run_dir: Path, hidden_cols: list[str] | None = None, timeout: float = 30.0
+) -> str | None:
     """Best-effort short hex hash of the frame `run_dir/table.py` renders.
 
     Execs table.py in a hard-timed-out **subprocess** (fresh interpreter, cwd =
     run_dir so relative data paths resolve) with `gtsave` stubbed to a no-op and
-    the Chrome shim neutralized, then hashes the canonicalized frame. Returns
-    None on ANY failure/timeout — the field is then simply skipped in the
+    the Chrome shim neutralized, then hashes the canonicalized frame. Columns
+    named in `hidden_cols` (parsed from `cols_hide(...)`) are passed to the
+    subprocess and dropped before hashing so the hash reflects the VISIBLE table.
+    Returns None on ANY failure/timeout — the field is then simply skipped in the
     convergence scoring, exactly like a missing choice. This never hangs (the
     subprocess is killed on timeout) and never raises to the caller.
 
@@ -502,7 +741,7 @@ def _compute_data_hash(run_dir: Path, timeout: float = 30.0) -> str | None:
         return None
     try:
         proc = subprocess.run(
-            [sys.executable, "-c", _DATA_HASH_RUNNER, str(table_py)],
+            [sys.executable, "-c", _DATA_HASH_RUNNER, str(table_py), *(hidden_cols or [])],
             cwd=str(run_dir),
             capture_output=True,
             text=True,
@@ -525,7 +764,18 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
     fields (grouping/stub/columns/fmt/domain) are pure source regex; `data_hash`
     needs `run_dir` (to exec the script against its data) and is None otherwise.
     """
+    # Heading band: prefer the literal tab_options hex (unchanged behavior); only
+    # fall back to a runtime band(gt, *, shade, hue) helper when no literal hex is
+    # set, so a helper-based run scores the band the SAME as the literal path.
     band_hex = _find_band_color(source)
+    band_helper = _find_band_helper(source) if band_hex is None else None
+    if band_hex:
+        heading_band_shade, heading_band_hue = _band_shade(band_hex), _classify_hue(band_hex)
+    elif band_helper:
+        heading_band_shade, heading_band_hue = band_helper
+    else:
+        heading_band_shade = heading_band_hue = "none"
+
     frame_present = bool(
         re.search(r"opt_table_outline\s*\(", source)
         or re.search(r"table_border_(?:left|right)_(?:style|width|color)\s*=", source)
@@ -535,6 +785,7 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         re.search(r"opt_row_striping\s*\(", source)
         or re.search(r"row_striping_background_color\s*=", source)
         or re.search(r"row_striping_include_table_body\s*=\s*True", source)
+        or _bare_call_blocks(source, "stripe")  # runtime stripe(gt) helper
     )
     caption_present = any(
         re.search(r"subtitle\s*=", block) for block in _call_arg_blocks(source, "tab_header")
@@ -546,23 +797,31 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
 
     palettes = _extract_palettes(source)
 
-    # R5: grouping / stub are GT(...) constructor kwargs (PP-1 / PP-13).
+    # R5: grouping / stub are GT(...) constructor kwargs (PP-1 / PP-13). An
+    # explicit `groupname_col=None` / `rowname_col=None` counts as ABSENT — a
+    # stub/group is present only when a real column value is supplied.
     gt_blocks = _gt_constructor_blocks(source)
-    grouping_present = any(re.search(r"\bgroupname_col\s*=", b) for b in gt_blocks)
-    stub_present = any(re.search(r"\browname_col\s*=", b) for b in gt_blocks)
+    grouping_present = _constructor_col_present(gt_blocks, "groupname_col")
+    stub_present = _constructor_col_present(gt_blocks, "rowname_col")
+
+    # Columns hidden via cols_hide(...) — dropped from the data_hash so the hash
+    # reflects the VISIBLE table.
+    hidden_cols: list[str] = []
+    for block in _call_arg_blocks(source, "cols_hide"):
+        hidden_cols += re.findall(r"['\"]([^'\"]+)['\"]", block)
 
     # R5: best-effort computed-data hash (PP-18/PP-29); None-safe, off the
     # critical path — a failure here must never break the report.
     data_hash: str | None = None
     if run_dir is not None:
         try:
-            data_hash = _compute_data_hash(run_dir)
+            data_hash = _compute_data_hash(run_dir, hidden_cols=hidden_cols)
         except Exception:
             data_hash = None
 
     return {
-        "heading_band_shade": _band_shade(band_hex) if band_hex else "none",
-        "heading_band_hue": _classify_hue(band_hex) if band_hex else "none",
+        "heading_band_shade": heading_band_shade,
+        "heading_band_hue": heading_band_hue,
         "heading_band_hex": band_hex,
         "palettes": palettes,
         "n_color_measures": len(palettes),
@@ -575,9 +834,11 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         # R5 additions (PP-29):
         "grouping_present": grouping_present,
         "stub_present": stub_present,
+        "stub_tint_hue": _find_stub_tint_hue(source),
         "columns_signature": _columns_signature(source),
         "fmt_signature": _fmt_signature(source),
         "domain_signature": _domain_signature(source),
+        "color_signature": _color_signature(source),
         "data_hash": data_hash,
     }
 
@@ -691,11 +952,18 @@ def _field_convergence(field: str, baseline_choices: dict | None, repeat_choices
     agreeing "None"): this matters for `data_hash`, which is None whenever the
     frame could not be computed — only runs where it *was* computable are scored.
     Existing fields never carry None values, so their behavior is unchanged.
+
+    A value of "(unknown)" is likewise skipped: it marks a signature that could
+    not be MEASURED (e.g. no cols_label/cols_hide call), so identical "(unknown)"
+    across runs must NOT be credited as unanimous agreement for a choice that was
+    never observed. A real "no choice" sentinel like "(none)" still counts.
     """
     vals = [
-        _value_signature(c[field])
+        sig
         for c in repeat_choices
         if c is not None and c.get(field) is not None
+        for sig in (_value_signature(c[field]),)
+        if sig != "(unknown)"
     ]
     baseline_val = (
         _value_signature(baseline_choices.get(field)) if baseline_choices is not None else None
