@@ -14,12 +14,35 @@ silently breaks `fmt_*` / `data_color` downstream.
    (`"$1,200"`, `"1,116.56"`, `"12%"`, `"5 kg"`) must become plain floats/ints
    **before** they reach gt. `fmt_currency`/`fmt_percent` format *numbers*; they will
    not parse `"$1,200"`.
+
+   **Normalize accounting-negative parentheses FIRST.** A value wrapped in parentheses
+   is a **negative** (`"($1,200)"` = −1200, `"(12%)"` = −12). The naïve strip
+   `r"[^0-9.\-]"` deletes the parentheses and keeps only the digits, silently turning a
+   loss into a positive number — **data corruption**. So detect the wrapping parentheses
+   and convert them to a leading `-` *before* you strip symbols:
    ```python
-   df["price"] = (
-       df["price"].astype(str)
-       .str.replace(r"[^0-9.\-]", "", regex=True)  # drop $ , % and unit text
-       .pipe(pd.to_numeric, errors="coerce")
-   )
+   s = df["price"].astype(str).str.strip()
+   s = s.str.replace(r"^\((.*)\)$", r"-\1", regex=True)  # (1,200) -> -1,200  BEFORE stripping
+   s = s.str.replace(r"[^0-9.\-]", "", regex=True)       # now drop $ , % and unit text; keep leading -
+   df["price"] = pd.to_numeric(s, errors="coerce")
+   ```
+   **Magnitude suffixes need an explicit multiplier — never the generic strip.** For
+   abbreviated values (`"$1.2M"`, `"3K"`, `"4bn"`) the generic strip leaves `1.2`, `3`,
+   `4` — dropping the ×1e6 / ×1e3 / ×1e9 multiplier, an order-of-magnitude corruption.
+   Do **not** run the generic strip on a suffixed column; parse the suffix explicitly
+   against a fixed multiplier table (deterministic — same string always maps to the same
+   number):
+   ```python
+   import re
+   _MULT = {"k": 1e3, "m": 1e6, "b": 1e9, "bn": 1e9, "t": 1e12}   # fixed, case-insensitive
+   def parse_scaled(x):
+       s = str(x).strip().lower().replace(",", "")
+       s = re.sub(r"^\((.*)\)$", r"-\1", s)                       # accounting negative first
+       m = re.match(r"^[^\d\-.]*(-?\d+(?:\.\d+)?)\s*(bn|k|m|b|t)?", s)  # bn before b
+       if not m:
+           return float("nan")
+       return float(m.group(1)) * _MULT.get(m.group(2), 1.0)
+   df["amount"] = df["amount"].map(parse_scaled)
    ```
 
 2. **Coerce `object`-dtype numeric columns deliberately.** A column with numbers plus a
@@ -38,7 +61,12 @@ silently breaks `fmt_*` / `data_color` downstream.
 
 5. **SQL / Decimal results → float.** Cast `decimal.Decimal` columns to `float`
    (`df["amt"] = df["amt"].astype(float)`) so gt's formatters accept them, and confirm
-   NULL handling matches your missing-value convention (below).
+   NULL handling matches your missing-value convention (below). **Caution — exact money /
+   large integers:** `float` has only ~15–16 significant digits (integers exact only up
+   to 2^53). For values that must stay exact — cents-precise money, IDs, or magnitudes
+   beyond 2^53 — do **not** cast to `float`: keep the `Decimal`, or `quantize` it to the
+   display precision (e.g. `df["amt"] = df["amt"].map(lambda d: d.quantize(Decimal("0.01")))`),
+   then format. gt can format `Decimal` values directly.
 
 6. **Trim whitespace in string keys.** Leading/trailing spaces break exact matching for
    `groupname_col` labels and joins: `df["region"] = df["region"].str.strip()`.
