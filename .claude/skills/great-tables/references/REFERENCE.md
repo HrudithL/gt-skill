@@ -7,8 +7,11 @@ file into your code**. Do not retype a palette, hex, or domain from memory — S
 holds none of them on purpose. Filenames live here and nowhere else, so you never have
 to point past this file.
 
-Paths below are relative to the skill's `references/` directory (examples are under
-`assets/`).
+Paths below are relative to the skill's `references/` directory (this file's own
+directory). The worked examples are the one exception: they live at the skill root in
+`assets/` — a **sibling** of `references/`, not inside it — so every example path is
+written with a leading `../` (i.e. `../assets/examples/…`, which resolves from
+`references/`). There is no `references/assets/`.
 
 ---
 
@@ -17,13 +20,19 @@ Paths below are relative to the skill's `references/` directory (examples are un
 Open **`api.md`** and copy the exact signature. Mechanical API detail only; every
 design decision stays in SKILL.md and the files below.
 
-## 1. EVERY table — unconditional (Steps 1, 4 & 5)
+## 1. EVERY table — unconditional (Steps 1, 2, 4 & 5)
 
 - **`data.md`** — the data-cleaning sub-step (Step 1, **before you organize columns**):
   get to ONE correctly-typed DataFrame. Strip currency/percent strings to floats, coerce
   `object`-dtype numerics, fix a non-zero header row, cast SQL `Decimal`s, standardize
   missing values. `great_tables` formats numbers, it does not parse strings — skip this
   and `fmt_*` / `data_color` break silently.
+- **`small_color.md` → "Deterministic triggers" section — BEFORE you write the
+  `GT(...)` constructor (Step 2).** The stub trigger (PP-13 → `rowname_col=`), the
+  grouping trigger (PP-1 → `groupname_col=`), and the ambiguous-measure rule
+  (F-canonical-metric, PP-18) all decide **constructor arguments**, so resolve them when
+  you organize columns (Step 2), **not** at Step 5. Read that one section now; the rest
+  of `small_color.md` (the polish checklist) is read later, at Step 5 (next bullet).
 - **`palettes.md`** — the single source of truth for every hex: Dark Academia solids,
   their washed light tints, the neutral greys, and the sequential/diverging palette
   *names*. Open it before you write any color at all.
@@ -65,13 +74,13 @@ column-label bottom rule regardless of band (hex in `small_color.md`).
 ## 4. Your data matches an archetype (Steps 2 & 5)
 
 Open the matching worked example for a full runnable table to pattern-match against
-(`assets/examples/EXAMPLES.md` indexes them all).
+(`../assets/examples/EXAMPLES.md` indexes them all).
 
 | Archetype — use when… | Open |
 |---|---|
-| Money, prices, signed deltas, percentages | `assets/examples/financial/` |
-| Dates, trends, monthly/yearly aggregation | `assets/examples/time_series/` |
-| Color-encoded data cells | `assets/examples/heatmap/` |
-| Top-N lists, ordered results | `assets/examples/ranking/` |
-| Aggregations, totals, subtotals | `assets/examples/summary_stats/` |
-| Measurements with units, sig figs | `assets/examples/scientific/` |
+| Money, prices, signed deltas, percentages | `../assets/examples/financial/` |
+| Dates, trends, monthly/yearly aggregation | `../assets/examples/time_series/` |
+| Color-encoded data cells | `../assets/examples/heatmap/` |
+| Top-N lists, ordered results | `../assets/examples/ranking/` |
+| Aggregations, totals, subtotals | `../assets/examples/summary_stats/` |
+| Measurements with units, sig figs | `../assets/examples/scientific/` |

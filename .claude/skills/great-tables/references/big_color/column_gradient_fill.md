@@ -4,11 +4,35 @@ Apply `data_color` to an ordered numeric column so that each cell's background e
 
 ## Trigger (computable — not optional)
 
-**IF an ordered numeric magnitude is present over ≥5 rows ⇒ it IS a colored measure**
-(the hero, if it is the only one). This is a deterministic branch, **not** a judgment
-call — do not leave the magnitude uncolored, and do not ask "should this be colored?"
-The ≥5-row magnitude answers it: yes. (Below 5 rows a gradient reads as random pastel —
-use a targeted highlight instead; see the last rule.)
+**IF an ordered numeric magnitude is present over ≥5 rows ⇒ it QUALIFIES as a colored
+measure** (the hero, if it is the only one that qualifies). This is a deterministic
+branch, **not** a judgment call — do not ask "should this be colored?" The ≥5-row
+magnitude answers it: yes, it qualifies. (Below 5 rows a gradient reads as random
+pastel — it does not qualify; use a targeted highlight instead, see the last rule.)
+
+"Qualifies" is not the same as "is colored": the router caps a table at **≤ 2 colored
+measures**. When **1 or 2** measures qualify, colour **all** of them (each is
+mandatory — do not leave a qualifying measure uncoloured). When **3 or more** qualify,
+you MUST colour exactly 2 — the ceiling wins — and the priority rule below picks
+**which** 2. This resolves the apparent conflict: qualifying is mandatory *eligibility*,
+the ceiling is a *hard cap*, and the priority rule is the deterministic selector.
+
+## Selecting the ≤2 when 3+ qualify (deterministic priority)
+
+Rank every qualifying measure by this order and take the **top 2**. The order is total
+and computable, so two runs on the same prompt+data pick the SAME 2 columns:
+
+1. **Prompt-named / emphasised measures first**, in the order they appear in the
+   prompt. A measure the user explicitly names, asks to "show/highlight/compare", or
+   puts in the title outranks any unnamed one.
+2. **Then leftmost-first by DataFrame column order.** Among measures with equal prompt
+   priority (e.g. none named, or several named at once), the one whose column appears
+   earlier (smallest column index) wins.
+
+Take the first 2 from this ranking; colour those, leave the rest uncoloured (a
+qualifying-but-unselected measure gets neither a fill nor a competing highlight — its
+magnitude is carried by the number alone). A measure that spans several facet columns
+(a matrix/heatmap block) counts as **one** measure occupying **one** of the 2 slots.
 
 ## When to use
 
@@ -22,13 +46,16 @@ If the column has both negatives and positives with opposite meaning, use `diver
 ## Recipe
 
 ```python
+import numpy as np
 from great_tables import GT
 
 # DATA-DRIVEN domain, shared across ALL facet columns of this ONE measure.
 # Never a per-column domain, never a round guess — compute it from the frame.
+# Backend-neutral: .to_numpy() + np.nanmin/nanmax return a scalar on BOTH pandas and
+# polars. (df[cols].min().min() returns a 1-row frame on polars and breaks float(...).)
 cols = ["measure"]                              # every column that IS this measure
-lo = float(df[cols].min().min())                # min across all facet columns
-hi = float(df[cols].max().max())                # max across all facet columns
+lo = float(np.nanmin(df[cols].to_numpy()))     # min across all facet columns
+hi = float(np.nanmax(df[cols].to_numpy()))     # max across all facet columns
 
 gt = (
     GT(df, rowname_col="entity")
@@ -46,8 +73,11 @@ gt = (
 ## Rules
 
 - **Domain = `[min, max]` across ALL facet columns of the measure — one shared domain.**
-  Compute `lo`/`hi` from the frame (`df[cols].min().min()` / `.max().max()`); the bound
-  must be **DATA-DRIVEN**, never a round guess. If the measure spans several facet
+  Compute `lo`/`hi` from the frame with the **backend-neutral** reduction
+  `float(np.nanmin(df[cols].to_numpy()))` / `float(np.nanmax(df[cols].to_numpy()))`
+  (matches the diverging recipe; works on pandas AND polars — the pandas-only
+  `df[cols].min().min()` returns a 1-row frame on polars and breaks `float(...)`); the
+  bound must be **DATA-DRIVEN**, never a round guess. If the measure spans several facet
   columns, they share this **single** domain (not a per-column domain), so equal values
   read as equal color across the block. A too-narrow domain flattens the extremes; a
   too-wide domain washes out the middle.

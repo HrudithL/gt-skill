@@ -37,10 +37,14 @@ the dominant Big-Color hue — see the grey-budget rule):
 
 ---
 
-## Deterministic triggers — resolve these BEFORE you style
+## Deterministic triggers — resolve these at Step 2, BEFORE the constructor
 
-Each is a decision the model **executes** on a computable condition, not a judgment
-call. Read the condition first; if it fires, the action is mandatory.
+These three triggers set **`GT(...)` constructor arguments** (`rowname_col=`,
+`groupname_col=`) and the canonical-metric definition, so resolve them when you
+**organize columns (Step 2)** — before you write the constructor — not at Step 5 with
+the rest of this checklist. (REFERENCE.md §1 routes you here at Step 2 for exactly this
+reason.) Each is a decision the model **executes** on a computable condition, not a
+judgment call. Read the condition first; if it fires, the action is mandatory.
 
 ### Stub default — a computable trigger (PP-13)
 
@@ -242,15 +246,18 @@ from this checklist, so the band hue, stripes, and dividers are the pinned hexes
 not a built-in theme. Escaping to `opt_stylize(style=N)` is exactly the off-flowchart
 drift that made "same-prompt" runs render as different products.
 
-`opt_stylize` may be used for **one** thing only: the rounded-corner **container** per
-the **Frame** global constant (it is the documented way to get rounded corners) —
-**never** as the color / band / stripe / theme mechanism. If you use it for the
-container, reset any chrome it touches back to this checklist's pinned surfaces with a
-later `tab_options(...)` call (e.g. restore the `#CCCCCC`/2px bottom rule) — later
-`tab_options(...)` wins.
+`opt_stylize(...)` is a full **theme preset** — it sets backgrounds, line colors, and
+styles across the whole table. There is **no** exception: do **not** call it for the
+whole table, for the container, for "just the rounded corners", or for anything else.
+Any use reintroduces exactly the unpinned styling this checklist exists to remove.
 
-- **Do not stack `opt_stylize` with `opt_row_striping()`** — layering the two produces
-  darker-than-intended stripes; item (c) already owns striping.
+**Rounded corners.** `great_tables` has **no** pinned `tab_options(...)` corner-radius
+option, so there is **no deterministic rounded-corner mechanism** — the **square**
+four-side Frame border below (color `#CCCCCC`, 1px, all sides) **is** the deterministic
+Frame, and SKILL.md explicitly declares a square light border acceptable. If (and only
+if) rounded corners are explicitly requested, the **only** border-radius-only escape
+that touches nothing else is a single `opt_css("table { border-radius: 6px; }")` rule —
+CSS scoped to `border-radius` alone, never `opt_stylize`. Default to the square Frame.
 
 ## Frame & render parameters (the Global-constant values)
 

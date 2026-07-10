@@ -93,14 +93,20 @@ same hue on every run.
 | growth · gain · improvement · "more is better" | **`Greens`** |
 | loss · risk · warning · worse · error rate — "more is worse" | **`Reds`** (`Oranges` = documented alternate only, when `Reds` clashes with another hue already in the table) |
 
-A neutral magnitude (money/price/volume/count/population) is **always `Blues`** —
-**never** Greens. `Greens`/`Reds` are reserved for measures that carry an explicit
-direction. This removes the Blues-vs-Greens coin-flip.
+A **single** neutral magnitude (money/price/volume/count/population) is **always
+`Blues`** — never Greens. `Greens`/`Reds` are reserved for measures that carry an
+explicit direction. This removes the Blues-vs-Greens coin-flip. (For the case of **two**
+neutral magnitudes in one table, which would both want `Blues`, see the neutral
+tie-breaker under "Rules for the colored measures" below.)
 
 ### Diverging (signed values)
 
-`RdYlGn` **default** (red = bad, green = good); `RdBu` / `PuOr` colorblind-safe
-alternatives.
+`RdYlGn` **default**. Orientation is computable, not assumed: positive = good ⇒
+`RdYlGn` (green = positive); **positive = bad** (cost/variance-over-budget, error,
+defect, latency, delay, downtime, churn — "more is worse") ⇒ `RdYlGn` with
+`reverse=True` (green = negative). `RdBu` / `PuOr` colorblind-safe alternatives. The
+symmetric domain `[-M, M]` is identical in both orientations — see
+`big_color/diverging_fill.md` for the full test.
 
 ### Rules for the colored measures
 
@@ -111,6 +117,20 @@ alternatives.
   `truncate=False` so out-of-range values keep the most extreme color rather than
   disappearing. (e.g. data −30 → +40 ⇒ `domain=[-40, 40]`.)
 - **Two sequential measures:** give them **two distinct semantic hue families —
-  never the same** (e.g. `Greens` + `Blues`, not `Blues` + `Blues`).
+  never the same** (e.g. `Greens` + `Blues`, not `Blues` + `Blues`). When each measure
+  carries its own direction, the semantic lookup already yields distinct hues.
+- **Two NEUTRAL measures (the tie-breaker):** two same-semantic neutral magnitudes
+  (e.g. price + volume, horsepower + price) both resolve to `Blues` by the lookup, which
+  would violate "distinct hues". Resolve deterministically: the **primary** neutral
+  measure keeps **`Blues`**; the **secondary** takes the next entry from the pinned
+  ordered fallback ladder **`Blues → Greens → Oranges`** (i.e. the second neutral →
+  `Greens`; a — never-reached under the ≤2 ceiling — third → `Oranges`). `Reds` is
+  excluded from this ladder (reserved for a directional "worse" measure). The ladder is
+  applied for **distinctness only**; the fallback hue carries no good/bad meaning here.
+  - **Which measure is "primary" (total, computable order):** (1) the measure the
+    prompt names/emphasises first, in prompt order; else (2) leftmost-first by DataFrame
+    column order. This is the SAME priority order used to pick the ≤2 colored measures
+    (`big_color/column_gradient_fill.md`), so both runs assign the same two palettes to
+    the same two columns.
 - **Non-gradient Big Color uses the Dark Academia solids** (§1), hue per the
   DA hue-selection rule — never these sequential/diverging palettes.
