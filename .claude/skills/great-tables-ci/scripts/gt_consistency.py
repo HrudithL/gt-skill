@@ -141,13 +141,39 @@ def _as_columns(columns):
     return list(columns)
 
 
+def _is_missing(value):
+    """True if ``value`` is a missing scalar — ``None`` / NaN / ``pd.NA`` / null.
+
+    Written to work without importing pandas or numpy at module top (keeps the
+    parity test dependency-free). Detection by cases:
+
+    * ``None`` — pandas/polars return this for an all-null column's ``.min()``
+      only in polars; the explicit check also covers plain ``None``.
+    * float ``NaN`` (pandas float dtype, numpy scalars) — ``NaN != NaN`` is
+      ``True``, so ``bool(value != value)`` is ``True``.
+    * ``pd.NA`` (pandas *nullable* dtypes) — ``pd.NA != pd.NA`` yields ``pd.NA``
+      and ``bool(pd.NA)`` raises (ambiguous), so the ``except`` treats it as
+      missing. This is the case that made ``float(pd.NA)`` crash before.
+    """
+    if value is None:
+        return True
+    try:
+        return bool(value != value)
+    except (TypeError, ValueError):
+        return True
+
+
 def _column_min_max(data, cols):
     """Return ``(lo, hi)`` as floats across every column in ``cols``.
 
     Works for both a pandas and a polars ``gt._tbl_data``: indexing a column by
     name (``data[col]``) and calling ``.min()`` / ``.max()`` is supported by
-    both, and both skip nulls. All-null columns (polars returns ``None``) are
-    ignored. Raises ``ValueError`` if no column yields a numeric extent.
+    both, and both skip nulls. All-missing columns are SKIPPED: a pandas
+    all-null column yields ``NaN`` (float dtype) or ``pd.NA`` (nullable dtype)
+    from ``.min()`` — NOT ``None`` — so a plain ``is None`` guard would let a
+    ``[nan, nan]`` domain through (and ``float(pd.NA)`` would raise); ``_is_missing``
+    catches all three. Raises ``ValueError`` if EVERY column is all-missing so no
+    numeric extent exists (a clear error, not a numpy crash).
     """
     lo = None
     hi = None
@@ -155,7 +181,7 @@ def _column_min_max(data, cols):
         series = data[col]
         c_min = series.min()
         c_max = series.max()
-        if c_min is None or c_max is None:
+        if _is_missing(c_min) or _is_missing(c_max):
             continue
         c_min = float(c_min)
         c_max = float(c_max)
@@ -163,8 +189,8 @@ def _column_min_max(data, cols):
         hi = c_max if hi is None else max(hi, c_max)
     if lo is None or hi is None:
         raise ValueError(
-            "heatmap(): no numeric values found across columns %r to build a "
-            "domain from" % (cols,)
+            "heatmap(): every selected column %r is all-missing (no numeric "
+            "values to build a domain from)" % (cols,)
         )
     return lo, hi
 
@@ -182,6 +208,13 @@ def _heatmap_domain(data, cols, kind):
     lo, hi = _column_min_max(data, cols)
     if kind == "diverging":
         m = max(abs(lo), abs(hi))
+        if m == 0:
+            # Every selected value is exactly 0 (or all-missing collapsed to 0):
+            # a [-0.0, 0.0] domain has identical endpoints, which GT rescales to
+            # the low-end (extreme) color — painting genuinely neutral data as
+            # the most-negative hue. Use a small nonzero symmetric domain so 0
+            # maps to the palette's center (neutral). Deterministic.
+            return [-1.0, 1.0]
         return [-m, m]
     if kind == "sequential":
         return [lo, hi]
@@ -287,12 +320,23 @@ def band(gt, *, shade, hue):
     if shade == "dark":
         options["column_labels_background_color"] = PALETTE["solid"][hue]
         gt = gt.tab_options(**options)
-        # No tab_options option sets column-label text color; use tab_style.
+        # No tab_options option sets column-label text color; use tab_style. Also
+        # whiten SPANNER labels so they match the dark band — otherwise they keep
+        # their default dark text and read as low-contrast on the solid. This
+        # great_tables version's loc.spanner_labels() requires explicit ids (a
+        # bare call raises), so pull them from the GT's own spanners and only add
+        # that location when spanners exist.
         from great_tables import loc, style
 
+        locations = [loc.column_labels()]
+        spanners = getattr(gt, "_spanners", None)
+        if spanners:
+            spanner_ids = [s.spanner_id for s in spanners]
+            if spanner_ids:
+                locations.append(loc.spanner_labels(ids=spanner_ids))
         return gt.tab_style(
             style=style.text(color="white"),
-            locations=loc.column_labels(),
+            locations=locations,
         )
     raise ValueError("band(): shade must be 'light' or 'dark', got %r" % (shade,))
 
