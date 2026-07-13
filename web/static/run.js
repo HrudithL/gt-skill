@@ -1,5 +1,5 @@
 // Run tab: configure -> live plan preview -> launch -> watch live (SSE).
-import { el, clear, postJSON, fmtCost, fmtInt } from "./api.js";
+import { el, clear, getJSON, postJSON, fmtCost, fmtInt } from "./api.js";
 import { renderTranscript } from "./transcript.js";
 import { loadFile, kindFor } from "./viewers.js";
 
@@ -168,17 +168,38 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
     startLive(res.run_id, spec);
   }
 
-  function startLive(runId, spec) {
+  // Set once app.js tears this tab down; guards async continuations (the
+  // reconnect fetch below) from spinning up a live stream against detached DOM.
+  let disposed = false;
+
+  function startLive(runId, spec, startedAt = null) {
+    if (disposed) return;
     if (liveView) liveView.destroy();
-    liveView = new LiveView(right, runId, spec, catalogs, { onJumpToHistory, onDone: () => { state.running = false; refreshConfigUI(); } });
+    liveView = new LiveView(right, runId, spec, catalogs, { onJumpToHistory, onDone: () => { state.running = false; refreshConfigUI(); }, startedAt });
     liveView.connect();
   }
 
   schedulePlan();
 
+  // Reconnect to an in-flight run: if a run is already going (we navigated away
+  // and came back), the backend still buffers and replays every event from the
+  // start, so we can rebuild the live view — transcript, files, chips — exactly
+  // as if we'd watched the whole time. This is why leaving the page is safe.
+  (async function reconnectActive() {
+    let info;
+    try { info = await getJSON("/api/runs"); }
+    catch (_) { return; }
+    if (disposed || !info.active || !info.active.run_id) return;
+    clearTimeout(planTimer);          // don't let the debounced plan clobber the live view
+    state.running = true;
+    refreshConfigUI();
+    startLive(info.active.run_id, info.active.spec || buildSpec(), info.active.started_at);
+  })();
+
   // Cleanup hook: app.js calls this before switching tabs so a live run's
   // EventSource + 1s timer are torn down instead of leaking against detached DOM.
   return () => {
+    disposed = true;
     clearTimeout(planTimer);
     if (liveView) liveView.destroy();
   };
@@ -212,7 +233,10 @@ function renderPlan(root, plan) {
 class LiveView {
   constructor(root, runId, spec, catalogs, opts) {
     this.root = root; this.runId = runId; this.spec = spec; this.opts = opts;
-    this.stages = []; this.active = -1; this.started = Date.now();
+    // On reconnect the backend reports the run's real start (epoch seconds) so the
+    // elapsed clock stays truthful instead of restarting from zero.
+    this.stages = []; this.active = -1;
+    this.started = opts.startedAt != null ? opts.startedAt * 1000 : Date.now();
     this.usage = { input: 0, output: 0, cost_usd: 0 };
     this.total = null;
   }
