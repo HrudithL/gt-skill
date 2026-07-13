@@ -118,22 +118,52 @@ numeric values live in the references.
 
 ## Checker loop (required)
 
-This is the **CI-checked variant**. It adds two mechanical steps to the flowchart
-above; every **design** decision is still yours.
+This is the **CI-checked variant**: it ships `scripts/` and adds **two mechanical
+steps** to the flowchart above — a checker you *run* and helpers you *import*. Every
+**design** decision is still yours. The procedure is here; the full rule-id table and
+the helper signatures live in **`references/scripts.md`** (open it once).
 
-- **Bind the final table to a top-level module variable named `gt`** in `table.py`.
-  This convention is not optional: the checker imports `table.py`, reads `gt`, and calls
-  `gt.as_raw_html()` to inspect the rendered DOM. If the table is bound to any other
-  name the checker cannot run.
-- **After writing `table.py`, run `python gt_check.py table.py`.** It prints a loud
-  `PASS`/`FAIL` banner. On `FAIL` it prints **one line per violation**, each naming the
-  exact `references/<file>` that documents the fix. **Open those files, fix `table.py`,
-  and re-run until it prints `PASS`.** Only then render and finish.
-- **Prefer the thin execution helpers** so the *mechanics* of a decision cannot drift
-  between runs: `from gt_consistency import PALETTE, frame, finalize, heatmap, band,
-  stripe, stub_tint`. `heatmap` computes the domain and looks up the palette; `band`
-  applies the exact band hex + the mandatory bottom rule; `frame`/`finalize` apply the
-  boxed border and the `gtsave` margin/zoom; `stripe`/`stub_tint` apply the pinned
-  surfaces; `PALETTE` holds every hex. **They choose nothing** — you still make every
-  design decision (which columns, sequential vs diverging, which hue, light vs dark
-  band) and pass it in as an argument. This is the only place scripts enter the flow.
+**The `gt` convention (not optional).** Bind the final table to a **top-level module
+variable named `gt`** in `table.py` (`gt = GT(df)...`), then end with
+`gt.gtsave("table.png")` as always. The checker execs `table.py`, reads `gt`, and
+calls `gt.as_raw_html()` to inspect the rendered DOM; bound to any other name it
+reports `gt-missing` and skips every DOM check. Rendering is neutralised while
+checking (Chrome is not launched — `gtsave` is stubbed to *record* its kwargs), so
+keep the `gtsave` call: it is inspected, it just produces no PNG during the check.
+
+**Run it, then iterate until `PASS`.** After writing `table.py`, run:
+
+```
+python gt_check.py table.py
+```
+
+It prints a loud banner, then one line per violation:
+
+```
+===== gt_check: FAIL (2 issue(s)) =====
+  [rule-id] <what you missed> — expected: <what's expected> — read references/<file>
+```
+
+Exit code is `0` on `PASS`, `1` on `FAIL`; `INFO` notes are advisory and never fail
+it. Every FAIL line ends in **`read references/<file>`** — the one reference that
+pins that rule's fix (e.g. `too-many-measures → palettes.md`, `domain-symmetry →
+big_color/diverging_fill.md`, `frame-missing`/`striping-gate → small_color.md`).
+**Open that file, fix the flagged rule in `table.py`, and re-run — repeat until it
+prints `PASS`.** Only then render for real and finish (Step 7). A `PASS` means the
+prompt-independent style rules hold; the checker never sees the prompt, so still
+audit the render against the request yourself.
+
+**Prefer the thin execution helpers** so the *mechanics* of a decision cannot drift
+between runs:
+
+```python
+from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
+```
+
+`heatmap` colors a measure (computes the shared domain, looks up the palette); `band`
+applies the exact band hex + the mandatory bottom rule; `frame`/`finalize` apply the
+boxed border and the `gtsave` margin/zoom; `stripe`/`stub_tint` apply the pinned
+surfaces; `PALETTE` holds every hex and mirrors `palettes.md` (**zero inlined
+hexes**). **They choose nothing** — you still decide which columns, sequential vs
+diverging, which hue, light vs dark band, and pass each in as an argument. This is
+the only place scripts enter the flow.
