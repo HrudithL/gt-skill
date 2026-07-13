@@ -8,6 +8,8 @@ A tiny, lightweight harness that uses the [Claude Agent SDK](https://pypi.org/pr
 python -m venv .venv
 source .venv/bin/activate
 pip install claude-agent-sdk great_tables pandas python-dotenv anyio
+# for the web UI backend:
+pip install starlette uvicorn sse-starlette websockets
 # also need the Claude Code CLI on PATH:
 npm install -g @anthropic-ai/claude-code
 ```
