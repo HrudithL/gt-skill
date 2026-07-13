@@ -2,43 +2,35 @@
 // a "diff prose <-> scripts" affordance (07-frontend-runner.md §5.3).
 import { el, clear, getText } from "./api.js";
 import { loadFile, kindFor } from "./viewers.js";
+import { renderCollapsibleTree } from "./tree.js";
 
 export function renderSkillsTab(root, catalogs) {
   clear(root);
+  root.append(el("div", { class: "page-head" },
+    el("h2", {}, "Skills"),
+    el("button", { class: "btn ghost sm", style: "margin-left:auto", onclick: () => diffProseScripts(viewer, catalogs) }, "diff prose ↔ scripts")));
+
   const grid = el("div", { class: "skills-grid" });
   const nav = el("div", { class: "card panel" });
-  const viewer = el("div", { class: "card panel" });
+  const viewer = el("div", { class: "card panel viewer-panel" });
   grid.append(nav, viewer);
   root.append(grid);
 
-  nav.append(el("h2", {}, "Skills"),
-    el("button", { class: "btn secondary", style: "margin-bottom:.6rem", onclick: () => diffProseScripts(viewer, catalogs) }, "diff prose ↔ scripts"));
-
   for (const s of catalogs.skills) {
-    nav.append(el("h3", {}, s.label));
-    nav.append(el("div", { class: "small muted", style: "margin-bottom:.3rem" }, s.dir));
-    nav.append(tree(s.label, s.tree, viewer));
+    const sec = el("div", { class: "skillsec" });
+    sec.append(el("div", { class: "skname" }, s.label));
+    sec.append(el("div", { class: "skdir" }, s.dir));
+    sec.append(renderCollapsibleTree(s.tree, { onFile: (path) => open(viewer, s.label, path) }));
+    nav.append(sec);
   }
-  viewer.append(el("div", { class: "muted" }, "Select a file to view. Markdown renders formatted; scripts as code; example PNGs inline."));
-}
-
-function tree(skill, nodes, viewer, depth = 0) {
-  const box = el("div", { class: "tree" });
-  for (const n of nodes || []) {
-    const pad = "  ".repeat(depth);
-    if (n.type === "dir") {
-      box.append(el("div", { class: "node dir" }, pad + n.name + "/"));
-      box.append(tree(skill, n.children, viewer, depth + 1));
-    } else {
-      box.append(el("div", { class: "node" }, pad, el("span", { class: "file clickable", onclick: () => open(viewer, skill, n.path) }, n.name)));
-    }
-  }
-  return box;
+  viewer.append(el("div", { class: "viewer-hint" },
+    el("div", { class: "big-muted" }, "Select a file"),
+    el("div", { class: "muted small" }, "Markdown renders formatted; scripts as code; example PNGs inline.")));
 }
 
 async function open(viewer, skill, path) {
   clear(viewer);
-  viewer.append(el("div", { class: "small muted" }, `${skill} / ${path}`));
+  viewer.append(el("div", { class: "viewer-path" }, path.split("/").pop(), el("span", { class: "muted small" }, `  ${skill} / ${path}`)));
   const url = `/api/skills/${encodeURIComponent(skill)}/file?path=${encodeURIComponent(path)}`;
   try { viewer.append(await loadFile(kindFor(path), url, path)); }
   catch (e) { viewer.append(el("div", { class: "err" }, e.message)); }
