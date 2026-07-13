@@ -40,6 +40,28 @@ def prompt_dir_name(pref: PromptRef) -> str:
     return slugify(pref.prompt)
 
 
+def unique_prompt_dir_names(prompts: list[PromptRef]) -> list[str]:
+    """Per-prompt dir names, uniquified so shared labels get ``_2``/``_3`` suffixes.
+
+    Multiple ad-hoc prompts now share the ``ad-hoc`` label (and two ad-hoc
+    prompts could share a slug historically), so both the plan preview and the
+    real run must disambiguate them the same way to stay in agreement. Shared by
+    ``build_plan`` and ``orchestrate.run_spec``.
+    """
+    names: list[str] = []
+    used: set[str] = set()
+    for p in prompts:
+        base = prompt_dir_name(p)
+        name = base
+        k = 2
+        while name in used:
+            name = f"{base}_{k}"
+            k += 1
+        used.add(name)
+        names.append(name)
+    return names
+
+
 def run_slug(spec: RunSpec) -> str:
     """The ``<skill>_<slug-or-multi>`` tail of the run dir name."""
     names = [prompt_dir_name(p) for p in spec.prompts]
@@ -114,7 +136,8 @@ def build_plan(spec: RunSpec, ts: str = "<ts>") -> dict:
     entries = _mount_entries(variant)
 
     prompts_plan: list[dict] = []
-    for p in spec.prompts:
+    names = unique_prompt_dir_names(spec.prompts)
+    for p, pname in zip(spec.prompts, names):
         dirs: list[dict] = []
         if baseline:
             dirs.append(
@@ -140,7 +163,7 @@ def build_plan(spec: RunSpec, ts: str = "<ts>") -> dict:
             )
         prompts_plan.append(
             {
-                "name": prompt_dir_name(p),
+                "name": pname,
                 "data": Path(p.data).name,
                 "dirs": dirs,
                 # convergence.json + contact_sheet.png only when repeats > 1
