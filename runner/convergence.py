@@ -1,49 +1,30 @@
 #!/usr/bin/env python3
-"""Consistency test harness for the great-tables skill.
+"""Convergence scoring + contact sheet — the metric core of the old runner.
 
-Measures *convergence*: for ONE prompt, run it once with no skill (the
-baseline) and N times with the skill active, then check how often the N
-with-skill runs land on the same design choices. That agreement fraction is
-the consistency metric.
+Every design-choice parser, the convergence scorer, and the contact-sheet
+compositor were moved here verbatim from ``consistency_runner.py`` (only the
+orchestration — the Chrome/SDK-driving ``run_consistency`` / ``main`` — was left
+behind; the new ``runner.orchestrate`` drives runs and calls these primitives).
+The parsing heuristics ARE the contract the convergence report depends on, so
+nothing about their behavior changed in the move.
 
-Runs through run.py's core `run()` with its new `skill_variant` parameter:
-  - baseline    -> skill_variant="none"     (no skill loaded)
-  - with_skill  -> skill_variant=<--variant> ("prose" or "scripted")
-
-Output layout under test-runs/:
-    test-runs/<ts>_<prompt-slug>/
-      baseline/            table.py · table.png · transcript.json
-      with_skill/repeat_1/  repeat_2/  repeat_3/   (each: table.py/.png/transcript)
-      contact_sheet.png     baseline + repeats side-by-side (PIL)
-      consistency_report.json
-
-Usage examples:
-    python consistency_runner.py "Make a clean table of this data" data/gtcars.csv
-    python consistency_runner.py "..." data/towny.csv --variant scripted --repeat 5
+For ONE prompt, the metric measures *convergence*: run it N times with the skill
+active and check how often the N runs land on the same design choices. That
+agreement fraction (averaged over the fields in ``CONVERGENCE_FIELDS``) is the
+consistency metric. A baseline (no-skill) run is parsed too, for contrast.
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
-import time
 from collections import Counter
-from datetime import datetime
 from pathlib import Path
 
-import anyio
-from dotenv import load_dotenv
-from nokap import Chrome
 from PIL import Image, ImageDraw, ImageFont
-
-from run import run as run_agent
-
-ROOT = Path(__file__).parent.resolve()
 
 # Fields the convergence metric is computed over, in report order. Each maps a
 # parsed design choice to a hashable value; palettes is list-valued and gets a
@@ -989,7 +970,7 @@ def build_report(
     baseline: dict,
     with_skill: list[dict],
 ) -> dict:
-    """Assemble consistency_report.json from parsed baseline + repeat results.
+    """Assemble the convergence report from parsed baseline + repeat results.
 
     `baseline` and each `with_skill` entry are parse_table_dir() dicts extended
     with at least {"repeat"/"run_dir"}.
@@ -1011,157 +992,3 @@ def build_report(
         "baseline": baseline,
         "with_skill": with_skill,
     }
-
-
-# --------------------------------------------------------------------------- #
-# run orchestration
-# --------------------------------------------------------------------------- #
-async def run_consistency(
-    prompt: str,
-    data_path: Path,
-    out_dir: Path,
-    repeat: int,
-    variant: str,
-    chrome_ws: str,
-) -> tuple[Path, list[Path]]:
-    """Run 1x baseline (none) + N x with-skill (variant), sharing one Chrome.
-
-    Returns (baseline_dir, [repeat_dir, ...]). Individual run failures are
-    caught and logged so the contact sheet / report can still be built.
-    """
-    async def _one(run_dir: Path, skill_variant: str, label: str) -> None:
-        run_dir.mkdir(parents=True, exist_ok=True)
-        print(f"\n{'=' * 60}\n{label}  (skill_variant={skill_variant})\n{'=' * 60}")
-        print(f"  run_dir: {run_dir}\n")
-        start = time.time()
-        try:
-            await run_agent(prompt, data_path, run_dir, chrome_ws, skill_variant=skill_variant)
-            print(f"  done in {time.time() - start:.1f}s")
-        except Exception as e:  # keep going; a failed run becomes a missing panel
-            print(f"  FAILED after {time.time() - start:.1f}s: {e}", file=sys.stderr)
-
-    baseline_dir = out_dir / "baseline"
-    await _one(baseline_dir, "none", "baseline")
-
-    repeat_dirs: list[Path] = []
-    for r in range(1, repeat + 1):
-        d = out_dir / "with_skill" / f"repeat_{r}"
-        await _one(d, variant, f"with_skill / repeat {r}/{repeat}")
-        repeat_dirs.append(d)
-
-    return baseline_dir, repeat_dirs
-
-
-def _finalize_outputs(
-    out_dir: Path, baseline_dir: Path, repeat_dirs: list[Path], meta: dict
-) -> dict:
-    """Parse runs, write contact_sheet.png + consistency_report.json, return report."""
-    panels: list[tuple[str, Path]] = [("baseline", baseline_dir / "table.png")]
-    panels += [(f"repeat {i}", d / "table.png") for i, d in enumerate(repeat_dirs, 1)]
-    build_contact_sheet(panels, out_dir / "contact_sheet.png")
-
-    baseline = {"run_dir": str(baseline_dir), **parse_table_dir(baseline_dir)}
-    with_skill = [
-        {"repeat": i, "run_dir": str(d), **parse_table_dir(d)}
-        for i, d in enumerate(repeat_dirs, 1)
-    ]
-    report = build_report(meta, baseline, with_skill)
-    (out_dir / "consistency_report.json").write_text(json.dumps(report, indent=2, default=str))
-    return report
-
-
-def _print_summary(report: dict, out_dir: Path) -> None:
-    print(f"\n{'=' * 60}\nCONSISTENCY SUMMARY\n{'=' * 60}")
-    print(f"overall convergence: {report['overall_convergence']}")
-    for field, c in report["convergence"].items():
-        print(
-            f"  {field:24s} agree={c['agreement']:>5s}  "
-            f"consensus={str(c['consensus'])!s:14.14}  baseline={str(c['baseline'])!s:.20}"
-        )
-    print(f"\ncontact sheet:  {out_dir / 'contact_sheet.png'}")
-    print(f"report:         {out_dir / 'consistency_report.json'}")
-
-
-def main() -> int:
-    load_dotenv(ROOT / ".env")
-
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("error: ANTHROPIC_API_KEY is not set (put it in .env)", file=sys.stderr)
-        return 2
-
-    parser = argparse.ArgumentParser(
-        description="Measure design-choice convergence of the great-tables skill "
-        "across repeated runs of one prompt.",
-    )
-    parser.add_argument("prompt", help="Describe the table you want.")
-    parser.add_argument("data", help="Path to the data file (e.g. data/gtcars.csv).")
-    parser.add_argument(
-        "--variant",
-        choices=["prose", "scripted"],
-        default="prose",
-        help="Which with-skill variant to repeat (default: prose).",
-    )
-    parser.add_argument(
-        "--repeat",
-        type=int,
-        default=3,
-        help="Number of with-skill repeats, N (default: 3). The baseline always runs once.",
-    )
-    parser.add_argument(
-        "--model",
-        default=None,
-        help="Model override (sets GTSKILL_AGENT_MODEL env var).",
-    )
-    args = parser.parse_args()
-
-    if args.repeat < 1:
-        print("error: --repeat must be >= 1", file=sys.stderr)
-        return 2
-
-    data_path = Path(args.data).expanduser().resolve()
-    if not data_path.is_file():
-        print(f"error: data file not found: {data_path}", file=sys.stderr)
-        return 2
-
-    if args.model:
-        os.environ["GTSKILL_AGENT_MODEL"] = args.model
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = ROOT / "test-runs" / f"{timestamp}_{slugify(args.prompt)}"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"out dir: {out_dir}")
-    print(f"data:    {data_path}")
-    print(f"variant: {args.variant}  (baseline=none + {args.repeat}x {args.variant})")
-    print(f"prompt:  {args.prompt}\n")
-
-    # One headless Chrome for the whole run; every baseline/repeat attaches to
-    # it over CDP (same single-sidecar pattern as run.py / test_runner.py).
-    chrome_profile = out_dir / ".chrome-profile"
-    chrome_profile.mkdir(exist_ok=True)
-    chrome = Chrome(extra_args=[f"--user-data-dir={chrome_profile}"])
-    print(f"chrome:  {chrome.ws_url}\n")
-
-    try:
-        baseline_dir, repeat_dirs = anyio.run(
-            run_consistency, args.prompt, data_path, out_dir, args.repeat, args.variant, chrome.ws_url
-        )
-    finally:
-        chrome.close()
-        shutil.rmtree(chrome_profile, ignore_errors=True)
-
-    meta = {
-        "timestamp": timestamp,
-        "prompt": args.prompt,
-        "data": str(data_path),
-        "variant": args.variant,
-        "repeat": args.repeat,
-        "model": args.model,
-    }
-    report = _finalize_outputs(out_dir, baseline_dir, repeat_dirs, meta)
-    _print_summary(report, out_dir)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

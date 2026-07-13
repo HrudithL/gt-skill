@@ -1,16 +1,28 @@
 #!/usr/bin/env python3
-"""Build a great_tables table from a data file using the Claude Agent SDK.
+"""The one globalized runner: build great_tables tables via the Claude Agent SDK.
 
-Usage:
-    python run.py "Make a clean table of this data" data/gtcars.csv
+One flag-driven entry over the shared ``runner/`` core. It exposes the same
+settings as the web app (skill, prompts, repeats, model, baseline, ad-hoc
+prompt), builds a ``RunSpec``, and hands it to ``runner.orchestrate`` — the exact
+path ``POST /api/runs`` takes — so the file runner and the web app can never
+diverge in behavior. This replaces the four old runners (run / consistency /
+test / skill_creator), which are folded into this one flow.
 
-The engine (the single ``claude_agent_sdk.query()`` choke point, the skill-variant
-mounting, the permission gate, the transcript writer) now lives in
-``runner/engine.py`` and the sidecar Chrome lifecycle in ``runner/sidecar.py``.
-This file is just the thin single-prompt CLI over that core; the web backend
-imports the same ``runner`` package rather than shelling out here, so the two can
-never diverge. The public names the sibling runners import (``run``,
-``CREATOR_SKILL_SRC``, …) are re-exported below so this stays their entry point.
+Examples:
+    # one corpus prompt, prose skill, once
+    python run.py --skill prose --prompt sp500_monthly_performance
+
+    # convergence: scripts skill, 3 repeats (baseline auto-on), Haiku
+    python run.py --skill scripts --prompt sp500_monthly_performance --repeat 3
+
+    # sweep every easy prompt under the creator skill
+    python run.py --skill creator --difficulty easy
+
+    # an ad-hoc prompt against a chosen data file
+    python run.py --skill prose --prompt-text "Make a clean table" --data data/gtcars.csv
+
+    # force the baseline control on at a single repeat
+    python run.py --skill scripts --prompt islands_sizes --baseline
 """
 
 from __future__ import annotations
@@ -18,69 +30,152 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from datetime import datetime
-from pathlib import Path
 
 import anyio
 from dotenv import load_dotenv
 
-# Re-export the engine's public surface so `from run import run` /
-# `from run import CREATOR_SKILL_SRC` (consistency_runner, test_runner,
-# skill_creator_runner) keep resolving to the exact same objects after the move.
+# Re-export the engine's public surface for back-compat (see runner/engine.py).
 from runner.engine import (  # noqa: F401
-    BASELINE_VARIANT,
     CREATOR_SKILL_SRC,
     ROOT,
-    SKILL_CI_DIR,
-    SKILL_CI_NAME,
     SKILL_DIR,
-    SKILL_NAME,
-    SKILL_VARIANTS,
     block_to_dict,
     message_to_dict,
     run,
 )
-from runner.sidecar import sidecar_chrome
+from runner import discover, orchestrate
+from runner.spec import (
+    DEFAULT_MODEL,
+    MODEL_LABELS,
+    SKILL_LABELS,
+    PromptRef,
+    RunSpec,
+)
+
+
+def _build_prompts(args: argparse.Namespace) -> list[PromptRef]:
+    """Assemble the run's PromptRefs from --prompt / --difficulty / --prompt-text.
+
+    Corpus prompts are de-duplicated by name so `--prompt X` combined with a
+    `--difficulty` that also includes X (or the same `--prompt` twice) runs X
+    once. The ad-hoc data path is validated later in orchestrate.create_run_dir,
+    before any Chrome/API spend.
+    """
+    prompts: list[PromptRef] = []
+    seen: set[str] = set()
+
+    def add_corpus(info: dict) -> None:
+        if info["name"] in seen:
+            return
+        seen.add(info["name"])
+        prompts.append(
+            PromptRef(
+                prompt=info["prompt"], data=info["data"],
+                name=info["name"], difficulty=info["difficulty"], source="corpus",
+            )
+        )
+
+    for name in args.prompt or []:
+        info = discover.find_prompt(name)
+        if info is None:
+            print(f"error: no corpus prompt named {name!r}", file=sys.stderr)
+            raise SystemExit(2)
+        add_corpus(info)
+
+    if args.difficulty:
+        for info in discover.discover_prompts(args.difficulty):
+            add_corpus(info)
+
+    if args.prompt_text:
+        if not args.data:
+            print("error: --prompt-text requires --data", file=sys.stderr)
+            raise SystemExit(2)
+        prompts.append(PromptRef(prompt=args.prompt_text, data=args.data, source="adhoc"))
+
+    return prompts
+
+
+def _cli_emit(event: dict) -> None:
+    """Console progress for the CLI (engine.run already prints each message)."""
+    t = event.get("type")
+    if t == "stage":
+        rep = f" repeat {event['repeat']}/{event.get('total')}" if event.get("repeat") else ""
+        print(f"\n{'=' * 60}\n[{event['index']}/{event['total']}] "
+              f"{event['prompt']} ({event['variant']}){rep}\n{'=' * 60}")
+    elif t == "run_finished":
+        agg = event["summary"]["aggregate"]
+        print(f"\n{'=' * 60}\nRESULTS: {agg['passed']} passed, {agg['failed']} failed "
+              f"of {agg['total']} | cost=${agg['total_cost_usd']}\n{'=' * 60}")
+    elif t == "run_error":
+        print(f"\nRUN ERROR: {event['error']}", file=sys.stderr)
 
 
 def main() -> int:
     load_dotenv(ROOT / ".env")
-
     if not os.environ.get("ANTHROPIC_API_KEY"):
         print("error: ANTHROPIC_API_KEY is not set (put it in .env)", file=sys.stderr)
         return 2
 
     parser = argparse.ArgumentParser(
-        description="Build a great_tables table from a data file using the Claude Agent SDK.",
+        description="Build great_tables tables via the Claude Agent SDK (one runner for all flows).",
     )
-    parser.add_argument("prompt", help="Describe the table you want.")
-    parser.add_argument("data", help="Path to the data file (e.g. data/gtcars.csv).")
+    parser.add_argument("--skill", choices=SKILL_LABELS, default="prose",
+                        help="Which self-contained skill to mount (default: prose).")
+    parser.add_argument("--prompt", action="append", metavar="NAME",
+                        help="Corpus prompt by file stem; repeatable for multiple prompts.")
+    parser.add_argument("--difficulty", choices=["easy", "medium", "hard", "all"],
+                        help="Add every corpus prompt of this difficulty.")
+    parser.add_argument("--prompt-text", metavar="TEXT",
+                        help="An ad-hoc prompt (requires --data).")
+    parser.add_argument("--data", metavar="PATH",
+                        help="Data CSV for --prompt-text (e.g. data/gtcars.csv).")
+    parser.add_argument("--repeat", type=int, default=1,
+                        help="With-skill invocations per prompt (default: 1).")
+    parser.add_argument("--model", choices=MODEL_LABELS, default=DEFAULT_MODEL,
+                        help=f"Model label (default: {DEFAULT_MODEL}).")
+    parser.add_argument("--baseline", action=argparse.BooleanOptionalAction, default=None,
+                        help="Force the no-skill baseline on/off (default: auto — on iff repeat>1).")
     args = parser.parse_args()
 
-    data_path = Path(args.data).expanduser().resolve()
-    if not data_path.is_file():
-        print(f"error: data file not found: {data_path}", file=sys.stderr)
+    if args.repeat < 1:
+        print("error: --repeat must be >= 1", file=sys.stderr)
         return 2
 
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = ROOT / "runs" / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+    prompts = _build_prompts(args)
+    if not prompts:
+        print("error: no prompts selected (use --prompt / --difficulty / --prompt-text)",
+              file=sys.stderr)
+        return 2
 
-    print(f"run dir: {run_dir}")
-    print(f"data:    {data_path}")
-    print(f"prompt:  {args.prompt}\n")
+    spec = RunSpec(
+        skill=args.skill, prompts=prompts, repeats=args.repeat,
+        model=args.model, baseline=args.baseline,
+    )
 
-    # Launch one headless Chrome in the parent process (outside the agent's
-    # macOS sandbox); the agent attaches to it over CDP via `nokap`/`gtsave`.
-    # The sidecar context manager owns the profile dir and cleanup.
-    with sidecar_chrome(run_dir) as chrome:
-        print(f"chrome:  {chrome.ws_url}\n")
-        anyio.run(run, args.prompt, data_path, run_dir, chrome.ws_url)
+    # create_run_dir validates the spec and every data file up front, so a bad
+    # --data / stale corpus path fails here — before Chrome or any API spend.
+    try:
+        spec.validate()
+        run_dir = orchestrate.create_run_dir(spec)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
 
-    print(f"\nartifacts in {run_dir}:")
-    for f in sorted(run_dir.iterdir()):
-        print(f"  - {f.name}")
-    return 0
+    print(f"run dir:  {run_dir}")
+    print(f"skill:    {spec.skill}  (variant={spec.variant()})")
+    print(f"model:    {spec.model} -> {spec.model_id()}")
+    print(f"prompts:  {len(prompts)}   repeats: {spec.repeats}   "
+          f"baseline: {spec.baseline_enabled()}   invocations: {spec.invocation_count()}")
+
+    summary = anyio.run(_run, spec, run_dir)
+    # Non-zero on any failing invocation OR a run-level (infra) error, so a
+    # sidecar/finalization failure doesn't exit 0 with an empty summary.
+    ok = summary["aggregate"]["failed"] == 0 and not summary.get("error")
+    return 0 if ok else 1
+
+
+async def _run(spec: RunSpec, run_dir) -> dict:
+    return await orchestrate.run_spec(spec, run_dir, emit=_cli_emit)
 
 
 if __name__ == "__main__":
