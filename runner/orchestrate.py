@@ -16,9 +16,9 @@ It owns the sidecar Chrome for the whole run (one shared browser, exactly like
 the old runners' ``main()``), threads the selected model id through
 ``GTSKILL_AGENT_MODEL``, and emits UI events (``runner.events``) as it goes.
 
-Output layout (07-frontend-runner.md §4.2):
+Output layout (07-frontend-runner.md §4.2, filed under runs/<type>/):
 
-    runs/<ts>_<skill>_<slug-or-multi>/
+    runs/<type>/<ts>_<skill>_<slug-or-multi>/   # type: single|convergence|sweep
       run.json                 # spec + resolved config + status + timings
       summary.json             # aggregate pass/fail + tokens/cost
       prompts/<name>/
@@ -40,7 +40,7 @@ from typing import Callable
 from runner import convergence, events
 from runner.engine import BASELINE_VARIANT, ROOT
 from runner.engine import run as engine_run
-from runner.plan import prompt_dir_name, run_dir_name
+from runner.plan import RUN_TYPES, prompt_dir_name, run_dir_name, run_type
 from runner.sidecar import sidecar_chrome
 from runner.spec import MODELS, PromptRef, RunSpec
 
@@ -105,11 +105,23 @@ def _write_run_json(run_dir: Path, payload: dict) -> None:
     (run_dir / "run.json").write_text(json.dumps(payload, indent=2, default=str))
 
 
+def _run_id_exists(root: Path, run_id: str) -> bool:
+    """True if a run dir named ``run_id`` exists under ANY run root.
+
+    The run id is the leaf dir name and is how the API/History address a run, so
+    it must be unique across every root — the type dirs (runs/<type>/) plus the
+    legacy flat runs/ and test-runs/ — not just one type dir. Otherwise a
+    same-second, same-slug run of a different type could shadow it.
+    """
+    roots = [root / "runs" / t for t in RUN_TYPES] + [root / "runs", root / "test-runs"]
+    return any((r / run_id).exists() for r in roots)
+
+
 # --------------------------------------------------------------------------- #
 # run-dir creation (the backend calls this first to learn the run_id)
 # --------------------------------------------------------------------------- #
 def create_run_dir(spec: RunSpec, *, ts: str | None = None, root: Path = ROOT) -> Path:
-    """Create ``runs/<ts>_<skill>_<slug>/`` and write an initial run.json.
+    """Create ``runs/<type>/<ts>_<skill>_<slug>/`` and write an initial run.json.
 
     Returns the run dir; its ``.name`` is the run_id. Split from ``run_spec`` so
     the web backend can return ``{run_id}`` immediately and stream events, then
@@ -123,14 +135,19 @@ def create_run_dir(spec: RunSpec, *, ts: str | None = None, root: Path = ROOT) -
         if not _resolve_data(p.data).is_file():
             raise ValueError(f"data file not found: {p.data}")
     ts = ts or datetime.now().strftime("%Y%m%d_%H%M%S")
-    # Keep run ids unique even for identical skill/prompt launches within one
-    # second (a double-click, two callers): never reuse an existing dir.
+    # All runs live under one runs/ root, filed by type: runs/<type>/<ts>_...
+    # (single | convergence | sweep). The leaf dir name IS the run id the API and
+    # History address a run by, so keep it unique across EVERY run root (all type
+    # dirs + legacy runs/ + test-runs/) — not just the chosen type dir — so a
+    # same-second, same-slug run of a different type can't shadow it.
+    type_dir = root / "runs" / run_type(spec)
     base = run_dir_name(spec, ts)
-    run_dir = root / "runs" / base
+    name = base
     n = 2
-    while run_dir.exists():
-        run_dir = root / "runs" / f"{base}_{n}"
+    while _run_id_exists(root, name):
+        name = f"{base}_{n}"
         n += 1
+    run_dir = type_dir / name
     run_dir.mkdir(parents=True)
     (run_dir / "prompts").mkdir()
     _write_run_json(
