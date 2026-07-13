@@ -25,12 +25,12 @@ export async function renderHistoryTab(root, openRunId = null) {
 
   const table = el("table", { class: "runs" });
   table.append(el("thead", {}, el("tr", {},
-    ...["When", "Layout", "Skill/Variant", "Prompts", "Repeats", "Pass", "Convergence", "Cost"].map((h) => el("th", {}, h)))));
+    ...["When", "Type", "Skill/Variant", "Prompts", "Repeats", "Pass", "Convergence", "Cost"].map((h) => el("th", {}, h)))));
   const tb = el("tbody", {});
   for (const r of runs) {
     tb.append(el("tr", { onclick: () => renderDetail(root, r.id) },
       el("td", {}, fmtWhen(r.timestamp)),
-      el("td", {}, el("span", { class: "tag" }, r.layout)),
+      el("td", { title: `layout: ${r.layout}` }, el("span", { class: "tag" }, runTypeLabel(r))),
       el("td", {}, r.skill ? `${r.skill} / ${r.variant || "—"}` : (r.variant || "—")),
       el("td", { title: (r.prompts || []).join(", ") }, promptCell(r.prompts)),
       el("td", {}, r.repeats ?? "—"),
@@ -45,6 +45,11 @@ export async function renderHistoryTab(root, openRunId = null) {
 function fmtWhen(ts) {
   const m = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/.exec(ts || "");
   return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` : (ts || "—");
+}
+// A run's type: the unified runs/<type>/ type when present, else mapped from the
+// legacy layout so every row reads as single / convergence / sweep.
+function runTypeLabel(r) {
+  return r.type || { consistency: "convergence", sweep: "sweep", single: "single", unified: "run" }[r.layout] || r.layout;
 }
 function promptCell(prompts) {
   if (!prompts || !prompts.length) return "—";
@@ -92,6 +97,12 @@ async function renderDetail(root, runId) {
       el("span", { class: "chip" }, `tok ${a.total_input_tokens}/${a.total_output_tokens}`)));
   }
 
+  // Prominent per-invocation table artifacts (the table script + rendered image),
+  // opening in the right-hand viewer on click — so both are one click away
+  // without hunting in the file tree.
+  const artifacts = renderArtifacts(runId, d.tree, () => rightC);
+  if (artifacts) left.append(artifacts);
+
   // convergence: unified (per-prompt) or legacy consistency (top-level)
   const convPairs = [];
   if (d.convergence && Object.keys(d.convergence).length) {
@@ -112,7 +123,7 @@ async function renderDetail(root, runId) {
   const viewerTarget = () => rightC;
   left.append(renderTree(d.tree, runId, viewerTarget));
 
-  rightC.append(el("div", { class: "muted" }, "Select a file on the left. transcript.json renders as an interpretable transcript; table.png shows inline."));
+  rightC.append(el("div", { class: "muted" }, "Select a table artifact or file on the left. transcript.json renders as an interpretable transcript; table.png shows inline."));
 }
 
 function renderConvergence(rep) {
@@ -134,6 +145,46 @@ function renderConvergence(rep) {
   return t;
 }
 function truncate(v, n) { const s = v == null ? "—" : String(v); return s.length > n ? s.slice(0, n) + "…" : s; }
+
+// Walk the run tree and group table.py / table.png by their invocation dir, so
+// the two key artifacts of every baseline/repeat are surfaced prominently
+// instead of having to be hunted for in the file tree.
+function collectArtifacts(nodes, acc) {
+  acc = acc || {};
+  for (const n of nodes || []) {
+    if (n.type === "dir") collectArtifacts(n.children, acc);
+    else if (n.type === "file" && (n.name === "table.png" || n.name === "table.py")) {
+      const dir = n.path.includes("/") ? n.path.slice(0, n.path.lastIndexOf("/")) : "(run root)";
+      (acc[dir] = acc[dir] || {})[n.name === "table.png" ? "png" : "py"] = n.path;
+    }
+  }
+  return acc;
+}
+
+function renderArtifacts(runId, tree, targetFn) {
+  const arts = collectArtifacts(tree);
+  const dirs = Object.keys(arts).sort();
+  if (!dirs.length) return null;
+  const box = el("div", {});
+  box.append(el("h3", {}, "table artifacts"));
+  const fileUrl = (p) => `/api/runs/${encodeURIComponent(runId)}/file?path=${encodeURIComponent(p)}`;
+  for (const dir of dirs) {
+    const a = arts[dir];
+    const card = el("div", { style: "margin:.3rem 0;padding:.4rem;border:1px solid var(--border);border-radius:6px" });
+    card.append(el("div", { class: "small muted" }, dir));
+    if (a.png) {
+      const img = el("img", { src: fileUrl(a.png), style: "max-width:100%;border:1px solid var(--border);border-radius:4px;cursor:zoom-in", onclick: () => window.open(fileUrl(a.png), "_blank") });
+      img.addEventListener("error", () => img.replaceWith(el("div", { class: "small muted" }, "(table.png not rendered)")));
+      card.append(img);
+    }
+    const links = el("div", { class: "small", style: "margin-top:.3rem" });
+    if (a.py) links.append(el("button", { class: "tmpl", onclick: () => openRunFile(targetFn(), runId, a.py) }, "view table.py"));
+    if (a.png) links.append(el("button", { class: "tmpl", style: "margin-left:.8rem", onclick: () => openRunFile(targetFn(), runId, a.png) }, "view table.png"));
+    card.append(links);
+    box.append(card);
+  }
+  return box;
+}
 
 function renderTree(nodes, runId, targetFn, depth = 0) {
   const box = el("div", { class: "tree" });
