@@ -40,7 +40,7 @@ from typing import Callable
 from runner import convergence, events
 from runner.engine import BASELINE_VARIANT, ROOT
 from runner.engine import run as engine_run
-from runner.plan import RUN_TYPES, prompt_dir_name, run_dir_name, run_type
+from runner.plan import RUN_TYPES, run_dir_name, run_type, unique_prompt_dir_names
 from runner.sidecar import sidecar_chrome
 from runner.spec import MODELS, PromptRef, RunSpec
 
@@ -188,19 +188,12 @@ async def run_spec(spec: RunSpec, run_dir: Path, *, emit: Emit = _noop) -> dict:
     model_id = spec.model_id()
 
     # Uniquify per-prompt directory names so the same corpus prompt selected
-    # twice (or --prompt overlapping --difficulty, or two ad-hoc prompts sharing
-    # a slug) can't overwrite each other's artifacts.
-    prompt_dirs: list[tuple[PromptRef, str]] = []
-    _used: set[str] = set()
-    for p in spec.prompts:
-        pbase = prompt_dir_name(p)
-        pname = pbase
-        k = 2
-        while pname in _used:
-            pname = f"{pbase}_{k}"
-            k += 1
-        _used.add(pname)
-        prompt_dirs.append((p, pname))
+    # twice (or --prompt overlapping --difficulty, or multiple ad-hoc prompts
+    # sharing the "ad-hoc" label) can't overwrite each other's artifacts. Shared
+    # with build_plan so the preview matches the tree it describes.
+    prompt_dirs: list[tuple[PromptRef, str]] = list(
+        zip(spec.prompts, unique_prompt_dir_names(spec.prompts))
+    )
 
     started = time.time()
     started_iso = datetime.now().isoformat(timespec="seconds")
