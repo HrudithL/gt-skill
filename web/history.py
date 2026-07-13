@@ -41,6 +41,79 @@ def _read_json(path: Path) -> dict | None:
         return None
 
 
+# --------------------------------------------------------------------------- #
+# transcript-derived metrics — the source of truth for cost/model/turns when a
+# report/summary omits them (old consistency reports store no cost; single runs
+# have no summary at all). Every layout can therefore show a standardized cost.
+# --------------------------------------------------------------------------- #
+def _result_entry(transcript: Path) -> dict:
+    """The final ``result`` message of a transcript.json (cost/turns/duration)."""
+    data = _read_json(transcript)
+    if not isinstance(data, list):
+        return {}
+    for e in reversed(data):
+        if isinstance(e, dict) and e.get("role") == "result":
+            return e
+    return {}
+
+
+def _model_from_transcript(transcript: Path) -> str | None:
+    """The model id from a transcript's system/init banner, if present."""
+    data = _read_json(transcript)
+    if not isinstance(data, list):
+        return None
+    for e in data:
+        if isinstance(e, dict) and e.get("role") == "system" and e.get("subtype") == "init":
+            return (e.get("data") or {}).get("model")
+    return None
+
+
+def _sum_cost(transcripts: list[Path]) -> float | None:
+    """Total cost across a set of transcripts, or None if none report a cost."""
+    costs = [_result_entry(t).get("total_cost_usd") for t in transcripts]
+    costs = [c for c in costs if isinstance(c, (int, float))]
+    return round(sum(costs), 4) if costs else None
+
+
+def _rel(base: Path, target) -> str | None:
+    """``target`` as a POSIX path relative to the run dir, or None if outside it."""
+    try:
+        return (Path(target).resolve().relative_to(base.resolve())).as_posix()
+    except (ValueError, OSError):
+        return None
+
+
+def _iteration(base: Path, idir: Path, label: str, extra: dict | None = None) -> dict:
+    """One invocation (baseline / repeat_N / sweep test): its dir + standardized
+    per-invocation metrics pulled from its transcript, so the UI can list and
+    drill into each without hunting through the file tree."""
+    res = _result_entry(idir / "transcript.json")
+    has_png = (idir / "table.png").is_file()
+    # Match the harness pass/fail rule (see _single_status / _metrics): an
+    # invocation only succeeds when it neither errored nor failed to render
+    # table.png, so a missing render is reported as a failure, not "ok".
+    if not res:
+        status = None
+    elif res.get("is_error") or not has_png:
+        status = "fail"
+    else:
+        status = "ok"
+    it: dict = {
+        "label": label,
+        "dir": _rel(base, idir),
+        "cost_usd": res.get("total_cost_usd"),
+        "num_turns": res.get("num_turns"),
+        "duration_ms": res.get("duration_ms"),
+        "status": status,
+        "has_png": has_png,
+        "has_py": (idir / "table.py").is_file(),
+        "has_transcript": (idir / "transcript.json").is_file(),
+    }
+    if extra:
+        it.update({k: v for k, v in extra.items() if v is not None})
+    return it
+
+
 def _timestamp(name: str, fallback: Path) -> str:
     m = _TS_RE.match(name)
     if m:
@@ -134,13 +207,21 @@ def _summarize(d: Path, layout: str) -> dict:
 
     elif layout == "consistency":
         rep = _read_json(d / "consistency_report.json") or {}
+        # Cost/model aren't stored in the report — derive them from the per-repeat
+        # (+ baseline) transcripts so every convergence run shows a real cost.
+        tps = sorted((d / "with_skill").glob("repeat_*/transcript.json"))
+        if (d / "baseline" / "transcript.json").is_file():
+            tps.append(d / "baseline" / "transcript.json")
+        model = rep.get("model") or (_model_from_transcript(tps[0]) if tps else None)
         item.update(
+            skill=rep.get("skill"),
             variant=rep.get("variant"),
-            model=rep.get("model"),
+            model=model,
             repeats=rep.get("repeat"),
             baseline=True,
             prompts=[rep.get("prompt", "")[:60]] if rep.get("prompt") else [],
             convergence=rep.get("overall_convergence"),
+            cost_usd=_sum_cost(tps),
             status="done",
         )
 
@@ -149,13 +230,20 @@ def _summarize(d: Path, layout: str) -> dict:
         cfg = summ.get("config") or {}
         agg = summ.get("aggregate") or {}
         names = []
+        first_dir = None
         for r in summ.get("results", []):
             n = r.get("name")
             if n and n not in names:
                 names.append(n)
+            if first_dir is None and r.get("run_dir"):
+                first_dir = Path(r["run_dir"])
+        # Old sweeps store model=None in config — recover it from a result transcript.
+        model = cfg.get("model")
+        if not model and first_dir is not None:
+            model = _model_from_transcript(first_dir / "transcript.json")
         item.update(
             variant=cfg.get("variant"),
-            model=cfg.get("model"),
+            model=model,
             repeats=cfg.get("repeat"),
             prompts=names,
             pass_rate=agg.get("pass_rate"),
@@ -164,7 +252,13 @@ def _summarize(d: Path, layout: str) -> dict:
         )
 
     elif layout == "single":
-        item.update(status=_single_status(d), repeats=1)
+        res = _result_entry(d / "transcript.json")
+        item.update(
+            status=_single_status(d),
+            repeats=1,
+            model=_model_from_transcript(d / "transcript.json"),
+            cost_usd=res.get("total_cost_usd"),
+        )
 
     return item
 
@@ -255,6 +349,64 @@ def _run_tree(root: Path, rel: Path | None = None) -> list[dict]:
     return out
 
 
+def _iterations(d: Path, layout: str) -> list[dict]:
+    """Normalized, grouped invocations for the detail view's iteration selector.
+
+    Returns ``[{prompt, items:[iteration,...]}]`` so the UI can offer a dropdown
+    of the specific test / repeat to inspect (sweep tests, convergence repeats,
+    the baseline control) instead of forcing the user to hunt in the file tree.
+    """
+    groups: list[dict] = []
+
+    if layout == "unified":
+        pdir = d / "prompts"
+        if pdir.is_dir():
+            for pd in sorted(p for p in pdir.iterdir() if p.is_dir()):
+                items = []
+                if (pd / "baseline").is_dir():
+                    items.append(_iteration(d, pd / "baseline", "baseline"))
+                for rp in sorted(pd.glob("repeat_*")):
+                    items.append(_iteration(d, rp, rp.name.replace("repeat_", "repeat ")))
+                groups.append({"prompt": pd.name, "items": items})
+
+    elif layout == "consistency":
+        rep = _read_json(d / "consistency_report.json") or {}
+        choices_by_repeat = {w.get("repeat"): w.get("choices") for w in (rep.get("with_skill") or [])}
+        items = []
+        if (d / "baseline").is_dir():
+            items.append(_iteration(d, d / "baseline", "baseline",
+                                    {"choices": (rep.get("baseline") or {}).get("choices")}))
+        ws = d / "with_skill"
+        if ws.is_dir():
+            for rp in sorted(ws.glob("repeat_*")):
+                n = int(rp.name.split("_")[-1]) if rp.name.split("_")[-1].isdigit() else None
+                items.append(_iteration(d, rp, rp.name.replace("repeat_", "repeat "),
+                                        {"choices": choices_by_repeat.get(n)}))
+        groups.append({"prompt": (rep.get("prompt") or "")[:80] or None, "items": items})
+
+    elif layout == "sweep":
+        summ = _read_json(d / "summary.json") or {}
+        items = []
+        for r in summ.get("results", []):
+            rd = r.get("run_dir")
+            idir = Path(rd) if rd else (d / (r.get("name") or ""))
+            if not idir.is_dir():
+                continue
+            items.append(_iteration(d, idir, r.get("name") or idir.name, {
+                "status": r.get("status"),
+                "cost_usd": r.get("total_cost_usd"),
+                "num_turns": r.get("num_turns"),
+                "duration_ms": r.get("duration_ms"),
+                "difficulty": r.get("difficulty"),
+            }))
+        groups.append({"prompt": None, "items": items})
+
+    elif layout == "single":
+        groups.append({"prompt": None, "items": [_iteration(d, d, "run")]})
+
+    return [g for g in groups if g["items"]]
+
+
 def run_detail(run_id: str) -> dict | None:
     """Full detail for one run: summary + parsed metadata + file tree."""
     d = _find_run(run_id)
@@ -269,6 +421,7 @@ def run_detail(run_id: str) -> dict | None:
         "summary_json": _read_json(d / "summary.json"),
         "consistency_report": _read_json(d / "consistency_report.json"),
         "tree": _run_tree(d),
+        "iterations": _iterations(d, layout),
         # per-prompt convergence reports (unified layout: prompts/<n>/convergence.json)
         "convergence": {},
     }
