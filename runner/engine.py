@@ -441,6 +441,7 @@ async def run(
     chrome_ws: str,
     skill_variant: str = "scripted",
     on_message: Callable[[dict], None] | None = None,
+    model_id: str | None = None,
 ) -> None:
     # Ensure the venv sidecar startup hook is installed (R11) so the agent's
     # `gt.gtsave("table.png")` attaches to the out-of-sandbox Chrome with no
@@ -562,7 +563,10 @@ async def run(
             # sidecar Chrome. Keep loopback access enabled.
             "network": {"allowLocalBinding": True},
         },
-        model=os.environ.get("GTSKILL_AGENT_MODEL") or None,
+        # Prefer the per-invocation model id (orchestrate passes spec.model_id())
+        # so overlapping runs can't race on a shared env var; fall back to the
+        # env var for back-compat when no id is threaded in.
+        model=model_id or os.environ.get("GTSKILL_AGENT_MODEL") or None,
     )
 
     async def prompt_stream():

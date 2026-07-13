@@ -54,14 +54,20 @@ from runner.spec import (
 
 
 def _build_prompts(args: argparse.Namespace) -> list[PromptRef]:
-    """Assemble the run's PromptRefs from --prompt / --difficulty / --prompt-text."""
-    prompts: list[PromptRef] = []
+    """Assemble the run's PromptRefs from --prompt / --difficulty / --prompt-text.
 
-    for name in args.prompt or []:
-        info = discover.find_prompt(name)
-        if info is None:
-            print(f"error: no corpus prompt named {name!r}", file=sys.stderr)
-            raise SystemExit(2)
+    Corpus prompts are de-duplicated by name so `--prompt X` combined with a
+    `--difficulty` that also includes X (or the same `--prompt` twice) runs X
+    once. The ad-hoc data path is validated later in orchestrate.create_run_dir,
+    before any Chrome/API spend.
+    """
+    prompts: list[PromptRef] = []
+    seen: set[str] = set()
+
+    def add_corpus(info: dict) -> None:
+        if info["name"] in seen:
+            return
+        seen.add(info["name"])
         prompts.append(
             PromptRef(
                 prompt=info["prompt"], data=info["data"],
@@ -69,14 +75,16 @@ def _build_prompts(args: argparse.Namespace) -> list[PromptRef]:
             )
         )
 
+    for name in args.prompt or []:
+        info = discover.find_prompt(name)
+        if info is None:
+            print(f"error: no corpus prompt named {name!r}", file=sys.stderr)
+            raise SystemExit(2)
+        add_corpus(info)
+
     if args.difficulty:
         for info in discover.discover_prompts(args.difficulty):
-            prompts.append(
-                PromptRef(
-                    prompt=info["prompt"], data=info["data"],
-                    name=info["name"], difficulty=info["difficulty"], source="corpus",
-                )
-            )
+            add_corpus(info)
 
     if args.prompt_text:
         if not args.data:
@@ -143,9 +151,16 @@ def main() -> int:
         skill=args.skill, prompts=prompts, repeats=args.repeat,
         model=args.model, baseline=args.baseline,
     )
-    spec.validate()
 
-    run_dir = orchestrate.create_run_dir(spec)
+    # create_run_dir validates the spec and every data file up front, so a bad
+    # --data / stale corpus path fails here — before Chrome or any API spend.
+    try:
+        spec.validate()
+        run_dir = orchestrate.create_run_dir(spec)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+
     print(f"run dir:  {run_dir}")
     print(f"skill:    {spec.skill}  (variant={spec.variant()})")
     print(f"model:    {spec.model} -> {spec.model_id()}")
@@ -153,7 +168,10 @@ def main() -> int:
           f"baseline: {spec.baseline_enabled()}   invocations: {spec.invocation_count()}")
 
     summary = anyio.run(_run, spec, run_dir)
-    return 0 if summary["aggregate"]["failed"] == 0 else 1
+    # Non-zero on any failing invocation OR a run-level (infra) error, so a
+    # sidecar/finalization failure doesn't exit 0 with an empty summary.
+    ok = summary["aggregate"]["failed"] == 0 and not summary.get("error")
+    return 0 if ok else 1
 
 
 async def _run(spec: RunSpec, run_dir) -> dict:
