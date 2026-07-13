@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Callable
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -438,6 +439,7 @@ async def run(
     run_dir: Path,
     chrome_ws: str,
     skill_variant: str = "scripted",
+    on_message: Callable[[dict], None] | None = None,
 ) -> None:
     # Ensure the venv sidecar startup hook is installed (R11) so the agent's
     # `gt.gtsave("table.png")` attaches to the out-of-sandbox Chrome with no
@@ -575,6 +577,17 @@ async def run(
         d = message_to_dict(msg)
         transcript.append(d)
         log_message(d)
+        # Live streaming seam (07-frontend-runner.md §4): the same loop that
+        # produces the durable transcript.json feeds each mapped message to an
+        # optional observer. No-op when unset, so behavior is unchanged for the
+        # CLI single-prompt path; orchestrate/the web backend pass a callback
+        # that turns each message into a UI event.
+        if on_message is not None:
+            try:
+                on_message(d)
+            except Exception:
+                # An observer must never break the run or the transcript write.
+                pass
 
     (run_dir / "transcript.json").write_text(
         json.dumps(transcript, indent=2, default=str)
