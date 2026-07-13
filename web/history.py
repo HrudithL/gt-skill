@@ -88,14 +88,24 @@ def _iteration(base: Path, idir: Path, label: str, extra: dict | None = None) ->
     per-invocation metrics pulled from its transcript, so the UI can list and
     drill into each without hunting through the file tree."""
     res = _result_entry(idir / "transcript.json")
+    has_png = (idir / "table.png").is_file()
+    # Match the harness pass/fail rule (see _single_status / _metrics): an
+    # invocation only succeeds when it neither errored nor failed to render
+    # table.png, so a missing render is reported as a failure, not "ok".
+    if not res:
+        status = None
+    elif res.get("is_error") or not has_png:
+        status = "fail"
+    else:
+        status = "ok"
     it: dict = {
         "label": label,
         "dir": _rel(base, idir),
         "cost_usd": res.get("total_cost_usd"),
         "num_turns": res.get("num_turns"),
         "duration_ms": res.get("duration_ms"),
-        "status": ("error" if res.get("is_error") else ("ok" if res else None)),
-        "has_png": (idir / "table.png").is_file(),
+        "status": status,
+        "has_png": has_png,
         "has_py": (idir / "table.py").is_file(),
         "has_transcript": (idir / "transcript.json").is_file(),
     }
