@@ -16,25 +16,50 @@ Create a `.env` with your key:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
-# Optional:
-GTSKILL_AGENT_MODEL=claude-sonnet-4-5
+# Optional (usually chosen with --model instead): a concrete model id override
+GTSKILL_AGENT_MODEL=claude-haiku-4-5
 ```
 
 ## Usage
 
+One flag-driven runner drives every flow (the web app calls the same core):
+
 ```bash
-python run.py "Make a clean, professional table of the top 10 cars by MSRP." data/gtcars.csv
+# one corpus prompt under the prose skill
+python run.py --skill prose --prompt sp500_monthly_performance
+
+# convergence: scripts skill, 3 repeats (baseline auto-on), Haiku
+python run.py --skill scripts --prompt sp500_monthly_performance --repeat 3
+
+# sweep every easy prompt under the creator skill
+python run.py --skill creator --difficulty easy
+
+# an ad-hoc prompt against a chosen data file
+python run.py --skill prose --prompt-text "Top 10 cars by MSRP" --data data/gtcars.csv
 ```
 
-Each invocation creates a fresh directory under `runs/<timestamp>/` containing:
+Flags: `--skill {prose,scripts,creator}`; `--prompt NAME` (repeatable) /
+`--difficulty {easy,medium,hard,all}` / `--prompt-text TEXT --data PATH`;
+`--repeat N`; `--model {haiku,sonnet,opus}`; `--baseline` / `--no-baseline`
+(default auto — the no-skill control runs iff `--repeat > 1`).
 
-- `table.py` — the model-authored Python script
-- `table.png` — the rendered table image
-- `transcript.json` — the full agent conversation (assistant text, tool calls, results)
+Each run writes one tree under `runs/<ts>_<skill>_<slug>/`:
 
-The CSV stays where it is — the agent reads it by absolute path and is **never** asked to copy it into the run directory.
+- `run.json` — the RunSpec + resolved config + status + timings
+- `summary.json` — aggregate pass/fail + tokens/cost across all prompts
+- `prompts/<name>/{baseline,repeat_1…N}/` — each with `table.py`, `table.png`,
+  `transcript.json`, the data snapshot, and the mounted `.claude/`
+- `prompts/<name>/{convergence.json,contact_sheet.png}` — only when `--repeat > 1`
+
+The CSV stays where it is — the agent reads it from a symlink in the run dir and
+is **never** asked to copy it elsewhere.
 
 ## How it works
 
-- `.claude/skills/great-tables/SKILL.md` is a one-paragraph skill discovered by the Claude Code CLI via the project skills directory.
-- `run.py` calls `claude_agent_sdk.query` with `skills=["great-tables"]` (which auto-enables the `Skill` tool) plus `Read`, `Write`, `Edit`, `Bash`. The agent invokes the `Skill` tool to load `SKILL.md`, then reads the data, writes `table.py`, runs it, and the script saves `table.png` via `GT.save()`.
+- Three self-contained skills live under `.claude/skills/great-tables` (prose),
+  `.claude/skills/great-tables-ci` (scripts), and `.claude-skill-creator`
+  (creator); the runner mounts exactly one per run into an ephemeral `.claude/`.
+- `runner/engine.py` calls `claude_agent_sdk.query` with the one mounted skill
+  plus `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`. The agent loads the
+  skill, reads the data, writes `table.py`, runs it, and the script renders
+  `table.png` via `gt.gtsave("table.png")` (attached to a sidecar Chrome over CDP).

@@ -116,10 +116,23 @@ def create_run_dir(spec: RunSpec, *, ts: str | None = None, root: Path = ROOT) -
     drive the run in the background.
     """
     spec.validate()
+    # Fail fast on a missing data file (a typo'd --data, a stale corpus path)
+    # before any run dir / Chrome / API spend. Raises ValueError, which both the
+    # CLI and POST /api/runs surface as a clean error instead of a wasted run.
+    for p in spec.prompts:
+        if not _resolve_data(p.data).is_file():
+            raise ValueError(f"data file not found: {p.data}")
     ts = ts or datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = root / "runs" / run_dir_name(spec, ts)
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "prompts").mkdir(exist_ok=True)
+    # Keep run ids unique even for identical skill/prompt launches within one
+    # second (a double-click, two callers): never reuse an existing dir.
+    base = run_dir_name(spec, ts)
+    run_dir = root / "runs" / base
+    n = 2
+    while run_dir.exists():
+        run_dir = root / "runs" / f"{base}_{n}"
+        n += 1
+    run_dir.mkdir(parents=True)
+    (run_dir / "prompts").mkdir()
     _write_run_json(
         run_dir,
         {
@@ -153,9 +166,24 @@ async def run_spec(spec: RunSpec, run_dir: Path, *, emit: Emit = _noop) -> dict:
     baseline = spec.baseline_enabled()
     prompts_dir = run_dir / "prompts"
 
-    # Thread the selected model id to the agent (engine.run reads this env var),
-    # matching the old runners' --model handling.
-    os.environ["GTSKILL_AGENT_MODEL"] = spec.model_id()
+    # Resolved model id, threaded per-invocation into engine_run below (never a
+    # process-global env var, so overlapping runs can't race on it).
+    model_id = spec.model_id()
+
+    # Uniquify per-prompt directory names so the same corpus prompt selected
+    # twice (or --prompt overlapping --difficulty, or two ad-hoc prompts sharing
+    # a slug) can't overwrite each other's artifacts.
+    prompt_dirs: list[tuple[PromptRef, str]] = []
+    _used: set[str] = set()
+    for p in spec.prompts:
+        pbase = prompt_dir_name(p)
+        pname = pbase
+        k = 2
+        while pname in _used:
+            pname = f"{pbase}_{k}"
+            k += 1
+        _used.add(pname)
+        prompt_dirs.append((p, pname))
 
     started = time.time()
     started_iso = datetime.now().isoformat(timespec="seconds")
@@ -220,6 +248,7 @@ async def run_spec(spec: RunSpec, run_dir: Path, *, emit: Emit = _noop) -> dict:
             await engine_run(
                 prompt_text, data_path, rdir, chrome.ws_url,
                 skill_variant=var, on_message=_make_cb(pname, var, rep, rdir),
+                model_id=model_id,
             )
             m = _metrics(rdir)
         except Exception as e:  # keep going; failed run -> failing result
@@ -230,8 +259,7 @@ async def run_spec(spec: RunSpec, run_dir: Path, *, emit: Emit = _noop) -> dict:
     error: str | None = None
     try:
         with sidecar_chrome(run_dir) as chrome:
-            for p in spec.prompts:
-                pname = prompt_dir_name(p)
+            for p, pname in prompt_dirs:
                 pdir = prompts_dir / pname
                 pdir.mkdir(parents=True, exist_ok=True)
                 data_path = _resolve_data(p.data)
@@ -266,7 +294,7 @@ async def run_spec(spec: RunSpec, run_dir: Path, *, emit: Emit = _noop) -> dict:
     except Exception as e:
         error = str(e)
 
-    summary = _write_summary(run_dir, spec, results, prompt_summaries)
+    summary = _write_summary(run_dir, spec, results, prompt_summaries, error)
 
     finished = time.time()
     _write_run_json(
@@ -329,9 +357,15 @@ def _finalize_prompt(
 
 
 def _write_summary(
-    run_dir: Path, spec: RunSpec, results: list[dict], prompt_summaries: list[dict]
+    run_dir: Path, spec: RunSpec, results: list[dict], prompt_summaries: list[dict],
+    error: str | None = None,
 ) -> dict:
-    """Aggregate pass/fail + tokens/cost across all invocations; write summary.json."""
+    """Aggregate pass/fail + tokens/cost across all invocations; write summary.json.
+
+    ``error`` carries any run-level failure (e.g. the sidecar or finalization
+    raising outside an individual invocation) so callers can distinguish an
+    infra failure from a clean 0-failure run — the CLI exits non-zero on it.
+    """
     passed = sum(1 for r in results if r.get("status") == "pass")
     failed = sum(1 for r in results if r.get("status") != "pass")
     total_cost = sum(r.get("total_cost_usd") or 0 for r in results)
@@ -341,6 +375,7 @@ def _write_summary(
     summary = {
         "run_id": run_dir.name,
         "config": _config(spec),
+        "error": error,
         "aggregate": {
             "total": len(results),
             "passed": passed,
