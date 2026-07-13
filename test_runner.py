@@ -98,13 +98,13 @@ def extract_result_metrics(run_dir: Path) -> dict:
 
 
 async def run_single_prompt(
-    prompt_text: str, data_path: Path, run_dir: Path, chrome_ws: str
+    prompt_text: str, data_path: Path, run_dir: Path, chrome_ws: str, skill_variant: str
 ) -> dict:
     """Run a single prompt through the agent and return metrics."""
     run_dir.mkdir(parents=True, exist_ok=True)
     start = time.time()
     try:
-        await run_agent(prompt_text, data_path, run_dir, chrome_ws)
+        await run_agent(prompt_text, data_path, run_dir, chrome_ws, skill_variant=skill_variant)
         elapsed = time.time() - start
         metrics = extract_result_metrics(run_dir)
         metrics["wall_time_s"] = round(elapsed, 2)
@@ -123,6 +123,7 @@ async def run_all(
     test_run_dir: Path,
     repeat: int,
     chrome_ws: str,
+    skill_variant: str,
 ) -> list[dict]:
     """Run all prompts sequentially and collect results."""
     results = []
@@ -150,7 +151,7 @@ async def run_all(
             print(f"  run_dir: {run_subdir}\n")
 
             metrics = await run_single_prompt(
-                prompt_info["prompt"], data_path, run_subdir, chrome_ws
+                prompt_info["prompt"], data_path, run_subdir, chrome_ws, skill_variant
             )
 
             result_entry = {
@@ -193,6 +194,7 @@ def write_summary(test_run_dir: Path, results: list[dict], config: dict) -> None
         "config": {
             "difficulty": config["difficulty"],
             "model": config.get("model"),
+            "variant": config.get("variant"),
             "repeat": config["repeat"],
         },
         "aggregate": {
@@ -234,6 +236,12 @@ def main() -> int:
         help="Model override (sets GTSKILL_AGENT_MODEL env var).",
     )
     parser.add_argument(
+        "--variant",
+        choices=["prose", "scripted"],
+        default="scripted",
+        help="Which with-skill variant to run (default: scripted).",
+    )
+    parser.add_argument(
         "--repeat",
         type=int,
         default=1,
@@ -257,12 +265,14 @@ def main() -> int:
         "timestamp": timestamp,
         "difficulty": args.difficulty,
         "model": args.model,
+        "variant": args.variant,
         "repeat": args.repeat,
     }
 
     print(f"Test run:   {test_run_dir}")
     print(f"Difficulty: {args.difficulty}")
     print(f"Model:      {args.model or '(default)'}")
+    print(f"Variant:    {args.variant}")
     print(f"Repeat:     {args.repeat}")
     print(f"Prompts:    {len(prompts)} found")
 
@@ -276,7 +286,7 @@ def main() -> int:
 
     try:
         results = anyio.run(
-            run_all, prompts, test_run_dir, args.repeat, chrome.ws_url
+            run_all, prompts, test_run_dir, args.repeat, chrome.ws_url, args.variant
         )
     finally:
         chrome.close()
