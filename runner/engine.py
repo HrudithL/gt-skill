@@ -65,7 +65,8 @@ SKILL_CI_DIR = ROOT / ".claude" / "skills" / SKILL_CI_NAME
 # references/ / scripts/ live directly at the top level of this dir (not under
 # a skills/<name>/ layout), and its frontmatter name is also "great-tables", so
 # the "creator" variant mounts it verbatim as the great-tables skill for A/B
-# evaluation against the promoted one in SKILL_DIR. See skill_creator_runner.py.
+# evaluation against the promoted one in SKILL_DIR. Selected via the "creator"
+# skill choice, which runner.orchestrate drives like any other.
 CREATOR_SKILL_SRC = ROOT / ".claude-skill-creator"
 
 # The *with-skill* variants the harness can run a prompt under. See
@@ -76,8 +77,8 @@ SKILL_VARIANTS = ("prose", "scripted", "creator")
 
 # Baseline config (R1): the agent sees NO `.claude` directory at all — no
 # skill, no settings.local.json — and is launched with `skills=[]`. Kept under
-# the historical token "none" so existing callers (consistency_runner.py) need
-# no change; `run()` short-circuits on it before any skill-root preparation, so
+# the historical token "none" (runner.orchestrate passes it for the baseline
+# control); `run()` short-circuits on it before any skill-root preparation, so
 # no ephemeral `.claude` is ever created for the baseline.
 BASELINE_VARIANT = "none"
 
