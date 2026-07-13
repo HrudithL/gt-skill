@@ -214,7 +214,10 @@ textarea { resize: vertical; min-height: 4rem; font-family: var(--mono); font-si
 table.runs { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.runs th, table.runs td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
 table.runs td.ellipsis { max-width: 22rem; }
-table.runs th { color: var(--muted); font-weight: 650; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 52px; background: var(--surface); z-index: 1; }
+/* Header sticks to the top of the (horizontally scrollable) table-wrap. `top: 0`
+   — not the 52px nav offset — because .table-wrap's overflow makes IT the scroll
+   context, so a 52px offset only wedged the first row into a gap above the header. */
+table.runs th { color: var(--muted); font-weight: 650; font-size: 11px; text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0; background: var(--surface); z-index: 1; }
 table.runs th.num, table.runs td.num { text-align: right; }
 table.runs tbody tr { cursor: pointer; transition: background .1s; }
 table.runs tbody tr:hover td { background: var(--surface-2); }
