@@ -20,6 +20,16 @@ written with a leading `../` (i.e. `../assets/examples/…`, which resolves from
 Open **`api.md`** and copy the exact signature. Mechanical API detail only; every
 design decision stays in SKILL.md and the files below.
 
+## 0b. This is the CI-checked variant — it ships `scripts/`
+
+Open **`scripts.md`** for the tooling this variant adds: **when and how to run
+`python gt_check.py table.py`** (the checker that reads your produced `table.py`),
+how to read its rule-id → reference output and iterate until it prints `PASS`, the
+**top-level `gt` variable convention** the checker requires, and the
+**`gt_consistency.py` helpers** (`heatmap` / `band` / `stripe` / `stub_tint`, plus
+`frame` / `finalize` and `PALETTE`). Mechanical only — the helpers execute a
+decision you already made and choose nothing.
+
 ## 1. EVERY table — unconditional (Steps 1, 2, 4 & 5)
 
 - **`data.md`** — the data-cleaning sub-step (Step 1, **before you organize columns**):
