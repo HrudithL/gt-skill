@@ -4,15 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>gtskill runner</title>
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <!-- Placeholder shell. The build-less single-page app (Run / History / Skills
-       tabs) is added in the frontend track and replaces this file. -->
-  <main style="font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1rem;">
-    <h1>gtskill runner</h1>
-    <p>Backend is up. The web UI ships in the frontend track.</p>
-    <p>API: <code>/api/skills</code> · <code>/api/prompts</code> · <code>/api/data</code> ·
-       <code>/api/models</code> · <code>/api/runs</code></p>
-  </main>
+  <header class="top">
+    <span class="brand">gtskill runner</span>
+    <nav id="nav"></nav>
+    <span class="spacer"></span>
+    <span class="hint">local · one run at a time</span>
+  </header>
+  <main id="view"></main>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>
