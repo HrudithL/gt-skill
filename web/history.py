@@ -23,6 +23,7 @@ import re
 from pathlib import Path
 
 from runner.engine import ROOT, _path_within
+from runner.plan import RUN_TYPES
 
 RUNS_DIR = ROOT / "runs"
 TESTRUNS_DIR = ROOT / "test-runs"
@@ -82,10 +83,20 @@ def _single_status(d: Path) -> str:
 
 def _summarize(d: Path, layout: str) -> dict:
     """A compact history-list item for one run dir (best-effort per layout)."""
+    # Top-level root (runs vs test-runs) regardless of nesting depth, plus the
+    # run type from the parent dir when it's a unified runs/<type>/ run.
+    if RUNS_DIR == d.parent or RUNS_DIR in d.parents:
+        root_name = "runs"
+    elif TESTRUNS_DIR == d.parent or TESTRUNS_DIR in d.parents:
+        root_name = "test-runs"
+    else:
+        root_name = d.parent.name
+    run_type_val = d.parent.name if d.parent.name in RUN_TYPES else None
     item: dict = {
         "id": d.name,
         "layout": layout,
-        "root": d.parent.name,  # "runs" | "test-runs"
+        "root": root_name,
+        "type": run_type_val,
         "timestamp": _timestamp(d.name, d),
         "skill": None,
         "variant": None,
@@ -158,19 +169,38 @@ def _summarize(d: Path, layout: str) -> dict:
     return item
 
 
+def _run_dirs() -> list[Path]:
+    """Every run directory across the unified runs/<type>/ layout and legacy dirs.
+
+    - ``runs/<type>/<run>``  — the unified layout (type: single|convergence|sweep)
+    - ``runs/<run>``         — legacy flat single runs (before the type split)
+    - ``test-runs/<run>``    — legacy consistency / sweep from the retired runners
+
+    So all current runs live under one ``runs/`` root organized by type, while
+    every past run (wherever it was written) stays browsable.
+    """
+    dirs: list[Path] = []
+    if RUNS_DIR.is_dir():
+        for child in RUNS_DIR.iterdir():
+            if not child.is_dir():
+                continue
+            if child.name in RUN_TYPES:  # a type container: descend one level
+                dirs += [d for d in child.iterdir() if d.is_dir()]
+            else:  # a legacy flat run dir written before the type split
+                dirs.append(child)
+    if TESTRUNS_DIR.is_dir():
+        dirs += [d for d in TESTRUNS_DIR.iterdir() if d.is_dir()]
+    return dirs
+
+
 def list_runs() -> list[dict]:
-    """Every past run across runs/ and test-runs/, newest first."""
+    """Every past run (unified runs/<type>/ + legacy runs/ + test-runs/), newest first."""
     items: list[dict] = []
-    for base in (RUNS_DIR, TESTRUNS_DIR):
-        if not base.is_dir():
+    for d in _run_dirs():
+        layout = _classify(d)
+        if layout == "unknown":
             continue
-        for d in base.iterdir():
-            if not d.is_dir():
-                continue
-            layout = _classify(d)
-            if layout == "unknown":
-                continue
-            items.append(_summarize(d, layout))
+        items.append(_summarize(d, layout))
     items.sort(key=lambda it: it["timestamp"], reverse=True)
     return items
 
@@ -188,7 +218,13 @@ def _find_run(run_id: str) -> Path | None:
     """
     if not run_id or run_id in (".", "..") or "/" in run_id or "\\" in run_id or "\x00" in run_id:
         return None
-    for base in (RUNS_DIR, TESTRUNS_DIR):
+    # Search the unified type subdirs first, then the legacy flat runs/ and
+    # test-runs/. A run id is a timestamped leaf, unique across these, so the
+    # first direct-child match is the run.
+    bases = [RUNS_DIR / t for t in RUN_TYPES] + [RUNS_DIR, TESTRUNS_DIR]
+    for base in bases:
+        if base == RUNS_DIR and run_id in RUN_TYPES:
+            continue  # a type container, not a run
         cand = base / run_id
         if cand.is_dir() and cand.resolve().parent == base.resolve():
             return cand
