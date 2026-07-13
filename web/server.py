@@ -225,6 +225,18 @@ async def run_file_ep(request: Request) -> Response:
     return _file_response(target)
 
 
+_FAVICON = (
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+    "<rect width='32' height='32' rx='6' fill='#2f4a38'/>"
+    "<text x='16' y='22' font-family='monospace' font-size='15' fill='#fff' "
+    "text-anchor='middle'>gt</text></svg>"
+)
+
+
+async def favicon(_request: Request) -> Response:
+    return Response(_FAVICON, media_type="image/svg+xml")
+
+
 async def run_events(request: Request) -> Response:
     run_id = request.path_params["run_id"]
     job = manager.get(run_id)
@@ -263,6 +275,7 @@ routes = [
     Route("/api/runs/{run_id}/file", run_file_ep),
     Route("/api/runs/{run_id}", run_detail_ep),
     Route("/api/runs", runs_ep, methods=["GET", "POST"]),
+    Route("/favicon.ico", favicon),
     Mount("/", app=StaticFiles(directory=str(STATIC_DIR), html=True)),
 ]
 
