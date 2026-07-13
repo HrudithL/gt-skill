@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 from pathlib import Path
 
 import anyio
@@ -71,6 +72,7 @@ class RunJob:
     def __init__(self, run_id: str, spec: RunSpec) -> None:
         self.run_id = run_id
         self.spec = spec
+        self.started_at = time.time()  # epoch seconds; drives the live-view elapsed clock on reconnect
         self.events: list[dict] = []
         self.done = False
         self._lock = threading.Lock()
@@ -92,10 +94,16 @@ class JobManager:
     def __init__(self) -> None:
         self.jobs: dict[str, RunJob] = {}
         self._busy = threading.Lock()
+        self._active_run_id: str | None = None
 
     @property
     def busy(self) -> bool:
         return self._busy.locked()
+
+    def active(self) -> RunJob | None:
+        """The currently-running job (so a reconnecting browser can find it)."""
+        run_id = self._active_run_id
+        return self.jobs.get(run_id) if run_id else None
 
     def launch(self, spec: RunSpec) -> str:
         spec.validate()
@@ -108,6 +116,7 @@ class JobManager:
             raise
         job = RunJob(run_dir.name, spec)
         self.jobs[run_dir.name] = job
+        self._active_run_id = run_dir.name
         threading.Thread(
             target=self._drive, args=(job, spec, run_dir), daemon=True
         ).start()
@@ -123,6 +132,7 @@ class JobManager:
             job.emit(events.run_error(job.run_id, str(e)))
         finally:
             job.done = True
+            self._active_run_id = None
             self._busy.release()
 
     def get(self, run_id: str) -> RunJob | None:
@@ -212,7 +222,15 @@ async def runs_ep(request: Request) -> JSONResponse:
         except RuntimeError as e:  # busy
             return JSONResponse({"error": str(e)}, status_code=409)
         return JSONResponse({"run_id": run_id})
-    return JSONResponse({"runs": history.list_runs(), "busy": manager.busy})
+    # Advertise the in-flight run (if any) so the Run tab can reconnect its live
+    # view after the browser navigated away and came back (07-frontend-runner §5.1).
+    job = manager.active()
+    active = (
+        {"run_id": job.run_id, "spec": job.spec.to_dict(), "started_at": job.started_at}
+        if job is not None
+        else None
+    )
+    return JSONResponse({"runs": history.list_runs(), "busy": manager.busy, "active": active})
 
 
 async def run_detail_ep(request: Request) -> JSONResponse:
