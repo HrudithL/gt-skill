@@ -5,13 +5,24 @@ function esc(s) {
   return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 }
 
+// Only allow relative/anchor links or http(s)/mailto — never javascript:, data:,
+// vbscript:, etc. A crafted local skill/reference file could otherwise inject an
+// executable link target into the SPA. `u` is already HTML-escaped (so quotes
+// can't break out of the attribute); this blocks the dangerous-scheme case too.
+function safeUrl(u) {
+  const t = u.trim();
+  const scheme = /^([a-z][a-z0-9+.\-]*):/i.exec(t);
+  return !scheme || /^(https?|mailto)$/i.test(scheme[1]);
+}
+
 // Inline: `code`, **bold**, *italic*, [text](url). Operates on already-escaped text.
 function inline(s) {
   return s
     .replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`)
     .replace(/\*\*([^*]+)\*\*/g, (_, c) => `<strong>${c}</strong>`)
     .replace(/(^|[^*])\*([^*]+)\*/g, (_, p, c) => `${p}<em>${c}</em>`)
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) => `<a href="${u}" target="_blank" rel="noopener">${t}</a>`);
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) =>
+      safeUrl(u) ? `<a href="${u}" target="_blank" rel="noopener">${t}</a>` : t);
 }
 
 // A pragmatic block-level markdown renderer covering the constructs used in the

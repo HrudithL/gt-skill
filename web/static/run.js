@@ -30,13 +30,19 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
     for (const p of state.selected.values()) {
       prompts.push({ prompt: p.prompt, data: p.data, name: p.name, difficulty: p.difficulty, source: "corpus" });
     }
-    if (state.adhocText.trim()) prompts.push({ prompt: state.adhocText.trim(), data: state.adhocData, source: "adhoc" });
+    // An ad-hoc prompt only counts when it also has a data file — otherwise the
+    // backend would resolve an empty path to the repo root and waste an agent
+    // invocation (the backend now rejects it too, defense in depth).
+    if (state.adhocText.trim() && state.adhocData) {
+      prompts.push({ prompt: state.adhocText.trim(), data: state.adhocData, source: "adhoc" });
+    }
     const baseline = state.baseline === "auto" ? null : state.baseline === "on";
     return { skill: state.skill, prompts, repeats: state.repeats, model: state.model, baseline };
   }
 
   function canLaunch() {
-    return !!state.skill && (state.selected.size > 0 || state.adhocText.trim().length > 0) && !state.running;
+    const hasAdhoc = !!(state.adhocText.trim() && state.adhocData);
+    return !!state.skill && (state.selected.size > 0 || hasAdhoc) && !state.running;
   }
 
   const launchBtn = el("button", { class: "btn", onclick: launch }, "Launch");
@@ -143,7 +149,7 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
   }
 
   // ---- launch + live view ----
-  let es = null;
+  let liveView = null;
   async function launch() {
     if (!canLaunch()) return;
     const spec = buildSpec();
@@ -163,12 +169,19 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
   }
 
   function startLive(runId, spec) {
-    const live = new LiveView(right, runId, spec, catalogs, { onJumpToHistory, onDone: () => { state.running = false; refreshConfigUI(); } });
-    if (es) es.close();
-    es = live.connect();
+    if (liveView) liveView.destroy();
+    liveView = new LiveView(right, runId, spec, catalogs, { onJumpToHistory, onDone: () => { state.running = false; refreshConfigUI(); } });
+    liveView.connect();
   }
 
   schedulePlan();
+
+  // Cleanup hook: app.js calls this before switching tabs so a live run's
+  // EventSource + 1s timer are torn down instead of leaking against detached DOM.
+  return () => {
+    clearTimeout(planTimer);
+    if (liveView) liveView.destroy();
+  };
 }
 
 // ---- plan tree rendering ----
@@ -222,6 +235,11 @@ class LiveView {
     es.addEventListener("run_error", (e) => this.onDone(es, JSON.parse(e.data), true));
     this.es = es;
     return es;
+  }
+
+  destroy() {
+    if (this.es) { this.es.close(); this.es = null; }
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
   }
 
   stageKey(d) { return `${d.prompt}·${d.variant}·${d.repeat ?? "b"}`; }

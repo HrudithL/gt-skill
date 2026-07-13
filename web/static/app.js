@@ -8,6 +8,7 @@ const view = document.getElementById("view");
 const nav = document.getElementById("nav");
 let catalogs = null;
 let current = "run";
+let cleanup = null; // teardown for the current tab (e.g. the Run tab's live stream)
 
 async function loadCatalogs() {
   const [prompts, data, models, skills] = await Promise.all([
@@ -17,10 +18,13 @@ async function loadCatalogs() {
 }
 
 function setTab(tab, arg) {
+  // Tear down the previous tab (closes the Run tab's EventSource + timers)
+  // before clearing the shared view, so nothing runs against detached DOM.
+  if (cleanup) { try { cleanup(); } catch (_) {} cleanup = null; }
   current = tab;
   for (const b of nav.querySelectorAll("button")) b.classList.toggle("active", b.dataset.tab === tab);
   clear(view);
-  if (tab === "run") renderRunTab(view, catalogs, { onJumpToHistory: (id) => setTab("history", id) });
+  if (tab === "run") cleanup = renderRunTab(view, catalogs, { onJumpToHistory: (id) => setTab("history", id) });
   else if (tab === "history") renderHistoryTab(view, arg || null);
   else if (tab === "skills") renderSkillsTab(view, catalogs);
 }
