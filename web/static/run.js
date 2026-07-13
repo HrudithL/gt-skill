@@ -168,7 +168,12 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
     startLive(res.run_id, spec);
   }
 
+  // Set once app.js tears this tab down; guards async continuations (the
+  // reconnect fetch below) from spinning up a live stream against detached DOM.
+  let disposed = false;
+
   function startLive(runId, spec, startedAt = null) {
+    if (disposed) return;
     if (liveView) liveView.destroy();
     liveView = new LiveView(right, runId, spec, catalogs, { onJumpToHistory, onDone: () => { state.running = false; refreshConfigUI(); }, startedAt });
     liveView.connect();
@@ -184,7 +189,7 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
     let info;
     try { info = await getJSON("/api/runs"); }
     catch (_) { return; }
-    if (!info.active || !info.active.run_id) return;
+    if (disposed || !info.active || !info.active.run_id) return;
     clearTimeout(planTimer);          // don't let the debounced plan clobber the live view
     state.running = true;
     refreshConfigUI();
@@ -194,6 +199,7 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
   // Cleanup hook: app.js calls this before switching tabs so a live run's
   // EventSource + 1s timer are torn down instead of leaking against detached DOM.
   return () => {
+    disposed = true;
     clearTimeout(planTimer);
     if (liveView) liveView.destroy();
   };
