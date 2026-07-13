@@ -179,10 +179,18 @@ def list_runs() -> list[dict]:
 # detail + file access
 # --------------------------------------------------------------------------- #
 def _find_run(run_id: str) -> Path | None:
-    """Resolve a run id (dir name) to its dir under runs/ or test-runs/."""
+    """Resolve a run id (dir name) to its dir under runs/ or test-runs/.
+
+    A run id is a plain child directory name; reject anything with a path
+    separator or a dot-segment (e.g. an encoded ``..``) so it cannot escape
+    runs/ / test-runs/ and expose arbitrary repo files. The parent check pins
+    the match to a direct child.
+    """
+    if not run_id or run_id in (".", "..") or "/" in run_id or "\\" in run_id or "\x00" in run_id:
+        return None
     for base in (RUNS_DIR, TESTRUNS_DIR):
         cand = base / run_id
-        if cand.is_dir():
+        if cand.is_dir() and cand.resolve().parent == base.resolve():
             return cand
     return None
 
@@ -238,20 +246,18 @@ def run_detail(run_id: str) -> dict | None:
 
 
 def resolve_file(run_id: str, rel: str) -> Path | None:
-    """Resolve ``rel`` to a real file inside the run dir, guarding traversal."""
+    """Resolve ``rel`` to a real file inside the run dir, guarding traversal.
+
+    Requires the fully *resolved* target to stay inside the run dir. A run dir
+    holds untrusted content — the agent can create arbitrary symlinks in its
+    working directory, and the data snapshot is itself a symlink out to
+    ``data/`` — so a symlink whose target escapes the run dir is rejected rather
+    than followed (those show as non-clickable ``link`` leaves in the tree).
+    """
     d = _find_run(run_id)
-    if d is None:
+    if d is None or not rel:
         return None
     target = (d / rel).resolve()
-    # Lexical containment against the run dir; symlinked data/.claude targets
-    # inside the run dir are fine. Reject escapes.
-    if not _path_within(target, d.resolve()):
-        # A run-dir symlink (e.g. the data snapshot) may resolve outside the run
-        # dir; allow it only when the *pre-resolution* path stays within.
-        lexical = (d / rel)
-        if not _path_within(lexical, d):
-            return None
-        target = lexical
-    if not target.is_file():
+    if not _path_within(target, d.resolve()) or not target.is_file():
         return None
     return target

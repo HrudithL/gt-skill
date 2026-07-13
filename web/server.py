@@ -165,8 +165,13 @@ async def skill_file(request: Request) -> Response:
     base = discover.skill_dir(label)
     if base is None or not base.is_dir():
         return JSONResponse({"error": "unknown skill"}, status_code=404)
-    target = (base / rel).resolve()
-    if not rel or not _path_within(target, base.resolve()) or not target.is_file():
+    # Lexical containment on the requested path (normalizes away any `..` so it
+    # can't escape the skill dir) WITHOUT resolving symlinks — the CI skill's
+    # references/ and assets/ are in-repo symlinks the /api/skills tree
+    # advertises, and skills are trusted content, so those must be serveable.
+    # (Run-dir files are untrusted and use resolved containment; see history.py.)
+    target = base / rel
+    if not rel or not _path_within(target, base) or not target.is_file():
         return JSONResponse({"error": "file not found"}, status_code=404)
     return _file_response(target)
 
