@@ -48,6 +48,31 @@ def run_dir_name(spec: RunSpec, ts: str) -> str:
     return f"{ts}_{run_slug(spec)}"
 
 
+# The three run types, matching the historical runner kinds. Every run is filed
+# under runs/<type>/ so all runs live under one ``runs/`` root, organized by
+# what kind of run they are.
+RUN_TYPES = ("single", "convergence", "sweep")
+
+
+def run_type(spec: RunSpec) -> str:
+    """Classify a run by shape: sweep (many prompts) > convergence (repeats>1) > single.
+
+    Multiple prompts read as a ``sweep`` (the old test_runner shape) even with
+    repeats; a single prompt run N>1 times is a ``convergence`` run (the old
+    consistency_runner shape); one prompt once is a ``single`` run.
+    """
+    if len(spec.prompts) > 1:
+        return "sweep"
+    if spec.repeats > 1:
+        return "convergence"
+    return "single"
+
+
+def run_dir_relpath(spec: RunSpec, ts: str) -> str:
+    """Run dir path relative to the repo root: ``runs/<type>/<ts>_<skill>_<slug>``."""
+    return f"runs/{run_type(spec)}/{run_dir_name(spec, ts)}"
+
+
 # --------------------------------------------------------------------------- #
 # plan
 # --------------------------------------------------------------------------- #
@@ -115,7 +140,8 @@ def build_plan(spec: RunSpec, ts: str = "<ts>") -> dict:
         )
 
     return {
-        "run_dir": f"runs/{run_dir_name(spec, ts)}",
+        "run_dir": run_dir_relpath(spec, ts),
+        "run_type": run_type(spec),
         "skill": spec.skill,
         "mounted_skill": mounted,
         "variant": variant,
