@@ -27,8 +27,17 @@ _PRODUCES = ["table.py", "table.png", "transcript.json"]
 # naming (shared with orchestrate)
 # --------------------------------------------------------------------------- #
 def prompt_dir_name(pref: PromptRef) -> str:
-    """Per-prompt directory name: the corpus name, else a slug of the text."""
-    return pref.name or slugify(pref.prompt)
+    """Per-prompt directory name / label.
+
+    A corpus prompt uses its name; an ad-hoc prompt is labelled ``ad-hoc`` (not a
+    slug of its full text — that made the plan/live/history labels the entire
+    prompt wording); anything else falls back to a slug of the text.
+    """
+    if pref.name:
+        return pref.name
+    if pref.source == "adhoc":
+        return "ad-hoc"
+    return slugify(pref.prompt)
 
 
 def run_slug(spec: RunSpec) -> str:
