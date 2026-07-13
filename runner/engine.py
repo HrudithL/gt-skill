@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Callable
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -64,7 +65,8 @@ SKILL_CI_DIR = ROOT / ".claude" / "skills" / SKILL_CI_NAME
 # references/ / scripts/ live directly at the top level of this dir (not under
 # a skills/<name>/ layout), and its frontmatter name is also "great-tables", so
 # the "creator" variant mounts it verbatim as the great-tables skill for A/B
-# evaluation against the promoted one in SKILL_DIR. See skill_creator_runner.py.
+# evaluation against the promoted one in SKILL_DIR. Selected via the "creator"
+# skill choice, which runner.orchestrate drives like any other.
 CREATOR_SKILL_SRC = ROOT / ".claude-skill-creator"
 
 # The *with-skill* variants the harness can run a prompt under. See
@@ -75,8 +77,8 @@ SKILL_VARIANTS = ("prose", "scripted", "creator")
 
 # Baseline config (R1): the agent sees NO `.claude` directory at all — no
 # skill, no settings.local.json — and is launched with `skills=[]`. Kept under
-# the historical token "none" so existing callers (consistency_runner.py) need
-# no change; `run()` short-circuits on it before any skill-root preparation, so
+# the historical token "none" (runner.orchestrate passes it for the baseline
+# control); `run()` short-circuits on it before any skill-root preparation, so
 # no ephemeral `.claude` is ever created for the baseline.
 BASELINE_VARIANT = "none"
 
@@ -438,6 +440,8 @@ async def run(
     run_dir: Path,
     chrome_ws: str,
     skill_variant: str = "scripted",
+    on_message: Callable[[dict], None] | None = None,
+    model_id: str | None = None,
 ) -> None:
     # Ensure the venv sidecar startup hook is installed (R11) so the agent's
     # `gt.gtsave("table.png")` attaches to the out-of-sandbox Chrome with no
@@ -559,7 +563,10 @@ async def run(
             # sidecar Chrome. Keep loopback access enabled.
             "network": {"allowLocalBinding": True},
         },
-        model=os.environ.get("GTSKILL_AGENT_MODEL") or None,
+        # Prefer the per-invocation model id (orchestrate passes spec.model_id())
+        # so overlapping runs can't race on a shared env var; fall back to the
+        # env var for back-compat when no id is threaded in.
+        model=model_id or os.environ.get("GTSKILL_AGENT_MODEL") or None,
     )
 
     async def prompt_stream():
@@ -575,6 +582,17 @@ async def run(
         d = message_to_dict(msg)
         transcript.append(d)
         log_message(d)
+        # Live streaming seam (07-frontend-runner.md §4): the same loop that
+        # produces the durable transcript.json feeds each mapped message to an
+        # optional observer. No-op when unset, so behavior is unchanged for the
+        # CLI single-prompt path; orchestrate/the web backend pass a callback
+        # that turns each message into a UI event.
+        if on_message is not None:
+            try:
+                on_message(d)
+            except Exception:
+                # An observer must never break the run or the transcript write.
+                pass
 
     (run_dir / "transcript.json").write_text(
         json.dumps(transcript, indent=2, default=str)
