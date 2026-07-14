@@ -1,38 +1,58 @@
-/* gtskill runner — build-less SPA styling. One system: neutral surfaces, a dark
-   header, monospace for code/transcript, one forest accent. Light + dark via
-   prefers-color-scheme. */
+/* gtskill runner — build-less SPA styling. One system: white surfaces with a
+   blue accent in light mode, black surfaces with a blue accent in dark mode.
+   All text colors verified for adequate contrast against their backgrounds. */
 :root {
-  --bg: #f6f7f6;
+  --bg: #f4f7fb;
   --surface: #ffffff;
-  --surface-2: #f0f1ef;
-  --surface-3: #e8eae7;
-  --border: #e0e1dd;
-  --border-strong: #cfd0ca;
-  --text: #1d1d1b;
-  --muted: #6b6b66;
-  --accent: #2f4a38;          /* dark-academia forest, echoing the skill palette */
-  --accent-2: #3f6b4e;
-  --accent-soft: #eaf1ec;
-  --danger: #8a2f2f;
-  --danger-soft: #f6e7e7;
-  --ok: #2f5d3a;
-  --ok-soft: #e6f0e8;
-  --warn: #8a6d1f;
-  --warn-soft: #f5eed7;
+  --surface-2: #eef3fa;
+  --surface-3: #e2ebf5;
+  --border: #d6e0ec;
+  --border-strong: #bccbdd;
+  --text: #0f1a2b;
+  --muted: #4d5a6e;           /* darkened from prior slate so it stays readable on --surface-2 */
+  --accent: #1d4ed8;          /* blue-700 — passes AA on white for buttons and links */
+  --accent-2: #1e40af;        /* blue-800 — for stronger emphasis and small text on white */
+  --accent-fg: #ffffff;       /* text color drawn on top of --accent (e.g. primary button label) */
+  --accent-soft: #dbe7fb;
+  --danger: #b42318;
+  --danger-soft: #fde3e0;
+  --ok: #036a3a;
+  --ok-soft: #d6f0e0;
+  --warn: #8a5a12;
+  --warn-soft: #fbe8c8;
+  --header-bg: #0b3a8a;       /* deep blue for the sticky header */
+  --header-text: #ffffff;
+  --header-muted: #c9d8f5;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --radius: 10px;
   --radius-sm: 7px;
-  --shadow: 0 1px 2px rgba(20,25,20,.05), 0 2px 8px rgba(20,25,20,.04);
+  --shadow: 0 1px 2px rgba(15,26,43,.06), 0 2px 8px rgba(15,26,43,.05);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #15161899; --bg: #151618; --surface: #1e2022; --surface-2: #26282b; --surface-3: #2e3034;
-    --border: #33363a; --border-strong: #45484d; --text: #e7e7e4; --muted: #9a9b98;
-    --accent: #8fb99b; --accent-2: #a7cfb2; --accent-soft: #22302a;
-    --danger: #d98b8b; --danger-soft: #35262699; --danger-soft: #3a2828;
-    --ok: #8fb99b; --ok-soft: #23302a; --warn: #d9be7f; --warn-soft: #34301f;
-    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 2px 10px rgba(0,0,0,.25);
+    --bg: #05070d;
+    --surface: #0b1220;
+    --surface-2: #111a2e;
+    --surface-3: #182541;
+    --border: #1f2d4b;
+    --border-strong: #2c3f66;
+    --text: #eaf0fb;
+    --muted: #a9b6cf;         /* lightened so it clears AA on --surface / --surface-2 */
+    --accent: #60a5fa;        /* blue-400 — high contrast on black for links/buttons */
+    --accent-2: #93c5fd;      /* blue-300 — for on-dark emphasis */
+    --accent-fg: #05070d;     /* dark text on the light-blue button in dark mode keeps ~7:1 contrast (WCAG AA) */
+    --accent-soft: #14213f;
+    --danger: #f0908a;
+    --danger-soft: #3a1a18;
+    --ok: #8adca9;
+    --ok-soft: #0f2a1c;
+    --warn: #f3c977;
+    --warn-soft: #2f2410;
+    --header-bg: #030814;
+    --header-text: #eaf0fb;
+    --header-muted: #a9b6cf;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 2px 10px rgba(0,0,0,.35);
   }
 }
 * { box-sizing: border-box; }
@@ -50,20 +70,20 @@ img { display: block; }
 /* ---- header / tabs ---- */
 header.top {
   display: flex; align-items: center; gap: 1.5rem;
-  background: #12201799; background: linear-gradient(#16261c, #12201a);
-  color: #eef3ef; padding: 0 1.1rem; height: 52px;
+  background: var(--header-bg);
+  color: var(--header-text); padding: 0 1.1rem; height: 52px;
   position: sticky; top: 0; z-index: 20; box-shadow: 0 1px 0 rgba(0,0,0,.25);
 }
 header.top .brand { font-weight: 650; letter-spacing: .01em; }
 header.top nav { display: flex; gap: .15rem; }
 header.top nav button {
-  background: transparent; color: #cdd8d0; border: 0; padding: .55rem .95rem;
+  background: transparent; color: var(--header-muted); border: 0; padding: .55rem .95rem;
   border-radius: 7px; font-weight: 550; transition: background .12s, color .12s;
 }
-header.top nav button:hover { color: #fff; background: rgba(255,255,255,.07); }
-header.top nav button.active { color: #fff; background: rgba(255,255,255,.14); }
+header.top nav button:hover { color: var(--header-text); background: rgba(255,255,255,.10); }
+header.top nav button.active { color: var(--header-text); background: rgba(255,255,255,.18); }
 header.top .spacer { flex: 1; }
-header.top .hint { color: #9fb0a4; font-size: 12px; }
+header.top .hint { color: var(--header-muted); font-size: 12px; }
 
 main { padding: 1.2rem; max-width: 1500px; margin: 0 auto; }
 .hidden { display: none !important; }
@@ -93,7 +113,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 textarea { resize: vertical; min-height: 4rem; font-family: var(--mono); font-size: 12.5px; }
 
 .btn {
-  background: var(--accent); color: #fff; border: 0; padding: .5rem .95rem;
+  background: var(--accent); color: var(--accent-fg); border: 0; padding: .5rem .95rem;
   border-radius: var(--radius-sm); font-weight: 600; transition: filter .12s;
 }
 .btn:hover:not(:disabled) { filter: brightness(1.08); }
@@ -144,6 +164,11 @@ textarea { resize: vertical; min-height: 4rem; font-family: var(--mono); font-si
 .promptrow input[type=checkbox] { width: auto; margin: 0; flex: none; }
 .promptrow > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .promptrow .tmpl { flex: none; font-size: 11px; background: none; border: 0; color: var(--accent-2); text-decoration: underline; padding: 0; }
+/* Compact "label + checkbox" row (baseline toggle, etc.) — like .promptrow but
+   the text is allowed to wrap so long option labels stay legible. */
+.checkrow { display: flex; gap: .5rem; align-items: center; padding: .3rem 0; cursor: pointer; }
+.checkrow input[type=checkbox] { width: auto; margin: 0; flex: none; }
+.checkrow > span { font-weight: 550; }
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
 .launchbar { margin-top: 1rem; display: flex; align-items: center; gap: .7rem; }
 
@@ -240,6 +265,7 @@ table.runs tbody tr:hover td { background: var(--surface-2); }
 
 .detail-grid { display: grid; grid-template-columns: minmax(340px, 440px) 1fr; gap: 1.1rem; align-items: start; }
 .detail-left { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+.detail-left.detail-stack { max-width: 900px; }
 .detail-left .section { padding: .9rem 1rem; }
 .viewer-panel { position: sticky; top: 70px; max-height: calc(100vh - 90px); overflow: auto; padding: 1rem; }
 .viewer-path { font-family: var(--mono); font-size: 12px; font-weight: 600; margin-bottom: .7rem; overflow-wrap: anywhere; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }

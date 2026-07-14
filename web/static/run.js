@@ -10,7 +10,7 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
     adhocText: "",
     adhocData: (catalogs.data[0] && catalogs.data[0].path) || "",
     repeats: 1,
-    baseline: "auto", // auto | on | off
+    baseline: false, // explicit opt-in via checkbox; when false, no baseline is scheduled
     model: (catalogs.models[0] && catalogs.models[0].label) || "haiku",
     running: false,
   };
@@ -36,7 +36,9 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
     if (state.adhocText.trim() && state.adhocData) {
       prompts.push({ prompt: state.adhocText.trim(), data: state.adhocData, source: "adhoc" });
     }
-    const baseline = state.baseline === "auto" ? null : state.baseline === "on";
+    // Baseline is a plain checkbox: true = include a no-skill control invocation
+    // per prompt; false = leave it out of every run.
+    const baseline = !!state.baseline;
     return { skill: state.skill, prompts, repeats: state.repeats, model: state.model, baseline };
   }
 
@@ -99,8 +101,8 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
 
   // repeats / baseline / model
   const repeatsIn = el("input", { type: "number", min: "1", value: "1", onchange: (e) => { state.repeats = Math.max(1, parseInt(e.target.value || "1", 10)); schedulePlan(); } });
-  const baselineSel = el("select", { onchange: (e) => { state.baseline = e.target.value; schedulePlan(); } },
-    el("option", { value: "auto" }, "Auto (on iff repeats>1)"), el("option", { value: "on" }, "On"), el("option", { value: "off" }, "Off"));
+  const baselineCb = el("input", { type: "checkbox", onchange: (e) => { state.baseline = e.target.checked; schedulePlan(); } });
+  baselineCb.checked = state.baseline;
   const modelSel = el("select", { onchange: (e) => { state.model = e.target.value; schedulePlan(); } },
     ...catalogs.models.map((m) => el("option", { value: m.label }, `${m.label} (${m.id})`)));
 
@@ -116,8 +118,9 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
     el("div", { class: "row2", style: "margin-top:.6rem" },
       el("div", {}, el("label", { class: "field" }, "Repeats"), repeatsIn),
       el("div", {}, el("label", { class: "field" }, "Model"), modelSel)),
-    el("label", { class: "field" }, "Baseline"),
-    baselineSel,
+    el("label", { class: "checkrow", style: "margin-top:.6rem" },
+      baselineCb,
+      el("span", {}, "Also run a baseline without the skill")),
     el("div", { class: "launchbar" }, launchBtn, launchNote)
   );
   refreshConfigUI();
