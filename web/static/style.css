@@ -12,6 +12,7 @@
   --muted: #4d5a6e;           /* darkened from prior slate so it stays readable on --surface-2 */
   --accent: #1d4ed8;          /* blue-700 — passes AA on white for buttons and links */
   --accent-2: #1e40af;        /* blue-800 — for stronger emphasis and small text on white */
+  --accent-fg: #ffffff;       /* text color drawn on top of --accent (e.g. primary button label) */
   --accent-soft: #dbe7fb;
   --danger: #b42318;
   --danger-soft: #fde3e0;
@@ -40,6 +41,7 @@
     --muted: #a9b6cf;         /* lightened so it clears AA on --surface / --surface-2 */
     --accent: #60a5fa;        /* blue-400 — high contrast on black for links/buttons */
     --accent-2: #93c5fd;      /* blue-300 — for on-dark emphasis */
+    --accent-fg: #05070d;     /* dark text on the light-blue button in dark mode keeps ~7:1 contrast (WCAG AA) */
     --accent-soft: #14213f;
     --danger: #f0908a;
     --danger-soft: #3a1a18;
@@ -111,7 +113,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-soft
 textarea { resize: vertical; min-height: 4rem; font-family: var(--mono); font-size: 12.5px; }
 
 .btn {
-  background: var(--accent); color: #fff; border: 0; padding: .5rem .95rem;
+  background: var(--accent); color: var(--accent-fg); border: 0; padding: .5rem .95rem;
   border-radius: var(--radius-sm); font-weight: 600; transition: filter .12s;
 }
 .btn:hover:not(:disabled) { filter: brightness(1.08); }
