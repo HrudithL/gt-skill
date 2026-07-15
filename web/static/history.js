@@ -1,8 +1,12 @@
 // History tab: a scannable list of past runs -> a structured detail view with a
 // standardized overview (cost always shown), an iteration/test selector that
 // drills into a specific sweep test or convergence repeat, per-iteration
-// convergence, and a high-level collapsible file browser (07-frontend-runner §5.2).
-import { el, clear, getJSON, fmtCost, fmtInt } from "./api.js";
+// convergence, a high-level collapsible file browser, and a wide sticky side
+// viewer that renders the selected table / script / transcript / markdown
+// inline (07-frontend-runner §5.2).
+import { el, clear, getJSON, getText, fmtCost, fmtInt } from "./api.js";
+import { renderTranscript } from "./transcript.js";
+import { loadFile, kindFor } from "./viewers.js";
 import { renderCollapsibleTree } from "./tree.js";
 
 const CONV_FIELDS = [
@@ -134,14 +138,30 @@ async function renderDetail(root, runId) {
   if (s.status && !agg) stats.append(stat("Status", s.status));
   root.append(el("div", { class: "card overview" }, stats));
 
-  // ---- body: a single stacked column of drill-down sections (the wide
-  // right-side viewer was removed — the table thumbnail on the left already
-  // shows the rendered PNG, and file links open in a new tab).
-  const left = el("div", { class: "detail-left detail-stack" });
-  root.append(left);
+  // ---- body: left (drill-down) / right (viewer) ----
+  const grid = el("div", { class: "detail-grid" });
+  const left = el("div", { class: "detail-left" });
+  const rightC = el("div", { class: "card panel viewer-panel" });
+  grid.append(left, rightC);
+  root.append(grid);
 
-  const fileUrl = (p) => `/api/runs/${encodeURIComponent(runId)}/file?path=${encodeURIComponent(p)}`;
-  const openFile = (path) => window.open(fileUrl(path), "_blank", "noopener");
+  const resetViewer = () => {
+    clear(rightC);
+    rightC.append(el("div", { class: "viewer-hint" },
+      el("div", { class: "big-muted" }, "Nothing open"),
+      el("div", { class: "muted small" }, "Pick a repeat / test on the left, or a file below, to view its table, script, or transcript here.")));
+  };
+  const openViewer = async (path, name) => {
+    clear(rightC);
+    rightC.append(el("div", { class: "viewer-path" }, name || path.split("/").pop(), el("span", { class: "muted small" }, "  " + path)));
+    const url = `/api/runs/${encodeURIComponent(runId)}/file?path=${encodeURIComponent(path)}`;
+    try {
+      if (path.endsWith("transcript.json")) rightC.append(renderTranscript(JSON.parse(await getText(url))));
+      else rightC.append(await loadFile(kindFor(path), url, path));
+    } catch (e) { rightC.append(el("div", { class: "err" }, e.message)); }
+  };
+
+  resetViewer(); // default state; the iteration UI below may auto-open an artifact
 
   // ---- iteration selector + per-iteration panel ----
   const groups = d.iterations || [];
@@ -151,7 +171,7 @@ async function renderDetail(root, runId) {
   if (flat.length) {
     left.append(el("div", { class: "card section" },
       el("h3", {}, groups.length > 1 || flat.length > 1 ? "Iterations" : "Run"),
-      buildIterationUI(groups, flat, runId, openFile)));
+      buildIterationUI(groups, flat, runId, openViewer)));
   }
 
   // ---- convergence (overall) per prompt + contact sheet ----
@@ -175,12 +195,12 @@ async function renderDetail(root, runId) {
   // ---- high-level collapsible file browser ----
   left.append(el("div", { class: "card section" },
     el("h3", {}, "Files"),
-    renderCollapsibleTree(d.tree, { onFile: (path) => openFile(path) })));
+    renderCollapsibleTree(d.tree, { onFile: openViewer })));
 }
 
 // The iteration drop-down + the selected iteration's panel. Grouped by prompt so
 // a multi-prompt run (or a sweep) offers a menu of the specific test / repeat.
-function buildIterationUI(groups, flat, runId, openFile) {
+function buildIterationUI(groups, flat, runId, openViewer) {
   const wrap = el("div", {});
   const sel = el("select", { class: "iter-select" });
   let idx = 0;
@@ -215,7 +235,11 @@ function buildIterationUI(groups, flat, runId, openFile) {
     idx = i;
     clear(panel);
     const it = flat[i];
-    panel.append(renderIteration(it, runId, openFile));
+    panel.append(renderIteration(it, runId, openViewer));
+    // Fill the wide viewer with this iteration's most useful artifact so it is
+    // never left empty: the rendered table if present, else its transcript.
+    if (it.dir != null && it.has_png) openViewer(`${it.dir}/table.png`, "table.png");
+    else if (it.dir != null && it.has_transcript) openViewer(`${it.dir}/transcript.json`, "transcript");
   };
   sel.addEventListener("change", () => show(parseInt(sel.value, 10)));
 
@@ -224,7 +248,7 @@ function buildIterationUI(groups, flat, runId, openFile) {
   return wrap;
 }
 
-function renderIteration(it, runId, openFile) {
+function renderIteration(it, runId, openViewer) {
   const box = el("div", {});
   // stat chips for this invocation
   const chips = el("div", { class: "chips" });
@@ -235,20 +259,20 @@ function renderIteration(it, runId, openFile) {
   if (it.duration_ms != null) chips.append(el("span", { class: "chip" }, fmtDur(it.duration_ms)));
   box.append(chips);
 
-  // table thumbnail (click -> open the full PNG in a new tab)
+  // table thumbnail (click -> open full in viewer)
   const fileUrl = (p) => `/api/runs/${encodeURIComponent(runId)}/file?path=${encodeURIComponent(p)}`;
   if (it.has_png && it.dir != null) {
     const p = `${it.dir}/table.png`;
-    const img = el("img", { class: "iter-thumb", src: fileUrl(p), alt: "table.png", onclick: () => openFile(p) });
+    const img = el("img", { class: "iter-thumb", src: fileUrl(p), alt: "table.png", onclick: () => openViewer(p, "table.png") });
     img.addEventListener("error", () => img.replaceWith(el("div", { class: "muted small" }, "table.png not rendered")));
     box.append(img);
   } else {
     box.append(el("div", { class: "muted small nobox" }, "No table.png (this iteration did not render a table)"));
   }
 
-  // action buttons -> open the file in a new browser tab
+  // action buttons -> load into the wide viewer
   const actions = el("div", { class: "iter-actions" });
-  const mk = (label, path) => el("button", { class: "btn ghost sm", onclick: () => openFile(path) }, label);
+  const mk = (label, path) => el("button", { class: "btn ghost sm", onclick: () => openViewer(path, label) }, label);
   if (it.has_png && it.dir != null) actions.append(mk("table.png", `${it.dir}/table.png`));
   if (it.has_py && it.dir != null) actions.append(mk("table.py", `${it.dir}/table.py`));
   if (it.has_transcript && it.dir != null) actions.append(mk("transcript", `${it.dir}/transcript.json`));

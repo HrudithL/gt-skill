@@ -265,7 +265,6 @@ table.runs tbody tr:hover td { background: var(--surface-2); }
 
 .detail-grid { display: grid; grid-template-columns: minmax(340px, 440px) 1fr; gap: 1.1rem; align-items: start; }
 .detail-left { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
-.detail-left.detail-stack { max-width: 900px; }
 .detail-left .section { padding: .9rem 1rem; }
 .viewer-panel { position: sticky; top: 70px; max-height: calc(100vh - 90px); overflow: auto; padding: 1rem; }
 .viewer-path { font-family: var(--mono); font-size: 12px; font-weight: 600; margin-bottom: .7rem; overflow-wrap: anywhere; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
