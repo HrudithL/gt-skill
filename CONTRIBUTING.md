@@ -85,6 +85,7 @@ main
 - **Sub-branches:** branch off a feature. Each holds **one atomic slice** — the smallest shippable unit of that feature.
 - **Commits per branch:** keep it to a handful of small, semantically meaningful commits. If a branch grows large, split it into more sub-branches.
 - **Parallelism:** independent slices MUST be developed in parallel via subagents (see [§4](#4-phase-3--executing-slices-subagents)). Dependent slices are serialized behind their parent.
+- **Isolation:** a single repository checkout can only have one branch checked out at a time — if two subagents share it, one switching branches yanks the working tree out from under the other, and edits or commits can land on the wrong branch. Each subagent working an in-flight branch in parallel with another MUST get its own git worktree (or clone). If isolated worktrees genuinely aren't available, serialize the branch work instead of sharing one checkout.
 - **Every branch is a leaf until proven otherwise.** Only create children when needed.
 
 ---
@@ -132,7 +133,7 @@ Every branch (sub → feature, feature → root) is integrated via a PR. No exce
 - **Base branch:** the direct parent in the tree. Sub-branch PRs target their feature branch. Feature PRs target the root branch. Only the root branch PR targets `main`.
 - **Title:** concise, imperative, scoped to the slice.
 - **Description MUST contain:**
-  - Link to the parent plan section in `.planning/<spec-name>.md` (paste the relevant excerpt — the file itself is gitignored).
+  - The relevant excerpt from the parent plan section in `.planning/<spec-name>.md`, pasted directly into the description — `.planning/` is gitignored, so a link to it would 404 for reviewers; the pasted excerpt is the only thing that actually resolves.
   - Summary of behavior change.
   - Explicit list of what was **not** changed / left for later slices.
   - Test evidence (commands run, output summary).
@@ -164,8 +165,11 @@ Treat this as part of the act of creating the PR, not a separate later step — 
 Do not react to partial results. Before making ANY fix on a PR, wait until **both** signals have
 fully finished:
 
-- **The entire CI run** — every job (including the slower `sentence-transformers` job), not just the
-  first one to report. A green fast job while another job is still running is **not** a pass.
+- **The entire CI run** — every job configured for this specific repository, not just the first one
+  to report. Check what's actually defined under `.github/workflows/` before waiting — a green fast
+  job while another job is still running is **not** a pass. (If a repo has no test/CI workflow beyond
+  a trigger-only action like an `@claude`-mention responder, this gate is trivially satisfied — there
+  is nothing else to wait for.)
 - **The entire Codex review** — the fresh bot review *comment* for your requested pass, not a partial
   or stale one. After each `@codex review`, wait for the new comment rather than assuming an earlier
   pass still applies.
@@ -173,8 +177,7 @@ fully finished:
 Reacting to a partial signal is the failure mode this rule prevents: pushing a fix while CI is still
 running or the review is mid-flight wastes CI minutes on a commit that's about to change, and it
 fragments one review into several passes. Collect **all** CI failures and **all** review comments
-first, then address them in a single follow-up pass and re-request review. (Now that CI includes a
-heavier ST job, the full run takes longer — waiting for it is deliberate, not optional.)
+first, then address them in a single follow-up pass and re-request review.
 
 ### Detecting the Codex review
 
@@ -218,7 +221,13 @@ Codex code review runs against the account's usage limits and can be **rate-limi
 
 This self-review **satisfies the review gate** for merging up the tree — it is not a licence to skip review, it is the *same* review performed by the agent when the external reviewer cannot run. Only if a self-review genuinely cannot be produced should the agent instead **ask the human** how review should be handled.
 
-> An external `@claude review` GitHub Action is deliberately **not** used as the fallback: it runs Claude inside CI, which requires paid auth (a Claude Max OAuth token or an `ANTHROPIC_API_KEY`) this repo does not carry. The Claude Code agent already driving the work provides the equivalent review at no extra cost.
+> Default to the self-review above rather than an external `@claude review` GitHub Action, even if
+> one is configured in this repo's `.github/workflows/` (e.g. a `claude.yml` responding to `@claude`
+> mentions): that action runs a *separate* Claude instance inside CI, with no context of this session's
+> work, and depends on CI-side auth (an OAuth token or `ANTHROPIC_API_KEY` secret) that may or may not
+> be provisioned. The Claude Code agent already driving the work provides the equivalent review at no
+> extra cost and with full context — reserve the CI action for cases where a human explicitly wants an
+> independent, out-of-session pass.
 
 ### Acting on review feedback
 
