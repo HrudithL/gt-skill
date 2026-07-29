@@ -42,12 +42,25 @@ def _baseline_match_rate(conv: dict) -> tuple[int, int]:
     matches = total = 0
     for field in ALL_FIELDS:
         e = conv.get(field)
-        if not isinstance(e, dict) or "consensus" not in e or "baseline" not in e:
+        # A run launched with no baseline still writes this field with
+        # "baseline": null (present, not absent) — count it as a real
+        # disagreement and every field would read as "baseline never matches",
+        # fabricating evidence the no-skill run did worse than it ever ran.
+        if not isinstance(e, dict) or "consensus" not in e or e.get("baseline") is None:
             continue
         total += 1
         if e["consensus"] == e["baseline"]:
             matches += 1
     return matches, total
+
+
+def _usage_tokens(usage: dict) -> int:
+    """Total tokens actually processed for one iteration: fresh input, prompt-cache
+    writes AND reads, plus output. Omitting cache-read tokens would undercount
+    skill runs far more than baseline ones (skill runs carry more turns, so a much
+    larger share of their input rides the cache), skewing the token comparison."""
+    return (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0) \
+        + (usage.get("cache_creation_input_tokens") or 0) + (usage.get("cache_read_input_tokens") or 0)
 
 
 def _token_cost_items(transcripts: list[Path]) -> list[dict]:
@@ -56,13 +69,10 @@ def _token_cost_items(transcripts: list[Path]) -> list[dict]:
         res = _result_entry(t)
         if not res:
             continue
-        usage = res.get("usage") or {}
-        tokens = (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0) \
-            + (usage.get("cache_creation_input_tokens") or 0)
         cost = res.get("total_cost_usd")
         if cost is None:
             continue
-        items.append({"tokens": tokens, "cost": cost})
+        items.append({"tokens": _usage_tokens(res.get("usage") or {}), "cost": cost})
     return items
 
 
@@ -93,13 +103,11 @@ def _unified_samples() -> list[dict]:
         for r in summ.get("results", []):
             if r.get("name") != prompt_dir.name:
                 continue
-            usage = r.get("usage") or {}
-            tokens = (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0) \
-                + (usage.get("cache_creation_input_tokens") or 0)
             cost = r.get("total_cost_usd")
             if cost is None:
                 continue
-            (base_items if r.get("kind") == "baseline" else skill_items).append({"tokens": tokens, "cost": cost})
+            item = {"tokens": _usage_tokens(r.get("usage") or {}), "cost": cost}
+            (base_items if r.get("kind") == "baseline" else skill_items).append(item)
 
         samples.append({
             "run_id": run_dir.name,

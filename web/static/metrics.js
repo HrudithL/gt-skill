@@ -133,7 +133,7 @@ function trendChart(rows) {
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = rows.length;
   const x = (i) => padL + (n === 1 ? plotW / 2 : (plotW * i) / (n - 1));
-  const y = (v) => padT + plotH * (1 - (v == null ? 0 : v));
+  const y = (v) => padT + plotH * (1 - v);
 
   const wrap = el("div", { class: "chart-wrap" });
   const tip = makeTooltip(wrap);
@@ -145,8 +145,17 @@ function trendChart(rows) {
     s.append(svg("text", { x: padL - 6, y: yy + 3, "text-anchor": "end", class: "chart-tick" }, Math.round(frac * 100) + "%"));
   }
 
+  // Missing values (e.g. a run launched with no baseline) break the line into
+  // a new subpath rather than plotting a fabricated 0% — a gap, not a dip.
   function pathFor(key) {
-    return rows.map((r, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(r[key])}`).join(" ");
+    let d = "", drawing = false;
+    rows.forEach((r, i) => {
+      const v = r[key];
+      if (v == null) { drawing = false; return; }
+      d += `${drawing ? "L" : "M"}${x(i)},${y(v)} `;
+      drawing = true;
+    });
+    return d.trim();
   }
   s.append(svg("path", { d: pathFor("baseline_match_rate"), fill: "none", stroke: BASE_COLOR, "stroke-width": 2, "stroke-dasharray": "6 4" }));
   s.append(svg("path", { d: pathFor("convergence"), fill: "none", stroke: SKILL_COLOR, "stroke-width": 2 }));
@@ -159,6 +168,7 @@ function trendChart(rows) {
     s.append(tick);
 
     for (const [key, color] of [["convergence", SKILL_COLOR], ["baseline_match_rate", BASE_COLOR]]) {
+      if (r[key] == null) continue;
       const cy = y(r[key]);
       const dot = svg("circle", { cx: gx, cy, r: 4, fill: color, stroke: "var(--surface,#fff)", "stroke-width": 2 });
       const hit = svg("circle", { cx: gx, cy, r: 12, fill: "transparent", class: "chart-hit" });
@@ -293,7 +303,11 @@ export async function renderMetricsTab(root) {
   // ---- consistency trend ----
   {
     const avgConv = d.trend.reduce((a, r) => a + (r.convergence ?? 0), 0) / d.trend.length;
-    const avgBase = d.trend.reduce((a, r) => a + (r.baseline_match_rate ?? 0), 0) / d.trend.length;
+    // Average only over runs that actually had a baseline — a run launched
+    // with no baseline has null here, and folding that in as 0 would make the
+    // benchmark look worse than any no-skill attempt ever scored.
+    const withBase = d.trend.filter((r) => r.baseline_match_rate != null);
+    const avgBase = withBase.length ? withBase.reduce((a, r) => a + r.baseline_match_rate, 0) / withBase.length : null;
     const { node, table } = trendChart(d.trend);
     root.append(chartCard(
       "Consistency: repeated with-skill runs vs. a single no-skill attempt",
