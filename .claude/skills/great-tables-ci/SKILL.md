@@ -1,6 +1,6 @@
 ---
 name: great-tables-ci
-description: "Use when building a table with `great_tables`, `gt.GT`, or `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Deterministic 7-step flowchart — understand data, organize columns, Big Color (≤2 colored measures), heading band, Small-Color checklist, titles/annotations, render+verify. Read `references/REFERENCE.md` before writing any Python; it routes every color/band/polish/API decision to the exact value that pins it. Mandatory renderer: `gt.gtsave(\"table.png\")`. Invoke before reading the data or writing any Python. CI-checked variant."
+description: Use when building a table with `great_tables`, `gt.GT`, or `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Deterministic 7-step flowchart — understand data, organize columns, Big Color (≤2 colored measures), heading band, Small-Color checklist, titles/annotations, render+verify. Read `references/REFERENCE.md` before writing any Python; it routes every color/band/polish/API decision to the exact value that pins it. The mandatory renderer is `gt.gtsave("table.png")`. Invoke before reading the data or writing any Python. CI-checked variant.
 ---
 
 # Great Tables Skill

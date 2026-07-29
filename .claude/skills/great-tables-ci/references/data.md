@@ -77,5 +77,3 @@ column silently breaks `fmt_*`/`data_color` downstream.
 If cleaning reveals the data cannot answer the request (a needed column is absent or
 unusable), stop — tell the user what is missing and emit a blank table (Step 1's
 validate-request rule). Never invent values to fill a gap.
-</content>
-</invoke>
