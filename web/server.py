@@ -10,6 +10,7 @@ and ``python run.py --flags`` share one behavior. Endpoints (07-frontend-runner.
     GET  /api/prompts                    corpus prompts grouped by difficulty
     GET  /api/data                       available data/*.csv
     GET  /api/models                     model dropdown (label -> id)
+    GET  /api/metrics                    skill-vs-baseline aggregates for the Metrics tab
     POST /api/plan                       dry-run a RunSpec -> planned dir tree
     POST /api/runs                       launch a run -> {run_id}
     GET  /api/runs                       history list (unified + legacy)
@@ -46,7 +47,7 @@ from starlette.staticfiles import StaticFiles
 from runner import discover, events, orchestrate, plan
 from runner.engine import ROOT, _path_within
 from runner.spec import RunSpec
-from web import history
+from web import history, metrics
 
 # Load .env at import so ANTHROPIC_API_KEY is present however the app is started
 # (uvicorn web.server:app, python -m web.server, or the TestClient). Idempotent.
@@ -162,6 +163,24 @@ async def _spec_from_body(request: Request) -> RunSpec:
     return RunSpec.from_dict(body)
 
 
+def _reject_cross_origin_launch(request: Request) -> str | None:
+    """Guard against a state-changing, cost-incurring POST arriving from a page
+    the user merely has open in another tab: request.json() parses the body
+    regardless of Content-Type, so a cross-site `text/plain` request (a CORS
+    "simple request" — no preflight) would otherwise launch a paid run with no
+    browser-side confirmation. Requiring an explicit JSON content type closes
+    that specific bypass; checking Origin (when the browser sends one) closes
+    the general cross-site-fetch case. Returns an error string, or None if the
+    request is same-origin JSON."""
+    ctype = request.headers.get("content-type", "").split(";")[0].strip().lower()
+    if ctype != "application/json":
+        return "content-type must be application/json"
+    origin = request.headers.get("origin")
+    if origin is not None and origin.rstrip("/") != f"{request.url.scheme}://{request.url.netloc}":
+        return "cross-origin requests are not allowed"
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # catalogs
 # --------------------------------------------------------------------------- #
@@ -198,6 +217,10 @@ async def models(_request: Request) -> JSONResponse:
     return JSONResponse({"models": discover.list_models()})
 
 
+async def metrics_ep(_request: Request) -> JSONResponse:
+    return JSONResponse(metrics.compute_metrics())
+
+
 # --------------------------------------------------------------------------- #
 # plan + launch + history
 # --------------------------------------------------------------------------- #
@@ -211,6 +234,8 @@ async def plan_ep(request: Request) -> JSONResponse:
 
 async def runs_ep(request: Request) -> JSONResponse:
     if request.method == "POST":
+        if (err := _reject_cross_origin_launch(request)) is not None:
+            return JSONResponse({"error": err}, status_code=403)
         try:
             spec = await _spec_from_body(request)
         except (KeyError, ValueError, TypeError) as e:
@@ -293,6 +318,7 @@ routes = [
     Route("/api/prompts", prompts),
     Route("/api/data", data),
     Route("/api/models", models),
+    Route("/api/metrics", metrics_ep),
     Route("/api/plan", plan_ep, methods=["POST"]),
     Route("/api/runs/{run_id}/events", run_events),
     Route("/api/runs/{run_id}/file", run_file_ep),

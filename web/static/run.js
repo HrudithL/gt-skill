@@ -156,8 +156,15 @@ export function renderRunTab(root, catalogs, { onJumpToHistory }) {
   async function launch() {
     if (!canLaunch()) return;
     const spec = buildSpec();
-    const plan = await postJSON("/api/plan", spec).catch(() => null);
-    const inv = plan ? plan.invocation_count : spec.prompts.length;
+    let plan;
+    try { plan = await postJSON("/api/plan", spec); }
+    catch (e) {
+      // Don't fall back to a prompts-only count (it ignores repeats/baseline
+      // and could silently skip the cost confirmation below) — just stop.
+      launchNote.textContent = "couldn't confirm invocation count, try again: " + e.message;
+      return;
+    }
+    const inv = plan.invocation_count;
     if (inv > 6 && !confirm(`This launches ${inv} agent invocations (API cost). Proceed?`)) return;
     let res;
     try {

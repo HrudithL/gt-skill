@@ -5,10 +5,17 @@ function esc(s) {
   return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 }
 
+// esc() above leaves quotes untouched (it only guards element text content), so
+// a link target needs its own escaping before it can sit inside an href="..."
+// attribute — otherwise a URL like `https://x/" onmouseover="..."` breaks out
+// of the attribute and injects a live handler.
+function escAttr(s) {
+  return s.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 // Only allow relative/anchor links or http(s)/mailto — never javascript:, data:,
 // vbscript:, etc. A crafted local skill/reference file could otherwise inject an
-// executable link target into the SPA. `u` is already HTML-escaped (so quotes
-// can't break out of the attribute); this blocks the dangerous-scheme case too.
+// executable link target into the SPA.
 function safeUrl(u) {
   const t = u.trim();
   const scheme = /^([a-z][a-z0-9+.\-]*):/i.exec(t);
@@ -22,7 +29,7 @@ function inline(s) {
     .replace(/\*\*([^*]+)\*\*/g, (_, c) => `<strong>${c}</strong>`)
     .replace(/(^|[^*])\*([^*]+)\*/g, (_, p, c) => `${p}<em>${c}</em>`)
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, u) =>
-      safeUrl(u) ? `<a href="${u}" target="_blank" rel="noopener">${t}</a>` : t);
+      safeUrl(u) ? `<a href="${escAttr(u)}" target="_blank" rel="noopener">${t}</a>` : t);
 }
 
 // A pragmatic block-level markdown renderer covering the constructs used in the

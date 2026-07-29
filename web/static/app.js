@@ -3,6 +3,7 @@ import { getJSON, el, clear } from "./api.js";
 import { renderRunTab } from "./run.js";
 import { renderHistoryTab } from "./history.js";
 import { renderSkillsTab } from "./skills.js";
+import { renderMetricsTab } from "./metrics.js";
 
 const view = document.getElementById("view");
 const nav = document.getElementById("nav");
@@ -27,11 +28,12 @@ function setTab(tab, arg) {
   if (tab === "run") cleanup = renderRunTab(view, catalogs, { onJumpToHistory: (id) => setTab("history", id) });
   else if (tab === "history") renderHistoryTab(view, arg || null);
   else if (tab === "skills") renderSkillsTab(view, catalogs);
+  else if (tab === "metrics") renderMetricsTab(view);
 }
 
 function buildNav() {
   clear(nav);
-  for (const [tab, label] of [["run", "Run"], ["history", "History"], ["skills", "Skills"]]) {
+  for (const [tab, label] of [["run", "Run"], ["history", "History"], ["metrics", "Metrics"], ["skills", "Skills"]]) {
     nav.append(el("button", { dataset: { tab }, onclick: () => setTab(tab) }, label));
   }
 }

@@ -13,6 +13,7 @@ the plan and the actual run agree byte-for-byte on paths.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from runner.engine import BASELINE_VARIANT, _VARIANT_SOURCES
@@ -21,6 +22,19 @@ from runner.spec import MODELS, PromptRef, RunSpec
 
 # Files the harness always produces inside each invocation dir.
 _PRODUCES = ["table.py", "table.png", "transcript.json"]
+
+# A prompt's `name` becomes a run/prompt directory component (below). Corpus
+# names are already safe slugs, but `name` also arrives verbatim from
+# POST /api/plan|/api/runs, so an API client could otherwise pass a value like
+# "../../etc" or "/tmp/x" and steer the run dir outside runs/. Anything that
+# isn't already a single safe component gets slugified instead of trusted.
+_SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _safe_component(name: str) -> str:
+    if name and name not in (".", "..") and _SAFE_NAME_RE.fullmatch(name):
+        return name
+    return slugify(name or "")
 
 
 # --------------------------------------------------------------------------- #
@@ -34,7 +48,7 @@ def prompt_dir_name(pref: PromptRef) -> str:
     prompt wording); anything else falls back to a slug of the text.
     """
     if pref.name:
-        return pref.name
+        return _safe_component(pref.name)
     if pref.source == "adhoc":
         return "ad-hoc"
     return slugify(pref.prompt)
