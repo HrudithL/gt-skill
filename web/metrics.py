@@ -19,11 +19,15 @@ once instead of averaging averages.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from runner import discover
+from runner.convergence import CONVERGENCE_FIELDS
 from runner.engine import ROOT
 from web.history import _read_json, _result_entry, _timestamp
+
+_AGREEMENT_RE = re.compile(r"^(\d+)/(\d+)$")
 
 # Fields whose "good table" reading is a plain present/absent boolean, so a
 # skill-consensus-true-rate vs baseline-true-rate comparison is meaningful.
@@ -77,6 +81,29 @@ def _baseline_match_counts(conv: dict) -> tuple[int, int]:
         total += 1
         if e["consensus"] == e["baseline"]:
             matches += 1
+    return matches, total
+
+
+def _consistency_counts(conv: dict) -> tuple[int, int]:
+    """(matches, total) pooled from every field's raw "M/N" agreement string —
+    the same underlying repeat-agreement counts overall_convergence itself
+    averages. Pooling these directly (rather than averaging each run's
+    already-divided overall_convergence) weights every repeat equally instead
+    of weighting a 2-repeat run the same as a 10-repeat run when several
+    historical runs of the same (skill, prompt) are combined."""
+    matches = total = 0
+    for field in CONVERGENCE_FIELDS:
+        e = conv.get(field)
+        if not isinstance(e, dict):
+            continue
+        m = _AGREEMENT_RE.match(e.get("agreement") or "")
+        if not m:
+            continue
+        n, d = int(m.group(1)), int(m.group(2))
+        if d == 0:
+            continue
+        matches += n
+        total += d
     return matches, total
 
 
@@ -145,14 +172,18 @@ def _unified_samples() -> list[dict]:
         conv = d.get("convergence") or {}
 
         base_items, skill_items = [], []
+        skill_repeat_n = 0
         for r in summ.get("results", []):
             if r.get("name") != prompt_dir.name:
                 continue
+            is_baseline = r.get("kind") == "baseline"
+            if not is_baseline:
+                skill_repeat_n += 1
             cost = r.get("total_cost_usd")
             if cost is None:
                 continue
             item = {"tokens": _usage_tokens(r.get("usage") or {}), "cost": cost}
-            (base_items if r.get("kind") == "baseline" else skill_items).append(item)
+            (base_items if is_baseline else skill_items).append(item)
 
         samples.append({
             "run_id": run_dir.name,
@@ -164,9 +195,11 @@ def _unified_samples() -> list[dict]:
             "convergence": d.get("overall_convergence"),
             "fields": conv,
             "baseline_match": _baseline_match_counts(conv),
+            "consistency": _consistency_counts(conv),
             "compliance": _compliance_counts(conv),
             "base_items": base_items,
             "skill_items": skill_items,
+            "skill_repeat_n": skill_repeat_n,
         })
     return samples
 
@@ -188,7 +221,8 @@ def _legacy_samples(corpus_names: dict[str, str]) -> list[dict]:
 
         base_tp = run_dir / "baseline" / "transcript.json"
         base_items = _token_cost_items([base_tp]) if base_tp.is_file() else []
-        skill_items = _token_cost_items(sorted((run_dir / "with_skill").glob("repeat_*/transcript.json")))
+        repeat_dirs = sorted((run_dir / "with_skill").glob("repeat_*"))
+        skill_items = _token_cost_items([p / "transcript.json" for p in repeat_dirs])
 
         samples.append({
             "run_id": run_dir.name,
@@ -200,9 +234,11 @@ def _legacy_samples(corpus_names: dict[str, str]) -> list[dict]:
             "convergence": d.get("overall_convergence"),
             "fields": conv,
             "baseline_match": _baseline_match_counts(conv),
+            "consistency": _consistency_counts(conv),
             "compliance": _compliance_counts(conv),
             "base_items": base_items,
             "skill_items": skill_items,
+            "skill_repeat_n": len(repeat_dirs),
         })
     return samples
 
@@ -252,14 +288,17 @@ def _by_skill_prompt(samples: list[dict]) -> list[dict]:
         key = (s["skill"] or "unknown", s["prompt_key"])
         g = groups.setdefault(key, {
             "skill": s["skill"] or "unknown", "prompt_key": s["prompt_key"],
-            "run_ids": set(), "conv_vals": [],
+            "run_ids": set(), "n_iterations": 0,
+            "consist_m": 0, "consist_t": 0,
             "match_m": 0, "match_t": 0,
             "comp_st": 0, "comp_sn": 0, "comp_bt": 0, "comp_bn": 0,
             "base_items": [], "skill_items": [],
         })
         g["run_ids"].add(s["run_id"])
-        if s["convergence"] is not None:
-            g["conv_vals"].append(s["convergence"])
+        g["n_iterations"] += s["skill_repeat_n"]
+        cm, ct = s["consistency"]
+        g["consist_m"] += cm
+        g["consist_t"] += ct
         m, t = s["baseline_match"]
         g["match_m"] += m
         g["match_t"] += t
@@ -275,8 +314,8 @@ def _by_skill_prompt(samples: list[dict]) -> list[dict]:
     for g in groups.values():
         rows.append({
             "skill": g["skill"], "prompt": g["prompt_key"].replace("_", " "), "prompt_key": g["prompt_key"],
-            "n_runs": len(g["run_ids"]), "n_iterations": len(g["skill_items"]),
-            "skill_consistency_avg": round(sum(g["conv_vals"]) / len(g["conv_vals"]), 3) if g["conv_vals"] else None,
+            "n_runs": len(g["run_ids"]), "n_iterations": g["n_iterations"],
+            "skill_consistency_avg": _ratio(g["consist_m"], g["consist_t"]),
             "baseline_consistency": _ratio(g["match_m"], g["match_t"]),
             "skill_compliance_avg": _ratio(g["comp_st"], g["comp_sn"]),
             "baseline_compliance": _ratio(g["comp_bt"], g["comp_bn"]),
