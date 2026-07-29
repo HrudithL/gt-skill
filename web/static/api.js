@@ -56,5 +56,5 @@ export function fmtCost(c) {
 }
 
 export function fmtInt(n) {
-  return n == null ? "—" : Number(n).toLocaleString();
+  return n == null ? "—" : Math.round(Number(n)).toLocaleString();
 }

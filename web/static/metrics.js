@@ -2,7 +2,9 @@
 // /api/metrics (which pools every historical convergence run and groups it by
 // skill + prompt), each pairing the skill's average against the no-skill
 // baseline sampled from the exact same runs, so the comparison is real data,
-// not a canned narrative.
+// not a canned narrative. Every chart carries its own axis scale and direct
+// "baseline -> with skill" value labels, so it reads standalone — a viewer
+// shouldn't need to hover or open the table to see what the numbers are.
 import { el, clear, getJSON, fmtCost, fmtInt } from "./api.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -20,6 +22,15 @@ function svg(tag, attrs = {}, ...children) {
 }
 
 function pct(v) { return v == null ? "—" : Math.round(v * 100) + "%"; }
+
+// A "nice" axis step (1/2/5 x 10^n) so ticks land on round numbers.
+function niceStep(maxV) {
+  if (!(maxV > 0)) return 1;
+  const raw = maxV / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+}
 
 // ---- shared hover tooltip (one floating div per chart wrapper) ----
 function makeTooltip(wrap) {
@@ -61,7 +72,9 @@ function chartCard(title, caption, chartNode, tableNode) {
 }
 
 // --------------------------------------------------------------------------- //
-// formatting checklist (global): skill consensus vs baseline, grouped bars
+// formatting checklist (global): skill consensus vs baseline, grouped bars,
+// each bar direct-labeled with its own percent so the chart reads without
+// hovering.
 // --------------------------------------------------------------------------- //
 const FIELD_LABELS = {
   frame_present: "Frame / border", striping_present: "Row striping", dividers_present: "Column dividers",
@@ -69,7 +82,7 @@ const FIELD_LABELS = {
 };
 
 function formattingChart(rows) {
-  const W = 680, H = 260, padL = 40, padR = 12, padT = 10, padB = 46;
+  const W = 680, H = 280, padL = 40, padR = 12, padT = 22, padB = 46;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = rows.length;
   const groupW = plotW / n;
@@ -104,6 +117,8 @@ function formattingChart(rows) {
       rect.addEventListener("pointermove", onHover);
       rect.addEventListener("pointerleave", () => tip.hide());
       s.append(rect);
+      // direct value-at-the-tip label, so each bar reads without hovering
+      s.append(svg("text", { x: b.x + barW / 2, y: y - 5, "text-anchor": "middle", class: "chart-bar-label" }, pct(b.v)));
     }
   });
 
@@ -125,20 +140,50 @@ function formattingChart(rows) {
 // per (skill, prompt) dumbbell: baseline vs skill-avg, one row per combo —
 // reused for compliance / consistency / tokens / price, since all four are
 // "baseline_<key>" vs "skill_<key>_avg" pairs on a by_skill_prompt row.
+//
+// Every row carries an always-visible "baseline -> with skill" value pair and
+// a delta chip in fixed right-hand columns (not attached to the dots, which
+// move), plus a top axis with real gridlines/ticks — so the exact numbers and
+// their scale are both readable without hovering.
 // --------------------------------------------------------------------------- //
-function dumbbellChart(rows, { key, format, label }) {
-  const rowH = 30, padL = 190, padR = 70;
-  const PADT = 10, PADB = 26, W = 680;
+function dumbbellChart(rows, { key, format, label, isPercent }) {
+  const rowH = 32, padL = 200, padR = 220;
+  const PADT = 26, PADB = 10, W = 800;
   const plotW = W - padL - padR;
   const H = PADT + PADB + rowH * rows.length;
+  // The last axis tick is centered at the plot's right edge (W - padR), so its
+  // own label (up to ~$0.2000 wide) needs real clearance before this column
+  // starts, not just a token 16px gap.
+  const valueColX = W - padR + 40;
+  const deltaColX = W - 8;
 
   const values = rows.flatMap((r) => [r[`baseline_${key}`], r[`skill_${key}_avg`]]);
-  const maxV = Math.max(...values, 1) * 1.12;
-  const x = (v) => padL + (plotW * v) / maxV;
+  const dataMax = Math.max(...values, isPercent ? 1 : 0);
+  const ticks = isPercent
+    ? [0, 0.25, 0.5, 0.75, 1]
+    : (() => {
+        const step = niceStep(dataMax);
+        const top = Math.ceil(dataMax / step) * step;
+        const out = [];
+        for (let t = 0; t <= top + 1e-9; t += step) out.push(t);
+        return out;
+      })();
+  const domainMax = ticks[ticks.length - 1] || 1;
+  const x = (v) => padL + (plotW * v) / domainMax;
 
   const wrap = el("div", { class: "chart-wrap" });
   const tip = makeTooltip(wrap);
   const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img" });
+
+  // top axis: gridlines through every row + tick labels once at the top
+  for (const t of ticks) {
+    const gx = x(t);
+    s.append(svg("line", { x1: gx, x2: gx, y1: PADT - 4, y2: H - PADB, stroke: "var(--grid,#e1e0d9)", "stroke-width": 1 }));
+    s.append(svg("text", { x: gx, y: PADT - 10, "text-anchor": "middle", class: "chart-tick" }, format(t)));
+  }
+  // column headers for the always-visible value/delta labels
+  s.append(svg("text", { x: valueColX, y: PADT - 10, class: "chart-tick" }, "baseline → with skill"));
+  s.append(svg("text", { x: deltaColX, y: PADT - 10, "text-anchor": "end", class: "chart-tick" }, "Δ"));
 
   rows.forEach((r, i) => {
     const cy = PADT + rowH * i + rowH / 2;
@@ -153,7 +198,7 @@ function dumbbellChart(rows, { key, format, label }) {
     const deltaLabel = delta == null ? "—" : (delta >= 0 ? "+" : "") + Math.round(delta * 100) + "%";
 
     // When the two dots sit close enough to overlap, nudge them apart
-    // vertically so both stay visible and the delta label has clear air.
+    // vertically so both stay visible.
     const overlap = Math.abs(x(sv) - x(bv)) < 16;
     const dotY = { base: cy + (overlap ? -5 : 0), skill: cy + (overlap ? 5 : 0) };
 
@@ -171,8 +216,12 @@ function dumbbellChart(rows, { key, format, label }) {
       hit.addEventListener("pointerleave", () => tip.hide());
       s.append(dot, hit);
     }
-    const labelX = Math.max(x(sv), x(bv)) + 12;
-    s.append(svg("text", { x: labelX, y: cy + 4, class: `chart-delta ${delta == null ? "" : delta >= 0 ? "up" : "down"}` }, deltaLabel));
+
+    // Always-visible value pair + delta, in fixed columns so they never
+    // collide with the dots (which move) or with each other.
+    const valuePair = bv == null ? `— → ${format(sv)}` : `${format(bv)} → ${format(sv)}`;
+    s.append(svg("text", { x: valueColX, y: cy + 4, class: "chart-value-pair" }, valuePair));
+    s.append(svg("text", { x: deltaColX, y: cy + 4, "text-anchor": "end", class: `chart-delta ${delta == null ? "" : delta >= 0 ? "up" : "down"}` }, deltaLabel));
   });
 
   wrap.append(s);
@@ -247,10 +296,10 @@ export async function renderMetricsTab(root) {
   {
     const a = avgDelta(bySP, "compliance");
     const rows = bySP.filter((r) => r.baseline_compliance != null && r.skill_compliance_avg != null);
-    const { node, table } = dumbbellChart(rows, { key: "compliance", format: pct, label: "compliance" });
+    const { node, table } = dumbbellChart(rows, { key: "compliance", format: pct, label: "compliance", isPercent: true });
     root.append(chartCard(
       "Formatting compliance per skill & prompt",
-      a ? `Averaged across every skill/prompt combo, the skill's own consensus follows the checklist ${pct(a.skill)} of the time vs. ${pct(a.base)} for a single no-skill attempt.` : "",
+      a ? `Averaged across every skill/prompt combo: ${pct(a.base)} checklist compliance with no skill, ${pct(a.skill)} with the skill — every row below shows its own before/after percentage.` : "",
       node, table));
   }
 
@@ -258,10 +307,10 @@ export async function renderMetricsTab(root) {
   {
     const a = avgDelta(bySP, "consistency");
     const rows = bySP.filter((r) => r.baseline_consistency != null && r.skill_consistency_avg != null);
-    const { node, table } = dumbbellChart(rows, { key: "consistency", format: pct, label: "consistency" });
+    const { node, table } = dumbbellChart(rows, { key: "consistency", format: pct, label: "consistency", isPercent: true });
     root.append(chartCard(
       "Consistency per skill & prompt: repeats vs. a single no-skill attempt",
-      a ? `The skill's repeats agree with each other ${pct(a.skill)} of the time on average; a lone no-skill attempt only lands on that same consensus ${pct(a.base)} of the time.` : "",
+      a ? `Averaged across every combo: a single no-skill attempt lands on the skill's own consensus ${pct(a.base)} of the time; the skill's own repeats agree with each other ${pct(a.skill)} of the time — every row below shows its own before/after percentage.` : "",
       node, table));
   }
 
@@ -269,10 +318,10 @@ export async function renderMetricsTab(root) {
   {
     const a = avgDelta(bySP, "tokens");
     const rows = bySP.filter((r) => r.baseline_tokens != null && r.skill_tokens_avg != null);
-    const { node, table } = dumbbellChart(rows, { key: "tokens", format: fmtInt, label: "tokens" });
+    const { node, table } = dumbbellChart(rows, { key: "tokens", format: fmtInt, label: "tokens", isPercent: false });
     root.append(chartCard(
       "Token usage per iteration, per skill & prompt",
-      a ? `On average the skill uses ${a.delta >= 0 ? "+" : ""}${Math.round(a.delta * 100)}% tokens per iteration vs. a no-skill attempt — the cost of the extra verification and formatting work behind the consistency above.` : "",
+      a ? `Averaged across every combo: ${fmtInt(a.base)} tokens per iteration with no skill vs. ${fmtInt(a.skill)} with the skill (${a.delta >= 0 ? "+" : ""}${Math.round(a.delta * 100)}%) — the cost of the extra verification and formatting work behind the consistency above.` : "",
       node, table));
   }
 
@@ -280,10 +329,10 @@ export async function renderMetricsTab(root) {
   {
     const a = avgDelta(bySP, "cost");
     const rows = bySP.filter((r) => r.baseline_cost != null && r.skill_cost_avg != null);
-    const { node, table } = dumbbellChart(rows, { key: "cost", format: fmtCost, label: "price" });
+    const { node, table } = dumbbellChart(rows, { key: "cost", format: fmtCost, label: "price", isPercent: false });
     root.append(chartCard(
       "Price per iteration, per skill & prompt",
-      a ? `That works out to ${a.delta >= 0 ? "+" : ""}${Math.round(a.delta * 100)}% price per iteration on average.` : "",
+      a ? `Averaged across every combo: ${fmtCost(a.base)} per iteration with no skill vs. ${fmtCost(a.skill)} with the skill (${a.delta >= 0 ? "+" : ""}${Math.round(a.delta * 100)}%).` : "",
       node, table));
   }
 }
