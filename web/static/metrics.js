@@ -149,7 +149,12 @@ function formattingChart(rows) {
 // move), plus a top axis with real gridlines/ticks — so the exact numbers and
 // their scale are both readable without hovering.
 // --------------------------------------------------------------------------- //
-function dumbbellChart(rows, { key, format, label, isPercent }) {
+function dumbbellChart(rows, { key, format, label, isPercent, higherIsBetter = true, deltaLabel = "Δ", deltaValue, deltaFormat }) {
+  const getDelta = deltaValue || ((r) => {
+    const bv = r[`baseline_${key}`], sv = r[`skill_${key}_avg`];
+    return bv != null ? (bv === 0 ? null : (sv - bv) / bv) : null;
+  });
+  const fmtDelta = deltaFormat || ((d) => d == null ? "—" : (d >= 0 ? "+" : "") + Math.round(d * 100) + "%");
   const rowH = 32, padL = 200, padR = 220;
   // AXIS_H reserves room below the last row for a real bottom x-axis (baseline
   // + tick marks + numbers), separate from PADB's small breathing-room gap.
@@ -199,7 +204,7 @@ function dumbbellChart(rows, { key, format, label, isPercent }) {
   }
   // column headers for the always-visible value/delta labels
   s.append(svg("text", { x: valueColX, y: PADT - 10, class: "chart-tick" }, "baseline → with skill"));
-  s.append(svg("text", { x: deltaColX, y: PADT - 10, "text-anchor": "end", class: "chart-tick" }, "Δ"));
+  s.append(svg("text", { x: deltaColX, y: PADT - 10, "text-anchor": "end", class: "chart-tick" }, deltaLabel));
 
   rows.forEach((r, i) => {
     const cy = PADT + rowH * i + rowH / 2;
@@ -210,8 +215,12 @@ function dumbbellChart(rows, { key, format, label, isPercent }) {
     s.append(svg("text", { x: padL - 10, y: cy + 4, "text-anchor": "end", class: "chart-tick ellipsis-label" }, rowLabel));
     s.append(svg("line", { x1: x(bv), x2: x(sv), y1: cy, y2: cy, stroke: "var(--border-strong,#bccbdd)", "stroke-width": 2 }));
 
-    const delta = bv != null ? (bv === 0 ? null : (sv - bv) / bv) : null;
-    const deltaLabel = delta == null ? "—" : (delta >= 0 ? "+" : "") + Math.round(delta * 100) + "%";
+    const delta = getDelta(r);
+    const deltaText = fmtDelta(delta);
+    // "Better" depends on the metric — a rise in compliance/consistency is
+    // good (green), a rise in tokens/cost is bad (red) — so color follows
+    // higherIsBetter rather than assuming positive-always-red/negative-green.
+    const good = delta == null ? null : (higherIsBetter ? delta >= 0 : delta <= 0);
 
     // When the two dots sit close enough to overlap, nudge them apart
     // vertically so both stay visible.
@@ -224,7 +233,7 @@ function dumbbellChart(rows, { key, format, label, isPercent }) {
       const hit = svg("circle", { cx: x(v), cy: dy, r: 14, fill: "transparent", class: "chart-hit" });
       const onHover = (e) => tip.show(e.clientX, e.clientY, [
         { label: `${name} · ${rowLabel}`, value: format(v), color },
-        { label: "Δ with skill vs baseline", value: deltaLabel, color: SKILL_COLOR },
+        { label: `${deltaLabel} vs baseline`, value: deltaText, color: SKILL_COLOR },
         { label: "sample size", value: nLabel, color: "var(--muted,#898781)" },
       ]);
       hit.addEventListener("pointerenter", onHover);
@@ -237,23 +246,22 @@ function dumbbellChart(rows, { key, format, label, isPercent }) {
     // collide with the dots (which move) or with each other.
     const valuePair = bv == null ? `— → ${format(sv)}` : `${format(bv)} → ${format(sv)}`;
     s.append(svg("text", { x: valueColX, y: cy + 4, class: "chart-value-pair" }, valuePair));
-    s.append(svg("text", { x: deltaColX, y: cy + 4, "text-anchor": "end", class: `chart-delta ${delta == null ? "" : delta >= 0 ? "up" : "down"}` }, deltaLabel));
+    s.append(svg("text", { x: deltaColX, y: cy + 4, "text-anchor": "end", class: `chart-delta ${good == null ? "" : good ? "good" : "bad"}` }, deltaText));
   });
 
   wrap.append(s);
   wrap.append(legend([{ label: "No-skill baseline", color: BASE_COLOR }, { label: "With skill (average)", color: SKILL_COLOR }]));
 
   const table = el("table", { class: "metric-table" },
-    el("thead", {}, el("tr", {}, el("th", {}, "Prompt"), el("th", {}, "Skill"), el("th", { class: "num" }, "Baseline " + label), el("th", { class: "num" }, "With-skill avg " + label), el("th", { class: "num" }, "Δ"), el("th", { class: "num" }, "iterations"))),
+    el("thead", {}, el("tr", {}, el("th", {}, "Prompt"), el("th", {}, "Skill"), el("th", { class: "num" }, "Baseline " + label), el("th", { class: "num" }, "With-skill avg " + label), el("th", { class: "num" }, deltaLabel), el("th", { class: "num" }, "iterations"))),
     el("tbody", {}, rows.map((r) => {
       const bv = r[`baseline_${key}`], sv = r[`skill_${key}_avg`];
-      const delta = bv != null ? (bv === 0 ? null : (sv - bv) / bv) : null;
       return el("tr", {},
         el("td", {}, r.prompt),
         el("td", {}, r.skill),
         el("td", { class: "num" }, format(bv)),
         el("td", { class: "num" }, format(sv)),
-        el("td", { class: "num" }, delta == null ? "—" : (delta >= 0 ? "+" : "") + Math.round(delta * 100) + "%"),
+        el("td", { class: "num" }, fmtDelta(getDelta(r))),
         el("td", { class: "num" }, r.n_iterations));
     })));
 
@@ -312,7 +320,7 @@ export async function renderMetricsTab(root) {
   {
     const a = avgDelta(bySP, "compliance");
     const rows = bySP.filter((r) => r.baseline_compliance != null && r.skill_compliance_avg != null);
-    const { node, table } = dumbbellChart(rows, { key: "compliance", format: pct, label: "compliance", isPercent: true });
+    const { node, table } = dumbbellChart(rows, { key: "compliance", format: pct, label: "compliance", isPercent: true, higherIsBetter: true });
     root.append(chartCard(
       "Formatting compliance per skill & prompt",
       a ? `Averaged across every skill/prompt combo: ${pct(a.base)} checklist compliance with no skill, ${pct(a.skill)} with the skill — every row below shows its own before/after percentage.` : "",
@@ -323,32 +331,30 @@ export async function renderMetricsTab(root) {
   {
     const a = avgDelta(bySP, "consistency");
     const rows = bySP.filter((r) => r.baseline_consistency != null && r.skill_consistency_avg != null);
-    const { node, table } = dumbbellChart(rows, { key: "consistency", format: pct, label: "consistency", isPercent: true });
+    const { node, table } = dumbbellChart(rows, { key: "consistency", format: pct, label: "consistency", isPercent: true, higherIsBetter: true });
     root.append(chartCard(
       "Consistency per skill & prompt: repeats vs. a single no-skill attempt",
       a ? `Averaged across every combo: a single no-skill attempt lands on the skill's own consensus ${pct(a.base)} of the time; the skill's own repeats agree with each other ${pct(a.skill)} of the time — every row below shows its own before/after percentage.` : "",
       node, table));
   }
 
-  // ---- token usage per skill & prompt ----
+  // ---- token usage & price per skill & prompt (merged: cost tracks token
+  // count almost exactly, so one dumbbell — scaled on tokens — carries both;
+  // the right-hand column shows the actual dollar cost increase rather than
+  // a second, redundant percentage) ----
   {
-    const a = avgDelta(bySP, "tokens");
+    const aTok = avgDelta(bySP, "tokens");
+    const aCost = avgDelta(bySP, "cost");
     const rows = bySP.filter((r) => r.baseline_tokens != null && r.skill_tokens_avg != null);
-    const { node, table } = dumbbellChart(rows, { key: "tokens", format: fmtInt, label: "tokens", isPercent: false });
+    const { node, table } = dumbbellChart(rows, {
+      key: "tokens", format: fmtInt, label: "tokens", isPercent: false, higherIsBetter: false,
+      deltaLabel: "cost Δ",
+      deltaValue: (r) => (r.baseline_cost != null && r.skill_cost_avg != null) ? r.skill_cost_avg - r.baseline_cost : null,
+      deltaFormat: (d) => d == null ? "—" : (d >= 0 ? "+$" : "-$") + Math.abs(d).toFixed(4),
+    });
     root.append(chartCard(
-      "Token usage per iteration, per skill & prompt",
-      a ? `Averaged across every combo: ${fmtInt(a.base)} tokens per iteration with no skill vs. ${fmtInt(a.skill)} with the skill (${a.delta >= 0 ? "+" : ""}${Math.round(a.delta * 100)}%) — the cost of the extra verification and formatting work behind the consistency above.` : "",
-      node, table));
-  }
-
-  // ---- price per skill & prompt ----
-  {
-    const a = avgDelta(bySP, "cost");
-    const rows = bySP.filter((r) => r.baseline_cost != null && r.skill_cost_avg != null);
-    const { node, table } = dumbbellChart(rows, { key: "cost", format: fmtCost, label: "price", isPercent: false });
-    root.append(chartCard(
-      "Price per iteration, per skill & prompt",
-      a ? `Averaged across every combo: ${fmtCost(a.base)} per iteration with no skill vs. ${fmtCost(a.skill)} with the skill (${a.delta >= 0 ? "+" : ""}${Math.round(a.delta * 100)}%).` : "",
+      "Token usage & price per iteration, per skill & prompt",
+      aTok && aCost ? `Averaged across every combo: ${fmtInt(aTok.base)} tokens per iteration with no skill vs. ${fmtInt(aTok.skill)} with the skill (${aTok.delta >= 0 ? "+" : ""}${Math.round(aTok.delta * 100)}%) — the cost of the extra verification and formatting work behind the consistency above, which comes out to ${fmtCost(aCost.base)} vs. ${fmtCost(aCost.skill)} per iteration.` : "",
       node, table));
   }
 }
