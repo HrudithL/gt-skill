@@ -56,6 +56,18 @@ Each run writes one tree under `runs/<ts>_<skill>_<slug>/`:
 The CSV stays where it is — the agent reads it from a symlink in the run dir and
 is **never** asked to copy it elsewhere.
 
+## Web UI
+
+The same runner is also available through a browser-based control plane:
+
+```bash
+uvicorn web.server:app --port 8000
+```
+
+Then open `http://localhost:8000`. It calls the same `runner` core as `run.py`,
+so a run launched from the browser behaves identically to one launched from
+the CLI.
+
 ## How it works
 
 - Three self-contained skills live under `.claude/skills/great-tables` (prose),
