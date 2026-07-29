@@ -82,7 +82,7 @@ const FIELD_LABELS = {
 };
 
 function formattingChart(rows) {
-  const W = 680, H = 280, padL = 40, padR = 12, padT = 10, padB = 46;
+  const W = 680, H = 280, padL = 40, padR = 12, padT = 22, padB = 46;
   const plotW = W - padL - padR, plotH = H - padT - padB;
   const n = rows.length;
   const groupW = plotW / n;
@@ -151,7 +151,10 @@ function dumbbellChart(rows, { key, format, label, isPercent }) {
   const PADT = 26, PADB = 10, W = 800;
   const plotW = W - padL - padR;
   const H = PADT + PADB + rowH * rows.length;
-  const valueColX = W - padR + 16;
+  // The last axis tick is centered at the plot's right edge (W - padR), so its
+  // own label (up to ~$0.2000 wide) needs real clearance before this column
+  // starts, not just a token 16px gap.
+  const valueColX = W - padR + 40;
   const deltaColX = W - 8;
 
   const values = rows.flatMap((r) => [r[`baseline_${key}`], r[`skill_${key}_avg`]]);
