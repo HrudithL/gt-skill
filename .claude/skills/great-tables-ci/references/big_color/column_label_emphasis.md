@@ -12,18 +12,10 @@ Does the table have ANY Big Color?
            Let the data color dominate; the band stays quiet. See the light branch below.
 ```
 
-So a **dark saturated header band anchors the table ONLY when there is no Big Color**
-— the pure categorical/text table (gtcars-style) with no magnitude/trend/signed/winner
-story. **When Big Color exists, the band goes light** and is a Small-Color surface, not
-a Big-Color one.
-
 ## When to use the DARK band (no-Big-Color branch)
 
-- The body is intentionally quiet — no `data_color` fill, no status pills, no
-  highlighted rows, no colored text. The header must be the top anchor.
-- The table has **spanners** or many columns and the reader needs the header to
-  structure everything below.
-- You want an editorial look where the header is a clear band across the top.
+Use it when the body is intentionally quiet (no fill/pills/highlights) and the header
+must be the anchor — e.g. tables with spanners/many columns, or an editorial top band.
 
 ## Recipe — DARK band (no Big Color)
 
@@ -42,11 +34,12 @@ gt = (
 )
 ```
 
-White label text on the solid comes from great-tables' automatic contrast; set it
-explicitly with `column_labels.style` if a theme overrode it. Pick the hue per the DA
-hue-selection rule in `references/palettes.md` §1 — default **Navy** `#22384F`, else
-harmonize to the subject/theme (Forest `#2F4A38`, Oxblood `#5C2E2E`, Espresso
-`#4A3A2C`, Ochre `#9A7B33`, Tan `#8A7452`).
+White label text on the solid comes from great-tables' automatic contrast (this applies
+to `tab_options` only — `tab_style` does NOT auto-contrast, so the single-column recipe
+below sets `style.text(...)` explicitly); override with `column_labels.style` if a theme
+overrode it. Hue per DA hue-selection rule, `references/palettes.md` §1 — default
+**Navy** `#22384F`, else Forest `#2F4A38`, Oxblood `#5C2E2E`, Espresso `#4A3A2C`, Ochre
+`#9A7B33`, Tan `#8A7452`.
 
 For a single-column emphasis (anchor just the one "answer" column's header):
 
@@ -63,27 +56,23 @@ gt = gt.tab_style(
 
 When the table has any Big Color, **do not use a dark band.** The header becomes a
 quiet washed-DA tint (matched to the dominant Big-Color hue) or grey — a Small-Color
-surface. Set it with `tab_options(column_labels_background_color=…)` using a washed
-tint from `references/palettes.md` §1 (e.g. pale-blue `#EAF0F6` for a `Blues` table) or
-grey `#F0F0F0`, keeping bold labels dark. The bottom rule stays `#CCCCCC`, 2px either
-way. This light case is governed by the grey-budget rule in `references/small_color.md`.
+surface, set via `tab_options(column_labels_background_color=…)` with a washed tint
+from `references/palettes.md` §1 (e.g. `#EAF0F6` for `Blues`) or grey `#F0F0F0`, bold
+labels dark. Bottom rule stays `#CCCCCC`, 2px, either way. Governed by the grey-budget
+rule in `references/small_color.md`.
 
 ## Rules
 
-- **Dark band ⇒ no Big Color.** If any Big Color exists, the band is light — never
-  stack a dark saturated band on top of a colored body; they fight for the anchor role.
+- **Dark band ⇒ no Big Color**; never stack a dark saturated band on a colored body.
 - **Dark fill + white text** (never dark-on-dark). Light fill ⇒ dark bold text.
-- **The header emphasis must match or exceed spanner emphasis.** If you loud-fill the
-  column labels, the spanners need at least the same visual weight (bolder, matching
-  fill, or a slightly darker shade of the same DA hue).
-- **One strong header treatment per table.** Don't also loud-color the row-group
-  labels, source note, and stub — the header alone owns the "structural loud" slot.
-- **Stub column labels are part of the header.** If you fill the header, either include
-  the stubhead in the same fill or explicitly leave it blank; a mismatched stubhead
-  cell reads as a bug.
+- **Header emphasis ≥ spanner emphasis** — if labels are loud-filled, spanners need at
+  least the same weight.
+- **One strong header treatment per table** — don't also loud-color row-group labels,
+  source note, and stub.
+- **Stub column labels are part of the header** — fill the stubhead to match or leave it
+  explicitly blank; a mismatched stubhead reads as a bug.
 
 ## Counts as
 
-One Big Color treatment (the dark-band case). If you *also* fill spanner cells to match,
-that's still one treatment (they're the same structural band). The light-band case is
-**not** a Big Color treatment — it's Small-Color chrome.
+One Big Color treatment (the dark-band case; filling spanners to match is still the same
+treatment). The light-band case is **not** a Big Color treatment — it's Small-Color chrome.

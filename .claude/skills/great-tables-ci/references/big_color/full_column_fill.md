@@ -1,6 +1,6 @@
 # Big Color — Full Column Fill
 
-Apply a solid background color to every body cell in one (or a small number of) column(s) so that the column reads as *the* column in the table.
+Solid background on every body cell in one (or a few) column(s) so it reads as *the* column.
 
 ## When to use
 
@@ -27,11 +27,11 @@ gt = (
 
 ## Rules
 
-- **One fill color for the whole column.** Do not vary it row-by-row — that's a different technique (`column_gradient_fill` or `status_cell_fill`).
-- **A solid Dark Academia hex with white text** (this is a non-gradient Big Color). Navy `#22384F` is the default; harmonize to the table's DA hue per the DA hue-selection rule in `references/palettes.md` §1 (Forest `#2F4A38`, Oxblood `#5C2E2E`, Espresso `#4A3A2C`, Ochre `#9A7B33`, Tan `#8A7452`). Never a pale/washed tint here — that quiet tint belongs to the stub, not to a Big-Color column.
-- **Also fill the column-label header** for that column with the same DA solid if you want the emphasis to extend into the header — pair with the `column_label_emphasis` technique on just that column.
-- **Do not** fill the stub column this way. Stub is structural — use the stub tint in `references/small_color.md` instead.
+- **One fill color for the whole column** — don't vary row-by-row (that's `column_gradient_fill` or `status_cell_fill`).
+- **Solid Dark Academia hex + white text** (non-gradient Big Color). Navy `#22384F` is the default; harmonize to the table's DA hue per `references/palettes.md` §1 (Forest `#2F4A38`, Oxblood `#5C2E2E`, Espresso `#4A3A2C`, Ochre `#9A7B33`, Tan `#8A7452`). Never a pale/washed tint here — that's for the stub.
+- Optionally also fill the column-label header with the same DA solid (pair with `column_label_emphasis`) to extend the emphasis upward.
+- **Do not** fill the stub column this way — use the stub tint in `references/small_color.md` instead.
 
 ## Counts as
 
-One Big Color treatment (even if you also bold the text — bold + fill on the same target answers one question).
+One Big Color treatment, even with bold added.
