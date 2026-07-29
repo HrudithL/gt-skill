@@ -1,13 +1,12 @@
 # Small Color — the fixed Step-5 checklist
 
-Step 5 is **overall formatting**, and it is **not a menu**. Every table runs this
-checklist top to bottom. Each item is **gated** by a rule (the condition that fires
-it) and, when it fires, uses the **one** `great_tables` mechanism given here. Every
-light surface is drawn from the **washed-DA + neutral-grey** palette below — never a
-saturated color.
+Step 5 is the fixed, **not-a-menu** formatting pass: every table runs this checklist
+top to bottom. Each item has a **gate** (the condition that fires it) and, when it
+fires, one prescribed `great_tables` mechanism. Every light surface uses the
+**washed-DA + neutral-grey** palette below — never a saturated color.
 
-This file is self-contained: all hexes are inlined so you never need a second hop.
-(They mirror `references/palettes.md` §2 for neutrals and §1 for washed-DA tints.)
+All hexes are inlined here (mirrors `references/palettes.md` §2 neutrals, §1
+washed-DA tints), so this file is self-contained.
 
 ## The palette this checklist draws from
 
@@ -24,7 +23,7 @@ Neutral greys (the default for every quiet surface):
 | NA / empty cell | `#808080` | `na_color=` fill; `sub_missing("—")` text |
 
 Washed-DA tints (used **instead of grey** when the table has Big Color, matched to
-the dominant Big-Color hue — see the grey-budget rule):
+the dominant hue — see the grey-budget rule):
 
 | Big-Color hue | Washed tint |
 |---|---|
@@ -39,37 +38,34 @@ the dominant Big-Color hue — see the grey-budget rule):
 
 ## Deterministic triggers — resolve these at Step 2, BEFORE the constructor
 
-These three triggers set **`GT(...)` constructor arguments** (`rowname_col=`,
-`groupname_col=`) and the canonical-metric definition, so resolve them when you
-**organize columns (Step 2)** — before you write the constructor — not at Step 5 with
-the rest of this checklist. (REFERENCE.md §1 routes you here at Step 2 for exactly this
-reason.) Each is a decision the model **executes** on a computable condition, not a
-judgment call. Read the condition first; if it fires, the action is mandatory.
+These three triggers set `GT(...)` constructor arguments (`rowname_col=`,
+`groupname_col=`) and the canonical-metric definition — resolve them at **Step 2
+(organize columns)**, before the constructor, not at Step 5 with the rest of this
+checklist. (REFERENCE.md §1 routes you here at Step 2 for exactly this reason.) Each
+is a computable condition, not a judgment call: if it fires, the action is mandatory.
 
 ### Stub default — a computable trigger (PP-13)
 
 **IF a column holds row identifiers (name / date / ID) ⇒ it IS the stub**
-(`rowname_col=…`) — **default ON, not optional.** Do not leave an obvious identifier
-as a plain value column. A `tab_stubhead(label=…)` **requires** that the stub already
-exist — **no orphan label** (setting a stubhead when there is no `rowname_col` is
-wrong, PP-25).
+(`rowname_col=…`) — **default ON, not optional.** A `tab_stubhead(label=…)`
+**requires** that the stub already exist — **no orphan label** (setting a stubhead
+when there is no `rowname_col` is wrong, PP-25).
 
 ### Grouping — a computable trigger (PP-1)
 
 **IF the user's prompt names a grouping dimension** ("grouped by X", "by country",
 "per region"), **OR the data has a low-cardinality categorical that is the organizing
-story ⇒ use `groupname_col=…`.** When the prompt says group, grouping is
-**MANDATORY** (Rule 0) — never render that dimension as a plain column. (Stub + groups
-may coexist.)
+story ⇒ use `groupname_col=…`.** Prompt-named grouping is **MANDATORY** (Rule 0).
+(Stub + groups may coexist.)
 
 ### Ambiguous measures — pick ONE canonical definition (F-canonical-metric, PP-18)
 
 **IF a requested measure has more than one reasonable definition** (e.g. "highest
 single-day gain" = `close − open`? intraday `high − low`? day-over-day
 `close.diff()`?) **⇒ pick ONE canonical definition, compute it, and STATE the chosen
-definition** in the subtitle or a source note so the number is reproducible. Do **not**
-silently pick one — an unstated choice makes the same prompt yield different numbers
-across runs.
+definition** in the subtitle or a source note so the number is reproducible. Do
+**not** silently pick one — an unstated choice makes the same prompt yield different
+numbers across runs.
 
 ---
 
@@ -114,8 +110,8 @@ gt = gt.tab_options(column_labels_border_bottom_color="#CCCCCC",
 **Gate:** logical column groups / multiple spanners exist. No column groups → **none**.
 
 A light, easily-noticeable vertical divider **at each group boundary only** — not
-between every column, not a full grid. Put a right border on the **last column of each
-group**, in **both** the body and the column labels so the seam runs full height.
+between every column, not a full grid. Put a right border on the **last column of
+each group**, in **both** the body and the column labels so the seam runs full height.
 
 ```python
 from great_tables import GT, style, loc
@@ -158,9 +154,9 @@ gt = (
 
 **Gate:** a stub (`rowname_col`) exists.
 
-A light tint on the stub so the row labels separate from the value columns. **Grey by
-default** (`#F0F0F0`); harmonize to the washed-DA tint of the Big-Color hue when there
-is Big Color. Subject to the grey-budget rule below.
+Light tint separating the stub from value columns. **Grey by default** (`#F0F0F0`);
+harmonize to the washed-DA tint of the Big-Color hue when there is Big Color.
+Subject to the grey-budget rule below.
 
 ```python
 from great_tables import GT, style, loc
@@ -211,15 +207,14 @@ monotony (usually just one).
 
 ## Sub-note — row-group emphasis
 
-**Gate:** the table uses `groupname_col=`. An unstyled group label sits in the flow of
-body rows and the reader loses the section boundary.
+**Gate:** the table uses `groupname_col=`. Unstyled, a group label sits in the flow
+of body rows and the reader loses the section boundary.
 
-Give each `groupname_col` header row a **light background fill AND bold weight** — the
-pair is non-negotiable. Fill alone reads as noise; bold alone reads as a stray body
-row; together they read as a section heading. Use the **same** light shade for every
-group (grey `#F0F0F0` by default, or the washed-DA tint when the table has Big Color —
-keep it consistent with the stub/band per the grey-budget rule). The structural rule
-above/below the label is `#BDBDBD`.
+Give each `groupname_col` header row a **light background fill AND bold weight** —
+the pair is non-negotiable (fill alone reads as noise, bold alone as a stray body
+row). Use the **same** light shade for every group (grey `#F0F0F0` by default, or the
+washed-DA tint when the table has Big Color — consistent with the stub/band per the
+grey-budget rule). The structural rule above/below the label is `#BDBDBD`.
 
 ```python
 gt = (
@@ -234,41 +229,40 @@ gt = (
 )
 ```
 
-Never fill a group header with a saturated color — that would make structural chrome
-compete with the data. Editorial weight belongs on the **column labels** (Step-4 band),
-not on group headers.
+Never fill a group header with a saturated color. Editorial weight belongs on the
+**column labels** (Step-4 band), not on group headers.
 
 ## Sub-note — do NOT use `opt_stylize` as a whole-table styler (PP-17)
 
 **Do NOT use `opt_stylize(...)` to theme the whole table** — it bypasses Steps 4–5.
 Build the heading **band (Step 4)** and the **Small-Color polish (Step 5)** explicitly
-from this checklist, so the band hue, stripes, and dividers are the pinned hexes and
-not a built-in theme. Escaping to `opt_stylize(style=N)` is exactly the off-flowchart
-drift that made "same-prompt" runs render as different products.
+from this checklist, so the band hue, stripes, and dividers stay the pinned hexes
+instead of a built-in theme.
 
-`opt_stylize(...)` is a full **theme preset** — it sets backgrounds, line colors, and
-styles across the whole table. There is **no** exception: do **not** call it for the
-whole table, for the container, for "just the rounded corners", or for anything else.
-Any use reintroduces exactly the unpinned styling this checklist exists to remove.
+`opt_stylize(...)` is a full **theme preset** (backgrounds, line colors, and styles
+across the whole table). There is **no** exception: not for the whole table, the
+container, "just the rounded corners", or anything else — any use reintroduces the
+unpinned styling this checklist exists to remove.
 
 **Rounded corners.** `great_tables` has **no** pinned `tab_options(...)` corner-radius
 option, so there is **no deterministic rounded-corner mechanism** — the **square**
-four-side Frame border below (color `#CCCCCC`, 1px, all sides) **is** the deterministic
-Frame, and SKILL.md explicitly declares a square light border acceptable. If (and only
-if) rounded corners are explicitly requested, the **only** border-radius-only escape
-that touches nothing else is a single `opt_css("table { border-radius: 6px; }")` rule —
-CSS scoped to `border-radius` alone, never `opt_stylize`. Default to the square Frame.
+four-side Frame border below (color `#CCCCCC`, 1px, all sides) **is** the
+deterministic Frame, and SKILL.md explicitly declares a square light border
+acceptable. If (and only if) rounded corners are explicitly requested, the **only**
+border-radius-only escape is a single `opt_css("table { border-radius: 6px; }")` rule
+— CSS scoped to `border-radius` alone, never `opt_stylize`. Default to the square
+Frame.
 
 ## Frame & render parameters (the Global-constant values)
 
-SKILL.md and `REFERENCE.md` route the **Frame** and **font-size fit** global constants
-here for their exact values.
+SKILL.md and `REFERENCE.md` route the **Frame** and **font-size fit** global
+constants here for their exact values.
 
 **Frame — the boxed enclosing border (every table).** A light border on **all four
-sides** plus an outer margin; never flat/edge-to-edge. The border color is the neutral
-`#CCCCCC`, 1px, `solid`. Great Tables defaults the *left/right* border style to
-`"none"`, so you MUST set the style explicitly or the sides render invisible (you'd get
-top/bottom rules, not a box):
+sides** plus an outer margin; never flat/edge-to-edge. The border color is the
+neutral `#CCCCCC`, 1px, `solid`. Great Tables defaults the *left/right* border style
+to `"none"`, so you MUST set the style explicitly or the sides render invisible
+(you'd get top/bottom rules, not a box):
 
 ```python
 gt = gt.tab_options(

@@ -1,26 +1,24 @@
 # Big Color — Column Gradient Fill
 
-Apply `data_color` to an ordered numeric column so that each cell's background encodes its magnitude on a sequential palette. The column becomes a mini-heatmap.
+Apply `data_color` to an ordered numeric column so each cell's background encodes its magnitude on a sequential palette (mini-heatmap).
 
 ## Trigger (computable — not optional)
 
 **IF an ordered numeric magnitude is present over ≥5 rows ⇒ it QUALIFIES as a colored
-measure** (the hero, if it is the only one that qualifies). This is a deterministic
-branch, **not** a judgment call — do not ask "should this be colored?" The ≥5-row
-magnitude answers it: yes, it qualifies. (Below 5 rows a gradient reads as random
-pastel — it does not qualify; use a targeted highlight instead, see the last rule.)
+measure** (the hero, if it is the only one that qualifies). Deterministic, not a judgment
+call. (Below 5 rows a gradient reads as random pastel — it does not qualify; use a
+targeted highlight instead, see the last rule.)
 
 "Qualifies" is not the same as "is colored": the router caps a table at **≤ 2 colored
 measures**. When **1 or 2** measures qualify, colour **all** of them (each is
 mandatory — do not leave a qualifying measure uncoloured). When **3 or more** qualify,
 you MUST colour exactly 2 — the ceiling wins — and the priority rule below picks
-**which** 2. This resolves the apparent conflict: qualifying is mandatory *eligibility*,
-the ceiling is a *hard cap*, and the priority rule is the deterministic selector.
+**which** 2.
 
 ## Selecting the ≤2 when 3+ qualify (deterministic priority)
 
-Rank every qualifying measure by this order and take the **top 2**. The order is total
-and computable, so two runs on the same prompt+data pick the SAME 2 columns:
+Rank every qualifying measure by this order and take the **top 2** (total and computable,
+so two runs on the same prompt+data pick the SAME 2 columns):
 
 1. **Prompt-named / emphasised measures first**, in the order they appear in the
    prompt. A measure the user explicitly names, asks to "show/highlight/compare", or
@@ -29,10 +27,9 @@ and computable, so two runs on the same prompt+data pick the SAME 2 columns:
    priority (e.g. none named, or several named at once), the one whose column appears
    earlier (smallest column index) wins.
 
-Take the first 2 from this ranking; colour those, leave the rest uncoloured (a
-qualifying-but-unselected measure gets neither a fill nor a competing highlight — its
-magnitude is carried by the number alone). A measure that spans several facet columns
-(a matrix/heatmap block) counts as **one** measure occupying **one** of the 2 slots.
+Take the first 2 from this ranking; colour those, leave the rest uncoloured. A measure
+that spans several facet columns (a matrix/heatmap block) counts as **one** measure
+occupying **one** of the 2 slots.
 
 ## When to use
 
@@ -73,22 +70,17 @@ gt = (
 ## Rules
 
 - **Domain = `[min, max]` across ALL facet columns of the measure — one shared domain.**
-  Compute `lo`/`hi` from the frame with the **backend-neutral** reduction
-  `float(np.nanmin(df[cols].to_numpy()))` / `float(np.nanmax(df[cols].to_numpy()))`
-  (matches the diverging recipe; works on pandas AND polars — the pandas-only
-  `df[cols].min().min()` returns a 1-row frame on polars and breaks `float(...)`); the
-  bound must be **DATA-DRIVEN**, never a round guess. If the measure spans several facet
-  columns, they share this **single** domain (not a per-column domain), so equal values
-  read as equal color across the block. A too-narrow domain flattens the extremes; a
-  too-wide domain washes out the middle.
-- **Palette by semantic — pin it from `palettes.md` §3, not by aesthetic.** It is a
-  lookup, not a choice: neutral magnitude (money/price/volume/count/population) → `Blues`
-  (always); good-direction ("more is better") → `Greens`; warning/worse → `Reds`
-  (`Oranges` only as the documented alternate). This kills the Blues-vs-Greens coin-flip.
+  Compute with the backend-neutral `float(np.nanmin(df[cols].to_numpy()))` /
+  `float(np.nanmax(df[cols].to_numpy()))` (see recipe comments); DATA-DRIVEN, never a
+  round guess, never per-column.
+- **Palette by semantic — pin it from `palettes.md` §3, not by aesthetic.** Neutral
+  magnitude (money/price/volume/count/population) → `Blues` (always); good-direction
+  ("more is better") → `Greens`; warning/worse → `Reds` (`Oranges` only as the documented
+  alternate).
 - **Do not gradient-fill the stub or identifier columns** — the gradient must apply to the measure only.
-- **Leave `truncate=False`** (default). If an outlier appears later it should still get the extreme color, not disappear.
-- **Do not** also bold or color the text of the same cells — the fill already carries the signal. Layering both crowds the cell.
-- **≥5 rows** or skip: a 3-row gradient reads as random pastel; use a targeted highlight instead.
+- **Leave `truncate=False`** (default) — outliers keep the extreme color.
+- **Do not** also bold or color the text of the same cells — the fill alone carries the signal.
+- **≥5 rows** or skip — use a targeted highlight instead.
 
 ## Counts as
 

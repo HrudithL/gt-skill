@@ -17,7 +17,7 @@ GT(
 )
 ```
 
-Setting `locale` at the GT level avoids repeating it in every `fmt_*` call.
+Avoids repeating `locale` per `fmt_*` call.
 
 ## Header & Footer
 
@@ -39,7 +39,7 @@ Use `md("**bold** text")` or `html("<em>styled</em>")` for rich formatting.
 .tab_source_note(source_note)   # str | md() | html()
 ```
 
-Call multiple times to add multiple source notes (they appear in order).
+Repeatable; notes appear in call order.
 
 ### tab_stubhead
 
@@ -58,7 +58,7 @@ Call multiple times to add multiple source notes (they appear in order).
 )
 ```
 
-Unit notation: `"Speed ({{m/s}})"` renders as "Speed (m/s)" with proper formatting.
+`{{m/s}}` unit notation formats units, e.g. `"Speed ({{m/s}})"` → "Speed (m/s)".
 
 ### cols_hide
 
@@ -178,8 +178,6 @@ All `fmt_*` methods share common parameters:
 )
 ```
 
-**Important**: `scale_values=True` (default) multiplies by 100. If data is already in 0–100 range, set `scale_values=False`.
-
 ### fmt_date
 
 ```python
@@ -295,7 +293,7 @@ Date styles: `"iso"` (2020-01-15), `"wday_month_day_year"` (Wednesday, January 1
 )
 ```
 
-Embed sparkline-style plots in cells from list/array data.
+Embeds sparkline plots from list/array data.
 
 ### fmt (custom formatter)
 
@@ -394,11 +392,11 @@ loc.source_notes()                         # footer source notes
 )
 ```
 
-Multiple levels: call `tab_spanner` multiple times. Spanners stack automatically from bottom to top.
+Call multiple times for multiple levels; spanners stack bottom-to-top.
 
 ### tab_row_group (via constructor)
 
-Row groups are set via `groupname_col=` in the GT constructor. The order of groups matches their first appearance in the data.
+Set via `groupname_col=` in the GT constructor; group order follows first appearance in data.
 
 ## Table Options
 
@@ -465,10 +463,10 @@ gt.gtsave(
 )
 ```
 
-`gtsave()` is the current `great_tables >= 0.22.0` API. It renders the table to an image (or PDF, depending on the file extension) via a headless Chromium browser.
+`gtsave()` (current API, `great_tables >= 0.22.0`) renders via headless Chromium to image/PDF per file extension.
 
-- Do **not** use `gt.save()` — it is deprecated (removed mid-2027) and uses Selenium/chromedriver.
-- If `gt.gtsave()` ever fails, **stop and surface the full error**. Do not silently swap in a PIL/imgkit/wkhtmltoimage/Playwright/HTML fallback. The deliverable is the actual `great_tables` PNG render and nothing else qualifies.
+- Do **not** use `gt.save()` — deprecated (removed mid-2027), uses Selenium/chromedriver.
+- If `gtsave()` fails, **stop and surface the full error** — no PIL/imgkit/wkhtmltoimage/Playwright/HTML fallback. Only the real `great_tables` PNG render qualifies.
 
 ## Helpers
 
@@ -480,4 +478,3 @@ html("<span style='...'>X</span>")  # Raw HTML
 define_units("m^2 s^-1")         # Unit notation for labels
 system_fonts("humanist")         # Font stacks: "humanist", "old-style", "transitional", "geometric-humanist", "classical-humanist", "neo-grotesque", "monospace-slab-serif", "monospace-code", "industrial", "rounded-sans", "slab-serif", "system-ui"
 ```
-
