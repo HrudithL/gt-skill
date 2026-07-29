@@ -95,7 +95,10 @@ function formattingChart(rows) {
 
   for (const frac of [0, 0.25, 0.5, 0.75, 1]) {
     const y = padT + plotH * (1 - frac);
-    s.append(svg("line", { x1: padL, x2: W - padR, y1: y, y2: y, stroke: "var(--grid,#e1e0d9)", "stroke-width": 1 }));
+    // The 0% line doubles as the bottom x-axis baseline, so it's drawn bolder
+    // than the other gridlines rather than blending in with them.
+    const isAxis = frac === 0;
+    s.append(svg("line", { x1: padL, x2: W - padR, y1: y, y2: y, stroke: isAxis ? "var(--border-strong,#bccbdd)" : "var(--grid,#e1e0d9)", "stroke-width": isAxis ? 1.5 : 1 }));
     s.append(svg("text", { x: padL - 6, y: y + 3, "text-anchor": "end", class: "chart-tick" }, Math.round(frac * 100) + "%"));
   }
 
@@ -148,9 +151,12 @@ function formattingChart(rows) {
 // --------------------------------------------------------------------------- //
 function dumbbellChart(rows, { key, format, label, isPercent }) {
   const rowH = 32, padL = 200, padR = 220;
-  const PADT = 26, PADB = 10, W = 800;
+  // AXIS_H reserves room below the last row for a real bottom x-axis (baseline
+  // + tick marks + numbers), separate from PADB's small breathing-room gap.
+  const PADT = 26, PADB = 10, AXIS_H = 26, W = 800;
   const plotW = W - padL - padR;
-  const H = PADT + PADB + rowH * rows.length;
+  const plotBottomY = PADT + rowH * rows.length + PADB;
+  const H = plotBottomY + AXIS_H;
   // The last axis tick is centered at the plot's right edge (W - padR), so its
   // own label (up to ~$0.2000 wide) needs real clearance before this column
   // starts, not just a token 16px gap.
@@ -175,11 +181,21 @@ function dumbbellChart(rows, { key, format, label, isPercent }) {
   const tip = makeTooltip(wrap);
   const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img" });
 
-  // top axis: gridlines through every row + tick labels once at the top
+  // gridlines through every row, ticks labeled at both the top (repeated once
+  // per column, handy while scanning row labels) and along a real bottom
+  // x-axis (baseline + tick marks) so the value scale reads like a
+  // conventional chart axis, not just gridlines.
   for (const t of ticks) {
     const gx = x(t);
-    s.append(svg("line", { x1: gx, x2: gx, y1: PADT - 4, y2: H - PADB, stroke: "var(--grid,#e1e0d9)", "stroke-width": 1 }));
+    s.append(svg("line", { x1: gx, x2: gx, y1: PADT - 4, y2: plotBottomY, stroke: "var(--grid,#e1e0d9)", "stroke-width": 1 }));
     s.append(svg("text", { x: gx, y: PADT - 10, "text-anchor": "middle", class: "chart-tick" }, format(t)));
+  }
+  // bottom x-axis: baseline + a tick mark and number under every gridline
+  s.append(svg("line", { x1: padL, x2: padL + plotW, y1: plotBottomY, y2: plotBottomY, stroke: "var(--border-strong,#bccbdd)", "stroke-width": 1 }));
+  for (const t of ticks) {
+    const gx = x(t);
+    s.append(svg("line", { x1: gx, x2: gx, y1: plotBottomY, y2: plotBottomY + 4, stroke: "var(--border-strong,#bccbdd)", "stroke-width": 1 }));
+    s.append(svg("text", { x: gx, y: plotBottomY + 15, "text-anchor": "middle", class: "chart-tick" }, format(t)));
   }
   // column headers for the always-visible value/delta labels
   s.append(svg("text", { x: valueColX, y: PADT - 10, class: "chart-tick" }, "baseline → with skill"));
