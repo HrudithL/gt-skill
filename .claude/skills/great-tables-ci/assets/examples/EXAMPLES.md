@@ -1,8 +1,6 @@
 # Examples
 
-Concrete reference tables. Each archetype lives in its own subfolder
-with source code and rendered output. Load the matching `.py` for the
-archetype you need.
+Load the matching `.py` for your archetype.
 
 | Archetype | Use when... | Files |
 |---|---|---|

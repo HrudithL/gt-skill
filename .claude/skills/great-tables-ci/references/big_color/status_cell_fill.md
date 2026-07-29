@@ -1,6 +1,6 @@
 # Big Color — Status Cell Fill
 
-Apply a per-cell background fill to a small categorical status column so each state (pass/fail, on/off, ok/warn/error, tier A/B/C) reads instantly as a colored tag.
+Per-cell fill for a small categorical status column (pass/fail, on/off, ok/warn/error, tier A/B/C) so each state reads as a colored tag.
 
 ## When to use
 
@@ -49,11 +49,11 @@ gt = (
 
 ## Rules
 
-- **Solid Dark Academia hexes with white text** (this is a non-gradient Big Color). Map states to DA members by meaning per `references/palettes.md` §1: Forest `#2F4A38` = good/pass, Oxblood `#5C2E2E` = bad/fail, Navy `#22384F` = neutral, Ochre `#9A7B33` / Espresso `#4A3A2C` / Tan `#8A7452` for further tiers. Never a pale/washed tint here.
-- **Two-state → explicit fill with `tab_style`.** Three-or-more-state → `data_color` with a **list of DA solid hexes** (not a brewer palette name — those are reserved for the sequential/diverging colored measures).
-- **Only fill the status column** — do not spread the fill across the whole row (that's `full_row_highlight.md`, a different treatment).
-- **Add a redundant encoding** (the text of the state name in the cell, or a short-word label like "Pass"/"Fail") so the cell is readable without color. Do not rely on hue alone.
-- **≤4 distinct fills**, otherwise the column becomes a rainbow and the states blur together.
+- **Solid DA hexes, white text.** Per `references/palettes.md` §1: Forest `#2F4A38` = good/pass, Oxblood `#5C2E2E` = bad/fail, Navy `#22384F` = neutral, Ochre `#9A7B33` / Espresso `#4A3A2C` / Tan `#8A7452` = further tiers. Never a pale tint.
+- **Two-state** → `tab_style`. **3–4 states** → `data_color` with DA solid hexes (not a brewer palette).
+- **Status column only** — not the row (`full_row_highlight.md` is the row treatment).
+- **Add a redundant text label** (e.g. "Pass"/"Fail") — don't rely on hue alone.
+- **≤4 distinct fills.**
 
 ## Counts as
 
