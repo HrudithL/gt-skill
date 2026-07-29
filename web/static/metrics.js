@@ -218,9 +218,17 @@ export async function renderMetricsTab(root) {
   root.append(el("div", { class: "page-head" }, el("h2", {}, "Metrics"),
     el("span", { class: "count-badge" }, bySP.length)));
 
-  if (!bySP.length) {
+  // Rows can exist with every baseline_* field null (repeats run with the
+  // baseline checkbox off, the Run tab's default) — every chart below would
+  // then filter down to zero rows, so check for an actual comparison rather
+  // than just a nonempty list before falling through to the charts.
+  const hasBaselineData = bySP.some((r) =>
+    r.baseline_compliance != null || r.baseline_consistency != null || r.baseline_tokens != null || r.baseline_cost != null);
+  if (!bySP.length || !hasBaselineData) {
     root.append(el("div", { class: "empty" },
-      "No convergence runs yet. Launch a run with repeat > 1 and the baseline checkbox on from the Run tab to populate these charts."));
+      bySP.length
+        ? "Found skill/prompt data, but none of it has a baseline to compare against. Check “Also run a baseline without the skill” on the Run tab and re-run to populate these charts."
+        : "No convergence runs yet. Launch a run with repeat > 1 and the baseline checkbox on from the Run tab to populate these charts."));
     return;
   }
 
