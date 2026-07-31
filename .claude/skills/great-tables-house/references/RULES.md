@@ -118,7 +118,12 @@ population growth, 1996–2021"):
    the between-period deltas ("percentage changes between each period"),
    include both as separate columns rather than picking one representation
    to stand in for the other. This is a *display* choice — it never
-   overrides the ranking metric found in step 1.
+   overrides the ranking metric found in step 1. The baseline guard from
+   step 3 applies to EVERY individual period's delta too, not just the
+   overall ranking figure — a period whose starting value is zero/negative
+   makes that one cell's percentage undefined; render that cell via
+   `sub_missing`/`—` (see "Missing values" below) rather than a computed
+   but meaningless percentage, without discarding the rest of the row.
 
 This narrows the ambiguity considerably but — being a precedence over
 natural-language phrasing, not a closed-form algorithm — does not
