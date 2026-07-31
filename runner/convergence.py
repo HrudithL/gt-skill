@@ -100,6 +100,16 @@ def _relative_luminance(rgb: tuple[int, int, int]) -> float:
     return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
 
 
+def _is_zero_length(v: str) -> bool:
+    """True for a CSS-style zero length (`"0px"`, `"0"`, `"0.0em"`, ...).
+
+    Shared by `_hlines_active`/`_vlines_active`: a zero-width/zero-weight
+    border or rule renders no visible line no matter what its style/color
+    say, so it must not count as "a divider/hairline is present."
+    """
+    return re.fullmatch(r"0+(\.0+)?(px|pt|em|rem|%)?", v.strip()) is not None
+
+
 def _band_shade(hexstr: str) -> str:
     """Classify a band hex as 'light' or 'dark' by luminance."""
     rgb = _hex_to_rgb(hexstr)
@@ -334,6 +344,13 @@ def _vlines_active(source: str) -> bool:
             if border_style_val is not None:
                 unquoted = _unquote(border_style_val)
                 if unquoted and unquoted.strip().lower() in ("none", "hidden", ""):
+                    continue
+            # A zero-weight border (`weight="0px"`) is equally invisible
+            # regardless of style/sides.
+            weight_val = _kwarg_value(borders_block, "weight")
+            if weight_val is not None:
+                unquoted_weight = _unquote(weight_val)
+                if unquoted_weight and _is_zero_length(unquoted_weight):
                     continue
             sides_val = _kwarg_value(borders_block, "sides")
             if sides_val is None:
@@ -892,20 +909,13 @@ def _extract_text_literal(value_text: str) -> str | None:
     # text and is genuinely balanced (its own depth never returns to 0
     # before the final char), so `("a") + ("b")` is correctly left alone.
     while v.startswith("(") and v.endswith(")") and len(v) >= 2:
-        inner = v[1:-1]
-        depth = 0
-        closes_early = False
-        for idx, ch in enumerate(inner):
-            if ch == "(":
-                depth += 1
-            elif ch == ")":
-                depth -= 1
-                if depth < 0:
-                    closes_early = True
-                    break
-        if closes_early or depth != 0:
+        # Quote-aware (_scan_balanced_paren): a '(' inside a string literal
+        # (`title=("Sales (preliminary")`) must not affect depth, or a
+        # perfectly valid grouped literal gets misread as unbalanced.
+        close_idx = _scan_balanced_paren(v, 0)
+        if close_idx != len(v) - 1:
             break
-        v = inner.strip()
+        v = v[1:-1].strip()
     parts: list[str] = []
     spans: list[tuple[int, int]] = []
     i, n = 0, len(v)
@@ -1093,10 +1103,14 @@ def _list_var_map(source: str) -> dict[str, list[str]]:
         # comprehension (`[c for c in df.columns if c.startswith("pct_")]`)
         # or any other non-literal expression must NOT resolve, or a single
         # quoted substring inside it (e.g. "pct_") would be misread as the
-        # variable's one-and-only column name.
+        # variable's one-and-only column name. Validated by ITS OWN quote
+        # character (_DQ_STRING/_SQ_STRING fullmatch), not a "no quotes at
+        # all inside" check — the latter would reject (and so silently drop
+        # the whole assignment for) a perfectly valid element containing an
+        # apostrophe, e.g. `hero_cols = ["Owner's share"]`.
         elems = _split_top_level_quoted(body)
-        if elems and all(re.fullmatch(r"""['"][^'"]*['"]""", e) for e in elems):
-            out[name] = [e[1:-1] for e in elems]
+        if elems and all(_DQ_STRING.fullmatch(e) or _SQ_STRING.fullmatch(e) for e in elems):
+            out[name] = [_find_quoted_strings(e)[0] for e in elems]
     return out
 
 
@@ -1318,7 +1332,19 @@ def _render_params(source: str) -> dict:
 
     finalize_blocks = _bare_call_blocks(source, "finalize")
     if finalize_blocks:
-        block = finalize_blocks[0]
+        # Same target-aware, last-write-wins selection as the .gtsave(...)
+        # branch above: finalize(gt, path=..., **overrides)'s `path` is the
+        # 2nd positional/kwarg.
+        block = finalize_blocks[-1]
+        for b in finalize_blocks:
+            path_val = _kwarg_value(b, "path")
+            if path_val is None:
+                positionals = [
+                    p for p in _split_top_level_quoted(b) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                path_val = positionals[1] if len(positionals) >= 2 else None  # positionals[0] is `gt`
+            if path_val and "table.png" in path_val:
+                block = b
         # A `**overrides`/`**{...}` expansion can override the defaults with
         # values this parser can't see (it isn't a literal `kwarg=value`) --
         # reporting the defaults anyway could mask a below-minimum override
@@ -1420,9 +1446,6 @@ def _hlines_active(source: str) -> bool:
     def _last(attr: str) -> str | None:
         matches = re.findall(rf"table_body_hlines_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
         return matches[-1] if matches else None
-
-    def _is_zero_length(v: str) -> bool:
-        return re.fullmatch(r"0+(\.0+)?(px|pt|em|rem|%)?", v.strip()) is not None
 
     style = _last("style")
     if style is not None and style.strip().lower() in ("none", "hidden", ""):
