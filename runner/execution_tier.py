@@ -167,7 +167,18 @@ def main():
 try:
     _fp = main()
 except Exception as e:
-    _fp = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    # Include the version info even on failure -- an unsupported
+    # great_tables version changing one of the private attributes this
+    # module reads is exactly the failure gt_version_pin_mismatch exists to
+    # make attributable; a bare {ok, error} would hide that signal.
+    _fp = {
+        "ok": False,
+        "error": f"{type(e).__name__}: {e}",
+        "gt_version": _installed_gt_version,
+        "gt_version_pin_mismatch": (
+            _installed_gt_version is not None and _installed_gt_version != _PINNED_GT_VERSION
+        ),
+    }
 
 sys.stdout.write("EXECFP:" + json.dumps(_fp) + "\n")
 '''
@@ -286,10 +297,18 @@ def row_set_identity(
     matched = cand & truth
     precision = (len(matched) / len(cand)) if cand else (1.0 if not truth else 0.0)
     recall = (len(matched) / len(truth)) if truth else (1.0 if not cand else 0.0)
+    # A group-aware key's first element can be None (a row with no group
+    # label) alongside a real string group id elsewhere in the same set --
+    # sorting tuples directly then compares None to a str and raises
+    # TypeError. An explicit key sorts None first without ever comparing it
+    # to a string.
+    def _key_sort(t: tuple) -> tuple:
+        return (t[0] is None, t[0] or "", t[1])
+
     return {
         "matched": len(matched),
-        "candidate_only": sorted(cand - truth),
-        "truth_only": sorted(truth - cand),
+        "candidate_only": sorted(cand - truth, key=_key_sort),
+        "truth_only": sorted(truth - cand, key=_key_sort),
         "precision": precision,
         "recall": recall,
         "exact": cand == truth,
@@ -345,11 +364,25 @@ def _shared_pairs(
         use_groups = bool(candidate_fp.get("row_group_ids")) and bool(truth_fp.get("row_group_ids"))
         cand_keys = _row_keys(cand_ids, candidate_fp.get("row_group_ids") if use_groups else None)
         truth_keys = _row_keys(truth_ids, truth_fp.get("row_group_ids") if use_groups else None)
-        truth_by_key = {key: i for i, key in enumerate(truth_keys)}
+        # A key can legitimately repeat -- most commonly when grouping ISN'T
+        # usable for alignment (one side lacks it) but the stub label itself
+        # repeats across what were distinct groups (e.g. "S"/"M" reused in
+        # every group). A plain {key: i} dict would keep only the LAST
+        # truth occurrence of a repeated key, silently losing every earlier
+        # occurrence instead of aligning it with anything. Keep every
+        # occurrence's index and consume them in order: the candidate's Nth
+        # occurrence of a key pairs with the truth's Nth occurrence of that
+        # SAME key, so repeated-label rows still align one-to-one.
+        truth_by_key: dict[tuple, list[int]] = {}
+        for i, key in enumerate(truth_keys):
+            truth_by_key.setdefault(key, []).append(i)
         pairs = []
         for i, key in enumerate(cand_keys):
-            j = truth_by_key.get(key)
-            if j is not None and i < len(cand_cols[candidate_col]) and j < len(truth_cols[truth_col]):
+            indices = truth_by_key.get(key)
+            if not indices:
+                continue
+            j = indices.pop(0)
+            if i < len(cand_cols[candidate_col]) and j < len(truth_cols[truth_col]):
                 pairs.append((cand_cols[candidate_col][i], truth_cols[truth_col][j]))
         return pairs
     n = min(len(cand_cols[candidate_col]), len(truth_cols[truth_col]))
