@@ -29,8 +29,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Bump this if `great_tables` is upgraded and extraction needs re-verifying
-# against its new internals (see module docstring).
+# Bump this (and the duplicate literal inside _EXEC_RUNNER, which runs in a
+# fresh subprocess and can't import this module) if `great_tables` is
+# upgraded and extraction needs re-verifying against its new internals (see
+# module docstring). `exec_table()`'s result carries `gt_version` and
+# `gt_version_pin_mismatch` so a silent extraction failure after an
+# unpinned-version upgrade is attributable rather than a mystery — this
+# warns rather than hard-blocks, since a version bump may not actually
+# touch the attributes this module reads.
 _GT_VERSION_PINNED = "0.22.0"
 
 # Subprocess payload: exec's the target script in a fresh interpreter (hard
@@ -44,13 +50,16 @@ _EXEC_RUNNER = r'''
 import sys, types, io, json, contextlib, math
 
 path = sys.argv[1]
+_PINNED_GT_VERSION = "0.22.0"
 
 for name in ("gtskill_chrome", "_gtskill_sidecar"):
     sys.modules[name] = types.ModuleType(name)
 
+_installed_gt_version = None
 try:
     import great_tables as _gt
     _gt.GT.gtsave = lambda *a, **k: None
+    _installed_gt_version = getattr(_gt, "__version__", None)
 except Exception:
     pass
 
@@ -58,7 +67,10 @@ except Exception:
 def _json_safe(v):
     if v is None:
         return None
-    if isinstance(v, float) and math.isnan(v):
+    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+        # +/-inf (e.g. a percent-change divide-by-zero) is not valid JSON --
+        # json.dumps would emit the non-standard Infinity/-Infinity token.
+        # Normalized to None like NaN: both mean "not a usable number".
         return None
     if isinstance(v, (bool, int, float, str)):
         return v
@@ -145,6 +157,10 @@ def main():
         "hidden_columns": hidden_columns,
         "columns": columns,
         "summary_rows": summary_rows,
+        "gt_version": _installed_gt_version,
+        "gt_version_pin_mismatch": (
+            _installed_gt_version is not None and _installed_gt_version != _PINNED_GT_VERSION
+        ),
     }
 
 
@@ -232,7 +248,13 @@ def normalize_id(x: Any) -> str:
     return str(x).strip().casefold()
 
 
-def row_set_identity(candidate_row_ids: list | None, truth_row_ids: list | None) -> dict:
+def row_set_identity(
+    candidate_row_ids: list | None,
+    truth_row_ids: list | None,
+    *,
+    candidate_group_ids: list | None = None,
+    truth_group_ids: list | None = None,
+) -> dict:
     """Set-based (order/count-blind) comparison of two row-identifier lists.
 
     Returns ``{"matched", "candidate_only", "truth_only", "precision",
@@ -242,14 +264,25 @@ def row_set_identity(candidate_row_ids: list | None, truth_row_ids: list | None)
     selected zero rows is a real, and often severe, selection failure — it
     must score `recall=0.0` against a nonempty ground truth, not be treated
     as "not comparable" and skipped.
+
+    `*_group_ids`, when BOTH are supplied, compare `(group_id, row_id)`
+    identities rather than bare row ids — a stub label that repeats across
+    groups (e.g. "Small"/"Medium" reused in every `groupname_col` group)
+    would otherwise dedupe into a single set entry, letting a candidate
+    covering just one group falsely report `exact=True` against a
+    multi-group ground truth. Group ids are ignored (bare row-id identity)
+    when only one side supplies them, per the same both-sides-or-neither
+    rule `_row_keys` uses — a grouping difference between candidate and
+    truth must not, by itself, make otherwise-identical rows look distinct.
     """
     if candidate_row_ids is None or truth_row_ids is None:
         return {
             "matched": 0, "candidate_only": [], "truth_only": [],
             "precision": None, "recall": None, "exact": False,
         }
-    cand = {normalize_id(x) for x in candidate_row_ids}
-    truth = {normalize_id(x) for x in truth_row_ids}
+    use_groups = bool(candidate_group_ids) and bool(truth_group_ids)
+    cand = set(_row_keys(candidate_row_ids, candidate_group_ids if use_groups else None))
+    truth = set(_row_keys(truth_row_ids, truth_group_ids if use_groups else None))
     matched = cand & truth
     precision = (len(matched) / len(cand)) if cand else (1.0 if not truth else 0.0)
     recall = (len(matched) / len(truth)) if truth else (1.0 if not cand else 0.0)
@@ -275,11 +308,27 @@ def _row_key(row_id: Any, group_id: Any | None) -> tuple:
     return (normalize_id(group_id) if group_id is not None else None, normalize_id(row_id))
 
 
+def _row_keys(row_ids: list, group_ids: list | None) -> list[tuple]:
+    """`_row_key` for every row, gated on `group_ids` genuinely being present.
+
+    A caller-supplied `group_ids=None`/`[]` (that side has no grouping)
+    must NOT be silently defaulted to a list of `None`s and combined
+    key-wise with the OTHER side's real group ids — `(None, "Small")` would
+    never equal `("g1", "Small")` even though the stub id matches and the
+    only real difference is which side happens to report grouping. Bare
+    row-id keys (`group_id=None` on both sides uniformly) are used whenever
+    grouping isn't usable on this side.
+    """
+    if not group_ids:
+        return [_row_key(rid, None) for rid in row_ids]
+    return [_row_key(rid, gid) for rid, gid in zip(row_ids, group_ids)]
+
+
 def _shared_pairs(
     candidate_fp: dict, truth_fp: dict, candidate_col: str, truth_col: str,
 ) -> list[tuple[Any, Any]]:
     """Value pairs for `candidate_col`/`truth_col`, aligned by stub row id
-    (and row-group id, when present — see `_row_key`).
+    (and row-group id, when BOTH sides provide one — see `_row_keys`).
 
     Falls back to positional alignment (by `row_order` index) when either
     side has no stub — the best available alignment without a named key.
@@ -291,14 +340,15 @@ def _shared_pairs(
     cand_ids = candidate_fp.get("row_ids")
     truth_ids = truth_fp.get("row_ids")
     if cand_ids and truth_ids:
-        cand_groups = candidate_fp.get("row_group_ids") or [None] * len(cand_ids)
-        truth_groups = truth_fp.get("row_group_ids") or [None] * len(truth_ids)
-        truth_by_key = {
-            _row_key(rid, gid): i for i, (rid, gid) in enumerate(zip(truth_ids, truth_groups))
-        }
+        # Group-aware keys only when BOTH sides report grouping -- otherwise
+        # bare row-id keys on both sides (see _row_keys).
+        use_groups = bool(candidate_fp.get("row_group_ids")) and bool(truth_fp.get("row_group_ids"))
+        cand_keys = _row_keys(cand_ids, candidate_fp.get("row_group_ids") if use_groups else None)
+        truth_keys = _row_keys(truth_ids, truth_fp.get("row_group_ids") if use_groups else None)
+        truth_by_key = {key: i for i, key in enumerate(truth_keys)}
         pairs = []
-        for i, (rid, gid) in enumerate(zip(cand_ids, cand_groups)):
-            j = truth_by_key.get(_row_key(rid, gid))
+        for i, key in enumerate(cand_keys):
+            j = truth_by_key.get(key)
             if j is not None and i < len(cand_cols[candidate_col]) and j < len(truth_cols[truth_col]):
                 pairs.append((cand_cols[candidate_col][i], truth_cols[truth_col][j]))
         return pairs
@@ -325,14 +375,25 @@ def match_measure_by_value(
 ) -> str | None:
     """Which candidate column is "the same measure" as `truth_col`, by value.
 
-    Scores every candidate column against `truth_col` via
-    `column_match_fraction` and returns the first (leftmost, by the
-    candidate DataFrame's own column order — the same tie-break
+    Scores every VISIBLE, non-structural candidate column against
+    `truth_col` via `column_match_fraction` and returns the first (leftmost,
+    by the candidate DataFrame's own column order — the same tie-break
     `palettes.md` uses for primary/secondary measure assignment) column
     clearing `threshold`. None if no candidate column clears it.
+
+    The stub column, the group column, and every `cols_hide(...)`-hidden
+    column are excluded from the search: a candidate that hides a raw copy
+    of a measure while displaying a derived/rounded version under a
+    different name would otherwise match on the hidden column (identical
+    values) instead of the actual rendered, colored one — attributing the
+    color to the wrong column.
     """
+    excluded = {candidate_fp.get("stub_column"), candidate_fp.get("group_column")}
+    excluded |= set(candidate_fp.get("hidden_columns") or [])
     best_col: str | None = None
     for col in candidate_fp.get("columns", {}):
+        if col in excluded:
+            continue
         frac = column_match_fraction(candidate_fp, truth_fp, col, truth_col)
         if frac is not None and frac >= threshold:
             best_col = col
