@@ -143,15 +143,24 @@ def _scan_balanced_paren(text: str, open_idx: int) -> int | None:
     char-by-char count would misread that unmatched `(` as opening a new
     nesting level, throw off the whole depth count, and never find the
     call's real closing paren (returning None / no block at all for
-    perfectly valid, statically-static source). Returns None if the parens
-    never balance before the end of `text` (an actually-malformed/partial
-    source snippet).
+    perfectly valid, statically-static source). Comment-aware too: a `#`
+    outside any string starts a comment that runs to end-of-line, and a
+    stray `(` inside an inline comment (`title="Sales",  # preliminary (`)
+    must not affect depth either. Returns None if the parens never balance
+    before the end of `text` (an actually-malformed/partial source
+    snippet).
     """
     depth = 0
     quote: str | None = None
+    in_comment = False
     i, n = open_idx, len(text)
     while i < n:
         c = text[i]
+        if in_comment:
+            if c == "\n":
+                in_comment = False
+            i += 1
+            continue
         if quote:
             if c == "\\" and i + 1 < n:
                 i += 2
@@ -162,6 +171,8 @@ def _scan_balanced_paren(text: str, open_idx: int) -> int | None:
             continue
         if c in "'\"":
             quote = c
+        elif c == "#":
+            in_comment = True
         elif c == "(":
             depth += 1
         elif c == ")":
@@ -850,6 +861,11 @@ def _find_quoted_strings(text: str) -> list[str]:
     literal by its own opening delimiter (like `_extract_text_literal`
     already does for header/caption text) reads the whole `"Owner's
     share"` correctly.
+
+    Each match is decoded via `ast.literal_eval` (real Python string-
+    literal semantics — `\\'`/`\\u0020`/etc. resolve to the actual
+    characters, not the literal escape sequence), falling back to the raw
+    matched text only if `literal_eval` itself fails.
     """
     out: list[str] = []
     i, n = 0, len(text)
@@ -859,7 +875,10 @@ def _find_quoted_strings(text: str) -> list[str]:
             pat = _DQ_STRING if c == '"' else _SQ_STRING
             m = pat.match(text, i)
             if m:
-                out.append(m.group(1))
+                try:
+                    out.append(ast.literal_eval(text[i : m.end()]))
+                except Exception:
+                    out.append(m.group(1))
                 i = m.end()
                 continue
         i += 1
@@ -1081,9 +1100,15 @@ def _list_var_map(source: str) -> dict[str, list[str]]:
     ground-truth scripts use for facet columns — without touching
     `_columns_token`/`_color_signature` (the convergence report's existing,
     unrelated repeat-vs-repeat contract, left unchanged on purpose).
+
+    Matches the assignment regardless of leading indentation (a script
+    that wraps its table-building code in a function, e.g.
+    ``def build():\n    hero_cols = [...]``) and an optional type
+    annotation (``hero_cols: list[str] = [...]``) — both are just as valid
+    a column-list assignment as an unindented, unannotated one.
     """
     out: dict[str, list[str]] = {}
-    for m in re.finditer(r"^([A-Za-z_]\w*)\s*=\s*\[", source, re.M):
+    for m in re.finditer(r"^[ \t]*([A-Za-z_]\w*)\s*(?::[^=\n]+)?=\s*\[", source, re.M):
         name = m.group(1)
         open_idx = m.end() - 1
         depth = 0
@@ -1323,6 +1348,11 @@ def _render_params(source: str) -> dict:
                 file_val = positionals[0] if positionals else None
             if file_val and "table.png" in file_val:
                 block = b  # keep scanning -- a LATER table.png write wins
+        # Same **overrides/**{...} guard as the finalize(...) branch below:
+        # an expansion can override the materialized defaults with values
+        # this parser can't see.
+        if any(p.strip().startswith("**") for p in _split_top_level(block)):
+            return {}
         out: dict[str, str] = {"zoom": "2.0", "expand": "5"}
         for kw in ("zoom", "expand", "vwidth", "vheight"):
             v = _kwarg_value(block, kw)
