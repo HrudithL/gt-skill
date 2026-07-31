@@ -117,6 +117,12 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
         raise ValueError(
             f"skill_variant must be one of {SKILL_VARIANTS}, got {skill_variant!r}"
         )
+    # run_dir/.claude and ROOT/.claude now share a name (unlike the old
+    # .claude-<variant> scheme, which never collided with the source by
+    # construction). If run_dir ever resolved to ROOT, the rmtree below would
+    # delete the project's real skill sources before copying from them.
+    if run_dir.resolve() == ROOT.resolve():
+        raise ValueError("run_dir must not be the repository root (ROOT)")
     src, mounted = _VARIANT_SOURCES[skill_variant]
 
     claude_dir = run_dir / ".claude"
