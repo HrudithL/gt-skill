@@ -198,13 +198,16 @@ gt = (
     # Hero, uncolored measure (rank + the whole-period growth that drove
     # the ranking) gets bold text rather than a third fill.
     .tab_style(style=style.text(weight="bold"), locations=loc.body(columns=["rank", "total_growth_pct"]))
-    # Light heading band (Big Color present) — washed tint of the primary
-    # measure's hue (Blues, prompt-named first), not a dark saturated band.
+    # Column-label band — house DEFAULT shade="light": the MORE-visible
+    # accent_tint (navy — matches the density heatmap's Blues family, per
+    # the DA hue-selection rule: match an existing heatmap hue first), not
+    # a dark saturated band (that's reserved for a table with no heatmap at
+    # all, and this one has two).
     .tab_options(
-        column_labels_background_color="#EAF0F6",
-        column_labels_font_weight="bold",
+        column_labels_background_color="#C9E0F0",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
+        column_labels_border_bottom_style="solid",
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
@@ -213,7 +216,10 @@ gt = (
         table_border_left_style="solid", table_border_left_color="#CCCCCC", table_border_left_width="1px",
         table_border_right_style="solid", table_border_right_color="#CCCCCC", table_border_right_width="1px",
     )
-    # Stub tint harmonized to the same washed-Blues theme as the band.
+    # Stub tint — the quieter washed navy, one tier down from the band, so
+    # the stub stays subtler than the louder column-label band above it
+    # rather than competing with it (the band/stub hierarchy from the
+    # great-tables-house skill).
     .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub())
     # Column-group dividers at each spanner boundary only.
     .tab_style(style=style.borders(sides="right", color="#D0D0D0", weight="1px"), locations=loc.body(columns="total_growth_pct"))
