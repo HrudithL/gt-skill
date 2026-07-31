@@ -216,11 +216,13 @@ def _kwarg_value(block: str, name: str) -> str | None:
     """Raw source text of the top-level `name=<value>` kwarg in a call's args.
 
     Splits on top-level commas (so `columns=['a','b']` / `domain=[x, y]` stay
-    intact) and returns the value text of the first arg that *starts* with
-    `name=`. None if the kwarg is absent. Whitespace/newlines inside the value
-    are preserved for the caller to normalize.
+    intact, AND so a quoted value containing its own comma —
+    `columns="Sales, USD"` — isn't itself mistaken for a split point) and
+    returns the value text of the first arg that *starts* with `name=`. None
+    if the kwarg is absent. Whitespace/newlines inside the value are
+    preserved for the caller to normalize.
     """
-    for part in _split_top_level(block):
+    for part in _split_top_level_quoted(block):
         m = re.match(rf"{re.escape(name)}\s*=\s*(.+)", part, re.S)
         if m:
             return m.group(1).strip()
@@ -848,6 +850,28 @@ def _extract_text_literal(value_text: str) -> str | None:
     m = re.match(r"^(?:html|md)\s*\(\s*(.*)\)\s*$", v, re.S)
     if m:
         v = m.group(1).strip()
+    # Peel a balanced OUTER `(...)` grouping -- e.g. `title=("Sales " "FY
+    # 2025")`, a common style for wrapping a long adjacent-literal
+    # concatenation across lines. Meaningless to Python (pure grouping, not
+    # a tuple -- no top-level comma), so it must not count as "leftover"
+    # dynamic content. Only strips a pair that spans the ENTIRE remaining
+    # text and is genuinely balanced (its own depth never returns to 0
+    # before the final char), so `("a") + ("b")` is correctly left alone.
+    while v.startswith("(") and v.endswith(")") and len(v) >= 2:
+        inner = v[1:-1]
+        depth = 0
+        closes_early = False
+        for idx, ch in enumerate(inner):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth < 0:
+                    closes_early = True
+                    break
+        if closes_early or depth != 0:
+            break
+        v = inner.strip()
     parts: list[str] = []
     spans: list[tuple[int, int]] = []
     i, n = 0, len(v)
@@ -926,13 +950,9 @@ def _split_top_level_quoted(text: str) -> list[str]:
     return [p for p in (p.strip() for p in parts) if p != ""]
 
 
-def _kwarg_value_quoted_aware(block: str, name: str) -> str | None:
-    """Like `_kwarg_value`, split via `_split_top_level_quoted` instead."""
-    for part in _split_top_level_quoted(block):
-        m = re.match(rf"{re.escape(name)}\s*=\s*(.+)", part, re.S)
-        if m:
-            return m.group(1).strip()
-    return None
+# `_kwarg_value` is now quote-aware itself (it used to differ from this
+# alias); kept as a name so existing call sites don't need to change.
+_kwarg_value_quoted_aware = _kwarg_value
 
 
 _TAB_HEADER_POSITIONAL_INDEX = {"title": 0, "subtitle": 1}
@@ -1058,6 +1078,31 @@ def _resolve_columns_token(value_text: str | None, var_map: dict[str, list[str]]
     return _columns_token(value_text)
 
 
+def _resolve_columns_list(value_text: str | None, var_map: dict[str, list[str]]) -> list[str]:
+    """Like `_resolve_columns_token`, but returns the actual list of column
+    names instead of a comma-joined string.
+
+    Exists because `token.split(",")` on `_resolve_columns_token`'s joined
+    string is ambiguous when a column name itself contains a comma
+    (`"Sales, USD"` joined with a second column becomes indistinguishable
+    from two columns "Sales" and "USD"). Callers that need to iterate
+    individual column names (`_fmt_column_map`, `_color_mechanics`,
+    `_bold_columns`) use this instead; callers that only ever treat the
+    result as an opaque signature string (`_color_signature`,
+    `_columns_signature`) keep using `_resolve_columns_token`/
+    `_columns_token`, where the ambiguity doesn't matter (the string is
+    never re-split, only compared for equality across runs).
+    """
+    if value_text is None:
+        return []
+    ident = value_text.strip()
+    if ident == "None":
+        return []
+    if ident in var_map and re.fullmatch(r"[A-Za-z_]\w*", ident):
+        return sorted(var_map[ident])
+    return re.findall(r"""['"]((?:[^'"\\]|\\.)*)['"]""", value_text)
+
+
 def _call_arg_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
     """Like `_call_arg_blocks`, paired with each match's source offset.
 
@@ -1138,10 +1183,24 @@ def _color_mechanics(source: str) -> list[dict]:
     finding) kwargs that can't be there. A literal `.data_color(...)` call
     that omits any of the three gets the SAME materialized defaults
     (`_DATA_COLOR_DEFAULTS`), since that's what actually renders.
+
+    A `.data_color(..., rows=[...])` call restricted to a subset of rows is
+    EXCLUDED entirely (like the analogous `_fmt_column_map` row-scope
+    exclusion) — it colors only part of the column, so it must not be
+    reported identically to a call that colors the whole measure.
+    `heatmap(...)` has no `rows=` parameter at all, so this only applies to
+    the literal branch.
+
+    `columns` is an actual `list[str]` (via `_resolve_columns_list`), not a
+    comma-joined string — a column name can itself contain a comma, which a
+    joined-then-split representation can't distinguish from two columns.
     """
     var_map = _list_var_map(source)
     entries: list[tuple[int, dict]] = []
     for pos, block in _call_arg_blocks_pos(source, "data_color"):
+        rows_val = _kwarg_value(block, "rows")
+        if rows_val is not None and rows_val.strip() != "None":
+            continue
         cols_val = _kwarg_value(block, "columns")
         if cols_val is None:
             # Quote-aware (see _heatmap_columns_raw): a column name can
@@ -1151,14 +1210,14 @@ def _color_mechanics(source: str) -> list[dict]:
             ]
             cols_val = positionals[0] if positionals else None
         entries.append((pos, {
-            "columns": _resolve_columns_token(cols_val, var_map),
+            "columns": _resolve_columns_list(cols_val, var_map),
             "na_color": _kwarg_or_default(block, "na_color"),
             "truncate": _kwarg_or_default(block, "truncate"),
             "autocolor_text": _kwarg_or_default(block, "autocolor_text"),
         }))
     for pos, block in _bare_call_blocks_pos(source, "heatmap"):
         entries.append((pos, {
-            "columns": _resolve_columns_token(_heatmap_columns_raw(block), var_map),
+            "columns": _resolve_columns_list(_heatmap_columns_raw(block), var_map),
             "na_color": "#808080",
             "truncate": "False",
             "autocolor_text": "True",
@@ -1186,11 +1245,28 @@ def _render_params(source: str) -> dict:
     defaults (`zoom=2.0`, `expand=5` — verified against the installed
     `great_tables==0.22.0` signature), so those are materialized too, the
     same way the `finalize(...)` branch already materializes its defaults.
+
+    When there are MULTIPLE `.gtsave(...)` calls (e.g. an earlier debug/
+    preview render before the final one), prefers whichever call's target
+    path contains `table.png` — the harness's mandated output filename —
+    over just taking the first. Falls back to the LAST call (last-wins,
+    consistent with the other multi-call fields above) when none of them
+    mentions `table.png` explicitly (e.g. a variable path).
     """
     blocks = _call_arg_blocks(source, "gtsave")
     if blocks:
+        block = blocks[-1]  # last-wins default when no call targets table.png
+        for b in blocks:
+            file_val = _kwarg_value(b, "file")
+            if file_val is None:
+                positionals = [
+                    p for p in _split_top_level_quoted(b) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                file_val = positionals[0] if positionals else None
+            if file_val and "table.png" in file_val:
+                block = b
+                break
         out: dict[str, str] = {"zoom": "2.0", "expand": "5"}
-        block = blocks[0]
         for kw in ("zoom", "expand", "vwidth", "vheight"):
             v = _kwarg_value(block, kw)
             if v is not None:
@@ -1278,9 +1354,9 @@ def _bold_columns(source: str) -> list[str]:
             # Resolve a list-variable reference (e.g. `loc.body(columns=
             # hero_cols)`) through var_map, the same as the other
             # per-column fields, before falling back to plain quoted names.
-            token = _resolve_columns_token(cols_val, var_map)
-            if token not in ("(cols?)", _ALL_COLUMNS):
-                out.extend(token.split(","))
+            # _resolve_columns_list (not _resolve_columns_token) avoids the
+            # join-then-split ambiguity for a column name containing a comma.
+            out.extend(_resolve_columns_list(cols_val, var_map))
     return out
 
 
@@ -1295,16 +1371,24 @@ def _hlines_active(source: str) -> bool:
     the first match would get this backwards). An explicit LAST
     `table_body_hlines_style="none"` is authoritative and disables the line
     regardless of any `_width`/`_color` also being set (those are
-    meaningless once style disables rendering).
+    meaningless once style disables rendering). Likewise a zero-length
+    `_width` (`"0px"`, `"0"`, ...) renders no visible line no matter what
+    `style`/`color` say, so it is equally authoritative.
     """
     def _last(attr: str) -> str | None:
         matches = re.findall(rf"table_body_hlines_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
         return matches[-1] if matches else None
 
+    def _is_zero_length(v: str) -> bool:
+        return re.fullmatch(r"0+(\.0+)?(px|pt|em|rem|%)?", v.strip()) is not None
+
     style = _last("style")
     if style is not None and style.strip().lower() in ("none", "hidden", ""):
         return False
-    for v in (style, _last("width"), _last("color")):
+    width = _last("width")
+    if width is not None and _is_zero_length(width):
+        return False
+    for v in (style, width, _last("color")):
         if v is not None and v.strip().lower() not in ("none", "hidden", ""):
             return True
     return False
@@ -1338,10 +1422,7 @@ def _fmt_column_map(source: str) -> dict[str, list[str]]:
                 p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
             ]
             val = positionals[0] if positionals else None
-        token = _resolve_columns_token(val, var_map)
-        if token in ("(cols?)", _ALL_COLUMNS):
-            continue
-        for col in token.split(","):
+        for col in _resolve_columns_list(val, var_map):
             out.setdefault(col, []).append(name)
     return out
 
