@@ -16,6 +16,7 @@ consistency metric. A baseline (no-skill) run is parsed too, for contrast.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -565,8 +566,11 @@ def _heatmap_columns_raw(block: str) -> str | None:
     """
     val = _kwarg_value(block, "columns")
     if val is None:
+        # Quote-aware: a column name can itself contain a comma (e.g.
+        # "Sales, USD"), which the plain bracket-depth-only splitter would
+        # misread as an argument separator.
         positionals = [
-            p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
         ]
         if len(positionals) >= 2:  # positionals[0] is the gt object
             val = positionals[1]
@@ -833,6 +837,12 @@ def _extract_text_literal(value_text: str) -> str | None:
     literals) also returns None — a `+ str(year)` operator, a method chain,
     an f-string prefix, etc. left over once every matched literal span is
     removed means the value is a dynamic expression, not static text.
+
+    Each segment is decoded via `ast.literal_eval` (real Python string-
+    literal semantics: `\\n`/`\\t`/`\\uXXXX`/etc. all resolve to the actual
+    characters that render, not the literal two-character escape sequence)
+    rather than hand-rolled unescaping, falling back to the raw matched text
+    only if `literal_eval` itself fails for some unforeseen reason.
     """
     v = value_text.strip()
     m = re.match(r"^(?:html|md)\s*\(\s*(.*)\)\s*$", v, re.S)
@@ -853,7 +863,11 @@ def _extract_text_literal(value_text: str) -> str | None:
                 prefix = v[j + 1 : i].lower()
                 if "f" in prefix and "{" in mm.group(1):
                     return None
-                parts.append(mm.group(1))
+                try:
+                    decoded = ast.literal_eval(v[j + 1 : mm.end()])
+                except Exception:
+                    decoded = mm.group(1)
+                parts.append(decoded)
                 spans.append((j + 1, mm.end()))
                 i = mm.end()
                 continue
@@ -867,7 +881,7 @@ def _extract_text_literal(value_text: str) -> str | None:
     leftover = "".join(ch for idx, ch in enumerate(v) if not covered[idx])
     if leftover.strip():
         return None
-    return "".join(parts).replace('\\"', '"').replace("\\'", "'")
+    return "".join(parts)
 
 
 def _split_top_level_quoted(text: str) -> list[str]:
@@ -930,7 +944,12 @@ def _tab_header_text(source: str, kwarg: str) -> str | None:
     Falls back to the positional form (`tab_header("Sales", "FY 2025")` —
     `title` is positional arg 0, `subtitle` is arg 1) when the keyword isn't
     present, so a validly-documented positional call isn't read as absent.
+
+    Uses the LAST `tab_header(...)` call in the source — a script that calls
+    it more than once (`.tab_header("Old").tab_header("New")`) renders the
+    LATER one, so reading the first would report stale text.
     """
+    result: str | None = None
     for block in _call_arg_blocks(source, "tab_header"):
         val = _kwarg_value_quoted_aware(block, kwarg)
         if val is None:
@@ -943,8 +962,8 @@ def _tab_header_text(source: str, kwarg: str) -> str | None:
                 if idx < len(positionals):
                     val = positionals[idx]
         if val is not None:
-            return _extract_text_literal(val)
-    return None
+            result = _extract_text_literal(val)
+    return result
 
 
 def _source_note_texts(source: str) -> list[str | None]:
@@ -1089,6 +1108,19 @@ def _bare_call_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
 _DATA_COLOR_DEFAULTS = {"na_color": "#808080", "truncate": "False", "autocolor_text": "True"}
 
 
+def _kwarg_or_default(block: str, name: str) -> str:
+    """`_unquote(_kwarg_value(block, name))`, defaulting when omitted OR
+    explicitly `None` (`na_color=None` is documented as "use the default,"
+    identical to not passing it at all — a bare unquoted `"None"` must not
+    be treated as a real, different value from the default it explicitly
+    requests).
+    """
+    v = _unquote(_kwarg_value(block, name))
+    if v is None or v == "None":
+        return _DATA_COLOR_DEFAULTS[name]
+    return v
+
+
 def _color_mechanics(source: str) -> list[dict]:
     """One dict per colored-measure call (`data_color`/`heatmap`), in TRUE
     source order (both call kinds interleave-sorted by match offset, so a
@@ -1112,15 +1144,17 @@ def _color_mechanics(source: str) -> list[dict]:
     for pos, block in _call_arg_blocks_pos(source, "data_color"):
         cols_val = _kwarg_value(block, "columns")
         if cols_val is None:
+            # Quote-aware (see _heatmap_columns_raw): a column name can
+            # itself contain a comma.
             positionals = [
-                p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
             ]
             cols_val = positionals[0] if positionals else None
         entries.append((pos, {
             "columns": _resolve_columns_token(cols_val, var_map),
-            "na_color": _unquote(_kwarg_value(block, "na_color")) or _DATA_COLOR_DEFAULTS["na_color"],
-            "truncate": _unquote(_kwarg_value(block, "truncate")) or _DATA_COLOR_DEFAULTS["truncate"],
-            "autocolor_text": _unquote(_kwarg_value(block, "autocolor_text")) or _DATA_COLOR_DEFAULTS["autocolor_text"],
+            "na_color": _kwarg_or_default(block, "na_color"),
+            "truncate": _kwarg_or_default(block, "truncate"),
+            "autocolor_text": _kwarg_or_default(block, "autocolor_text"),
         }))
     for pos, block in _bare_call_blocks_pos(source, "heatmap"):
         entries.append((pos, {
@@ -1165,8 +1199,16 @@ def _render_params(source: str) -> dict:
 
     finalize_blocks = _bare_call_blocks(source, "finalize")
     if finalize_blocks:
-        out = {"expand": "15", "zoom": "2.0"}
         block = finalize_blocks[0]
+        # A `**overrides`/`**{...}` expansion can override the defaults with
+        # values this parser can't see (it isn't a literal `kwarg=value`) --
+        # reporting the defaults anyway could mask a below-minimum override
+        # (e.g. `finalize(gt, **{"zoom": 1.0})`), so leave this unresolved
+        # rather than assert a default that might not be what actually
+        # rendered.
+        if any(p.strip().startswith("**") for p in _split_top_level(block)):
+            return {}
+        out = {"expand": "15", "zoom": "2.0"}
         for kw in ("zoom", "expand", "vwidth", "vheight"):
             v = _kwarg_value(block, kw)
             if v is not None:
@@ -1187,6 +1229,7 @@ def _bold_columns(source: str) -> list[str]:
     `locations=` keywords and the equivalent positional form
     (`tab_style(style.text(...), loc.body(...))`) are recognized.
     """
+    var_map = _list_var_map(source)
     out: list[str] = []
     for block in _call_arg_blocks(source, "tab_style"):
         style_val = _kwarg_value(block, "style")
@@ -1224,12 +1267,20 @@ def _bold_columns(source: str) -> list[str]:
             continue
         cols_val = _kwarg_value(body_args, "columns")
         if cols_val is None:
+            # Quote-aware (see _heatmap_columns_raw): a column name can
+            # itself contain a comma.
             positionals = [
-                p for p in _split_top_level(body_args) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                p for p in _split_top_level_quoted(body_args)
+                if not re.match(r"[A-Za-z_]\w*\s*=", p)
             ]
             cols_val = positionals[0] if positionals else None
         if cols_val:
-            out.extend(re.findall(r"['\"]([^'\"]+)['\"]", cols_val))
+            # Resolve a list-variable reference (e.g. `loc.body(columns=
+            # hero_cols)`) through var_map, the same as the other
+            # per-column fields, before falling back to plain quoted names.
+            token = _resolve_columns_token(cols_val, var_map)
+            if token not in ("(cols?)", _ALL_COLUMNS):
+                out.extend(token.split(","))
     return out
 
 
@@ -1267,15 +1318,24 @@ def _fmt_column_map(source: str) -> dict[str, list[str]]:
     call via the same `_columns_token` used by the color-signature helpers;
     a call with no parseable column target, or an explicit `columns=None`
     (`_ALL_COLUMNS` — "every column", not a column literally named "None"),
-    contributes nothing rather than being guessed or fabricated.
+    contributes nothing rather than being guessed or fabricated. A call
+    restricted to a subset of rows (`rows=...`, and not the literal `None`
+    "every row" default) is EXCLUDED entirely — it doesn't format the whole
+    column, so it must not satisfy a whole-column semantic-type check the
+    same way a full-column call does.
     """
     var_map = _list_var_map(source)
     out: dict[str, list[str]] = {}
     for name, block in _fmt_calls(source):
+        rows_val = _kwarg_value(block, "rows")
+        if rows_val is not None and rows_val.strip() != "None":
+            continue
         val = _kwarg_value(block, "columns")
         if val is None:
+            # Quote-aware (see _heatmap_columns_raw): a column name can
+            # itself contain a comma.
             positionals = [
-                p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
             ]
             val = positionals[0] if positionals else None
         token = _resolve_columns_token(val, var_map)
