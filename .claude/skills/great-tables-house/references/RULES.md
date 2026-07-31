@@ -72,8 +72,22 @@ population growth, 1996–2021"):
    about what to display for the towns already selected, not a competing
    ranking criterion, even though it sits right next to "fastest-growing."
    An explicitly named metric ("top 15 by revenue") always wins outright,
-   full stop, no further judgment needed.
-2. **A stated date range always means the FULL span, not a sub-period** —
+   full stop, no further judgment needed. **If the topic measure and the
+   named display columns are different things** (population to rank by,
+   density to display), show BOTH as columns, not just the display one —
+   a table titled "population growth trends" that contains zero
+   population data reads as incomplete regardless of how well it answers
+   the density question.
+2. **Entity/category scope: match the request's term to ALL data rows it
+   plausibly covers, not a narrower literal subset** — "Ontario towns"
+   in ordinary usage means "Ontario municipalities" generically; if the
+   data has a type/category column (e.g. `csd_type` with `town`/`city`/
+   `township`/`municipality`/`village`), don't silently filter to only the
+   rows whose type-value literally matches the request's word. State the
+   scope actually used (e.g. "all municipality types" vs. "town-type
+   records only") so the choice, once made, is explicit rather than a
+   silent, unstated filter.
+3. **A stated date range always means the FULL span, not a sub-period** —
    "from 1996 to 2021" compares `value_2021` against `value_1996`, never a
    single interior period, unless the request names that period
    specifically. Compare them as a **percentage/relative change**
@@ -84,8 +98,16 @@ population growth, 1996–2021"):
    adding the same absolute headcount), the same convention "fastest-
    growing companies/cities" lists use elsewhere. Use absolute change
    instead only when the request explicitly asks for a magnitude ("added
-   the most residents," "grew by the largest number").
-3. **"Show X across all periods, with changes between each period" means
+   the most residents," "grew by the largest number"). **Guard the
+   baseline first**: a percentage/relative change is only meaningful for a
+   strictly positive starting value — a measure that can legitimately
+   start at zero or negative (revenue from a new product, profit from a
+   loss) makes `(end - start) / start` divide-by-zero or produce a
+   sign-reversed, meaningless result. When the baseline can be
+   zero/negative, fall back to absolute change instead and say so in the
+   subtitle/source note, rather than applying the percentage formula
+   blindly.
+4. **"Show X across all periods, with changes between each period" means
    BOTH, not one or the other** — when a request separately names the
    per-checkpoint values ("density changes across all census years") AND
    the between-period deltas ("percentage changes between each period"),
