@@ -102,6 +102,13 @@ def _json_safe(v):
 def main():
     with open(path) as fh:
         src = fh.read()
+    # A script that reads sys.argv (e.g. `argparse.ArgumentParser().
+    # parse_args()`, even with no custom arguments defined) would otherwise
+    # see this runner's OWN argv (the table path at index 1) as an
+    # unexpected positional and raise SystemExit before a fingerprint is
+    # ever produced -- reset argv to look like a normal `python table.py`
+    # invocation first.
+    sys.argv = [path]
     ns = {"__name__": "__main__", "__file__": path}
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
