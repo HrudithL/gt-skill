@@ -1634,13 +1634,18 @@ def _fmt_column_map(source: str) -> dict[str, str]:
     full target set can't be enumerated without the real schema: every
     prior per-column entry is now stale (overwritten by this call), so it
     must not survive as though it were still the effective formatter.
+
+    A row-scoped LATER call for a column that ALREADY has a whole-column
+    entry also invalidates that entry (rather than merely being skipped):
+    it overwrites the formatting for the rows it targets, so the column is
+    no longer uniformly the earlier formatter either — a column that's
+    "mostly fmt_percent, one row overridden to fmt_number" must not read
+    as "fully fmt_percent" just because the row-restricted call itself
+    doesn't count as a NEW whole-column formatter.
     """
     var_map = _list_var_map(source)
     out: dict[str, str] = {}
     for name, block in _fmt_calls(source):
-        rows_val = _kwarg_value(block, "rows")
-        if rows_val is not None and rows_val.strip() != "None":
-            continue
         val = _kwarg_value(block, "columns")
         if val is None:
             # Quote-aware (see _heatmap_columns_raw): a column name can
@@ -1649,6 +1654,14 @@ def _fmt_column_map(source: str) -> dict[str, str]:
                 p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
             ]
             val = positionals[0] if positionals else None
+        rows_val = _kwarg_value(block, "rows")
+        if rows_val is not None and rows_val.strip() != "None":
+            if val is None or val.strip() == "None":
+                out.clear()
+            else:
+                for col in _resolve_columns_list(val, var_map):
+                    out.pop(col, None)
+            continue
         if val is None or val.strip() == "None":
             out.clear()
             continue
