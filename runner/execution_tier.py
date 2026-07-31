@@ -67,11 +67,20 @@ except Exception:
 def _json_safe(v):
     if v is None:
         return None
-    if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
-        # +/-inf (e.g. a percent-change divide-by-zero) is not valid JSON --
-        # json.dumps would emit the non-standard Infinity/-Infinity token.
-        # Normalized to None like NaN: both mean "not a usable number".
+    if isinstance(v, float) and math.isnan(v):
         return None
+    if isinstance(v, float) and math.isinf(v):
+        # +inf and -inf are DISTINCT computed results (e.g. a percent-change
+        # divide-by-zero with the wrong sign is a real, different bug from
+        # one with the right sign) -- collapsing both to the same value
+        # would let values_close() treat a wrong-signed infinity as a
+        # match. Encoded as the literal strings "Infinity"/"-Infinity"
+        # (valid JSON, unlike a raw non-standard Infinity token) rather
+        # than a bespoke sentinel: Python's float() parses them straight
+        # back to real +-inf, and math.isclose already special-cases
+        # inf-vs-inf (True) and inf-vs-(-inf) (False) correctly, so
+        # values_close() needs no changes at all to compare these right.
+        return "Infinity" if v > 0 else "-Infinity"
     if isinstance(v, (bool, int, float, str)):
         return v
     try:
@@ -134,6 +143,7 @@ def main():
     row_order = [r.rownum_i for r in rows]
 
     summary_rows = []
+    summary_rows_error = None
     try:
         grand = gt._summary_rows_grand
         if grand is not None:
@@ -142,8 +152,14 @@ def main():
                     "label": _json_safe(getattr(info, "label", None)),
                     "values": {k: _json_safe(v) for k, v in getattr(info, "values", {}).items()},
                 })
-    except Exception:
-        pass
+    except Exception as e:
+        # Distinguish "extraction broke" from "no grand summary defined" --
+        # a bare `except: pass` here would make a genuine extraction
+        # failure (e.g. a great_tables version change breaking the
+        # _summary_rows_grand/_d attribute path) indistinguishable from a
+        # table with no summary at all, silently skipping or false-passing
+        # a summary-row check that should have run.
+        summary_rows_error = f"{type(e).__name__}: {e}"
 
     return {
         "ok": True,
@@ -157,6 +173,7 @@ def main():
         "hidden_columns": hidden_columns,
         "columns": columns,
         "summary_rows": summary_rows,
+        "summary_rows_error": summary_rows_error,
         "gt_version": _installed_gt_version,
         "gt_version_pin_mismatch": (
             _installed_gt_version is not None and _installed_gt_version != _PINNED_GT_VERSION
@@ -257,6 +274,25 @@ def values_close(a: Any, b: Any, *, rel_tol: float = _REL_TOL, abs_tol: float = 
 def normalize_id(x: Any) -> str:
     """Canonical form of a row/entity identifier for set comparison."""
     return str(x).strip().casefold()
+
+
+def _value_distance(a: Any, b: Any) -> float:
+    """Numeric closeness of `a`/`b` for greedy nearest-match alignment
+    (`_shared_pairs`) -- NOT a pass/fail check like `values_close`, just an
+    ordering to pick the best available pairing among several candidates
+    for the same repeated stub key. Both None -> 0 (closest possible);
+    exactly one None -> infinity (never the best choice over a real
+    value); both numeric -> absolute difference; otherwise 0 if equal
+    strings else infinity.
+    """
+    if a is None and b is None:
+        return 0.0
+    if a is None or b is None:
+        return float("inf")
+    try:
+        return abs(float(a) - float(b))
+    except (TypeError, ValueError):
+        return 0.0 if str(a).strip() == str(b).strip() else float("inf")
 
 
 def row_set_identity(
@@ -369,21 +405,38 @@ def _shared_pairs(
         # repeats across what were distinct groups (e.g. "S"/"M" reused in
         # every group). A plain {key: i} dict would keep only the LAST
         # truth occurrence of a repeated key, silently losing every earlier
-        # occurrence instead of aligning it with anything. Keep every
-        # occurrence's index and consume them in order: the candidate's Nth
-        # occurrence of a key pairs with the truth's Nth occurrence of that
-        # SAME key, so repeated-label rows still align one-to-one.
+        # occurrence instead of aligning it with anything -- so every
+        # occurrence's index is kept. FIFO consumption (candidate's Nth
+        # occurrence <-> truth's Nth occurrence) assumes row order
+        # corresponds, but row order/count is explicitly never graded
+        # elsewhere (row_set_identity is order-blind by design) -- a
+        # candidate that reproduces the same rows/values in a different
+        # order must still match. So each candidate occurrence instead
+        # greedily claims whichever remaining truth occurrence of the SAME
+        # key has the CLOSEST value in the very column being compared --
+        # value proximity is the only available disambiguator once the key
+        # (and group, if usable) is already tied, and it naturally
+        # reproduces FIFO's result when order and values agree.
         truth_by_key: dict[tuple, list[int]] = {}
         for i, key in enumerate(truth_keys):
             truth_by_key.setdefault(key, []).append(i)
         pairs = []
         for i, key in enumerate(cand_keys):
             indices = truth_by_key.get(key)
-            if not indices:
+            if not indices or i >= len(cand_cols[candidate_col]):
                 continue
-            j = indices.pop(0)
-            if i < len(cand_cols[candidate_col]) and j < len(truth_cols[truth_col]):
-                pairs.append((cand_cols[candidate_col][i], truth_cols[truth_col][j]))
+            cand_val = cand_cols[candidate_col][i]
+            best_pos, best_dist = 0, None
+            for pos, j in enumerate(indices):
+                if j >= len(truth_cols[truth_col]):
+                    continue
+                dist = _value_distance(cand_val, truth_cols[truth_col][j])
+                if best_dist is None or dist < best_dist:
+                    best_dist, best_pos = dist, pos
+            if best_dist is None:
+                continue
+            j = indices.pop(best_pos)
+            pairs.append((cand_val, truth_cols[truth_col][j]))
         return pairs
     n = min(len(cand_cols[candidate_col]), len(truth_cols[truth_col]))
     return list(zip(cand_cols[candidate_col][:n], truth_cols[truth_col][:n]))
