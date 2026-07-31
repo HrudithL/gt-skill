@@ -19,6 +19,7 @@ from runner.engine import (
     ROOT,
     SKILL_CI_DIR,
     SKILL_DIR,
+    SKILL_HOUSE_DIR,
 )
 from runner.spec import MODELS, SKILL_LABELS
 
@@ -33,6 +34,7 @@ SKILL_DIRS: dict[str, Path] = {
     "prose": SKILL_DIR,
     "scripts": SKILL_CI_DIR,
     "creator": CREATOR_SKILL_SRC,
+    "house": SKILL_HOUSE_DIR,
 }
 
 

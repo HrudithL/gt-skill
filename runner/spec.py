@@ -14,12 +14,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # UI skill label -> engine variant token (see runner.engine._VARIANT_SOURCES).
-# The three self-contained skills the UI offers; "scripts" is historically the
+# The four self-contained skills the UI offers; "scripts" is historically the
 # engine's "scripted" variant, so the label differs from the token by design.
 SKILL_TO_VARIANT: dict[str, str] = {
     "prose": "prose",
     "scripts": "scripted",
     "creator": "creator",
+    "house": "house",
 }
 SKILL_LABELS: tuple[str, ...] = tuple(SKILL_TO_VARIANT)
 
@@ -88,7 +89,7 @@ class RunSpec:
       - creator (old skill_creator_runner): skill="creator"
     """
 
-    skill: str  # "prose" | "scripts" | "creator" (UI label)
+    skill: str  # "prose" | "scripts" | "creator" | "house" (UI label)
     prompts: list[PromptRef] = field(default_factory=list)
     repeats: int = 1  # per prompt
     model: str = DEFAULT_MODEL  # "haiku" | "sonnet" | "opus"
