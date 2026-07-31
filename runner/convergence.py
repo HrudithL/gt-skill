@@ -354,21 +354,17 @@ def _extract_palettes(source: str) -> list[str]:
     return sorted(palettes)
 
 
-def _vlines_active(source: str) -> bool:
-    """True if a column-group divider is present, by EITHER accepted mechanism.
+def _has_active_tab_style_border(source: str, side_pattern: str) -> bool:
+    """True if a `tab_style(style=style.borders(sides=...), ...)` call
+    names a side matching `side_pattern` (a regex alternation like
+    `left|right` or `top|bottom`) with a visible (non-`none`/non-zero)
+    style and weight.
 
-    A table-wide `*_vlines_*` `tab_options` kwarg is one way; a per-boundary
-    `tab_style(style=style.borders(sides="left"/"right", ...), ...)` call is
-    the other (what `towny_growth_trends.py` actually uses for its spanner
-    dividers) — both are equally valid per the outcome-only scoring rule, so
-    either must count.
+    Shared by `_vlines_active` (column-group dividers, `left`/`right`) and
+    `_hlines_active` (row hairlines, `top`/`bottom`) — `tab_style` +
+    `style.borders(...)` is one mechanism that can render either, keyed
+    only by which `sides` value is named.
     """
-    for m in re.finditer(
-        r"(?:table_body|column_labels)_vlines_(?:style|width|color)\s*=\s*['\"]([^'\"]+)['\"]",
-        source,
-    ):
-        if m.group(1).strip().lower() not in ("none", "hidden", ""):
-            return True
     for block in _call_arg_blocks(source, "tab_style"):
         style_val = _kwarg_value(block, "style")
         if style_val is None:
@@ -382,7 +378,7 @@ def _vlines_active(source: str) -> bool:
         # `Loc | list[Loc]`-shaped API `tab_style` uses for `locations=`),
         # e.g. `style=[style.borders(sides="top"), style.borders(sides=
         # "left")]` — inspect EVERY `style.borders(...)` occurrence, not
-        # just the first, so a divider named anywhere in the list counts.
+        # just the first, so a border named anywhere in the list counts.
         for bm in re.finditer(r"style\s*\.\s*borders\s*\(", style_val):
             open_idx = bm.end() - 1
             close_idx = _scan_balanced_paren(style_val, open_idx)
@@ -390,8 +386,7 @@ def _vlines_active(source: str) -> bool:
                 continue
             borders_block = style_val[open_idx + 1 : close_idx]
             # A `style="none"`/`"hidden"` on the border itself disables it
-            # regardless of which sides were named — a left/right side with
-            # no visible border style renders no divider at all.
+            # regardless of which sides were named.
             border_style_val = _kwarg_value(borders_block, "style")
             if border_style_val is not None:
                 unquoted = _unquote(border_style_val)
@@ -410,13 +405,29 @@ def _vlines_active(source: str) -> bool:
                     p for p in _split_top_level(borders_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
                 ]
                 sides_val = positionals[0] if positionals else None
-            # Only an actual "left"/"right" token counts — a purely
-            # horizontal `sides=["top", "bottom"]` is a row rule, not a
-            # column divider, and must not be misread as one just because
-            # it's a bracketed list.
-            if sides_val and re.search(r"['\"](?:left|right)['\"]", sides_val):
+            if sides_val and re.search(rf"['\"](?:{side_pattern})['\"]", sides_val):
                 return True
     return False
+
+
+def _vlines_active(source: str) -> bool:
+    """True if a column-group divider is present, by EITHER accepted mechanism.
+
+    A table-wide `*_vlines_*` `tab_options` kwarg is one way; a per-boundary
+    `tab_style(style=style.borders(sides="left"/"right", ...), ...)` call is
+    the other (what `towny_growth_trends.py` actually uses for its spanner
+    dividers) — both are equally valid per the outcome-only scoring rule, so
+    either must count. Only an actual "left"/"right" token counts — a
+    purely horizontal `sides=["top", "bottom"]` is a row rule (see
+    `_hlines_active`), not a column divider.
+    """
+    for m in re.finditer(
+        r"(?:table_body|column_labels)_vlines_(?:style|width|color)\s*=\s*['\"]([^'\"]+)['\"]",
+        source,
+    ):
+        if m.group(1).strip().lower() not in ("none", "hidden", ""):
+            return True
+    return _has_active_tab_style_border(source, "left|right")
 
 
 # --------------------------------------------------------------------------- #
@@ -926,7 +937,15 @@ def _find_quoted_strings(text: str) -> list[str]:
     while i < n:
         c = text[i]
         if c in "'\"":
-            pat = _DQ_STRING if c == '"' else _SQ_STRING
+            # Try the TRIPLE-quote pattern first (see
+            # _extract_text_literal's identical ordering rationale): the
+            # single-quote pattern would otherwise match just the opening
+            # `"` of `"""..."""` and misread an embedded ordinary quote as
+            # the string's end.
+            triple = c * 3
+            pat = (_TQ_DQ_STRING if c == '"' else _TQ_SQ_STRING) if text[i : i + 3] == triple else (
+                _DQ_STRING if c == '"' else _SQ_STRING
+            )
             m = pat.match(text, i)
             if m:
                 j = i - 1
@@ -937,7 +956,7 @@ def _find_quoted_strings(text: str) -> list[str]:
                     i = m.end()
                     continue
                 try:
-                    out.append(ast.literal_eval(text[i : m.end()]))
+                    out.append(ast.literal_eval(text[j + 1 : m.end()]))
                 except Exception:
                     out.append(m.group(1))
                 i = m.end()
@@ -1183,6 +1202,43 @@ def _source_note_texts(source: str) -> list[str | None]:
     return texts
 
 
+def _strip_line_comments(text: str) -> str:
+    """Remove `#`-to-end-of-line comments from `text`, quote-aware (a
+    literal `#` inside a string, e.g. a column named "Item #1", is not a
+    comment and is left alone).
+    """
+    out: list[str] = []
+    quote: str | None = None
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if quote:
+            if c == "\\" and i + 1 < n:
+                out.append(text[i : i + 2])
+                i += 2
+                continue
+            if text[i : i + len(quote)] == quote:
+                out.append(quote)
+                i += len(quote)
+                quote = None
+                continue
+            out.append(c)
+            i += 1
+            continue
+        if c in "'\"":
+            quote = c * 3 if text[i : i + 3] == c * 3 else c
+            out.append(quote)
+            i += len(quote)
+            continue
+        if c == "#":
+            j = text.find("\n", i)
+            i = j if j != -1 else n
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def _list_var_map(source: str) -> dict[str, list[str]]:
     """Best-effort ``{variable name -> [quoted strings]}`` for simple
     list-literal assignments (e.g. ``density_cols = ["density_1996", ...]``).
@@ -1226,8 +1282,16 @@ def _list_var_map(source: str) -> dict[str, list[str]]:
         # character (_DQ_STRING/_SQ_STRING fullmatch), not a "no quotes at
         # all inside" check — the latter would reject (and so silently drop
         # the whole assignment for) a perfectly valid element containing an
-        # apostrophe, e.g. `hero_cols = ["Owner's share"]`.
-        elems = _split_top_level_quoted(body)
+        # apostrophe, e.g. `hero_cols = ["Owner's share"]`. An explanatory
+        # comment between elements (`["sales", # primary\n "profit"]`) is
+        # stripped first — `_split_top_level_quoted` isn't comment-aware,
+        # so it would otherwise glue the comment onto the following
+        # element's text and fail the fullmatch, discarding the whole
+        # (fully static) binding over what's really just a comment.
+        elems = [
+            e for e in (_strip_line_comments(p).strip() for p in _split_top_level_quoted(body))
+            if e
+        ]
         if elems and all(_DQ_STRING.fullmatch(e) or _SQ_STRING.fullmatch(e) for e in elems):
             out[name] = [_find_quoted_strings(e)[0] for e in elems]
     return out
@@ -1551,9 +1615,16 @@ def _bold_columns(source: str) -> list[str]:
             # A `rows=[...]`-restricted location bolds only a subset of
             # cells, not the whole column — must not count as the required
             # whole-column hero emphasis (same row-scope exclusion already
-            # applied to fmt_column_map/color_mechanics).
+            # applied to fmt_column_map/color_mechanics). A `**{...}`
+            # expansion could supply `rows=` invisibly to the keyword
+            # lookup, so it's treated the same as an explicit row
+            # restriction — it MIGHT be row-scoped and this parser can't
+            # tell, so it's not credited as whole-column emphasis either.
             rows_val = _kwarg_value(body_args, "rows")
-            if rows_val is not None and rows_val.strip() != "None":
+            has_expansion = any(
+                p.strip().startswith("**") for p in _split_top_level_quoted(body_args)
+            )
+            if has_expansion or (rows_val is not None and rows_val.strip() != "None"):
                 continue
             cols_val = _kwarg_value(body_args, "columns")
             if cols_val is None:
@@ -1589,6 +1660,13 @@ def _hlines_active(source: str) -> bool:
     meaningless once style disables rendering). Likewise a zero-length
     `_width` (`"0px"`, `"0"`, ...) renders no visible line no matter what
     `style`/`color` say, so it is equally authoritative.
+
+    A per-boundary `tab_style(style=style.borders(sides="top"/"bottom",
+    ...), locations=loc.body())` call is an EQUALLY valid alternate
+    mechanism for rendering row hairlines (the outcome-only scoring rule
+    applies here the same way it does for `_vlines_active`'s
+    `left`/`right` equivalent) — checked when the table-wide
+    `table_body_hlines_*` options don't already establish one.
     """
     def _last(attr: str) -> str | None:
         matches = re.findall(rf"table_body_hlines_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
@@ -1603,7 +1681,7 @@ def _hlines_active(source: str) -> bool:
     for v in (style, width, _last("color")):
         if v is not None and v.strip().lower() not in ("none", "hidden", ""):
             return True
-    return False
+    return _has_active_tab_style_border(source, "top|bottom")
 
 
 def _fmt_column_map(source: str) -> dict[str, str]:
@@ -1636,12 +1714,21 @@ def _fmt_column_map(source: str) -> dict[str, str]:
     must not survive as though it were still the effective formatter.
 
     A row-scoped LATER call for a column that ALREADY has a whole-column
-    entry also invalidates that entry (rather than merely being skipped):
-    it overwrites the formatting for the rows it targets, so the column is
-    no longer uniformly the earlier formatter either — a column that's
-    "mostly fmt_percent, one row overridden to fmt_number" must not read
-    as "fully fmt_percent" just because the row-restricted call itself
-    doesn't count as a NEW whole-column formatter.
+    entry also invalidates that entry (rather than merely being skipped)
+    UNLESS it's the SAME formatter name — it overwrites the formatting for
+    the rows it targets, so a column that's "mostly fmt_percent, one row
+    overridden to fmt_number" must not read as "fully fmt_percent"; but a
+    row-scoped re-application of the identical formatter
+    (`.fmt_percent(columns="rate").fmt_percent(columns="rate",
+    rows=[0])`) leaves the column uniformly the same format it already
+    was, so that entry survives.
+
+    A `**overrides`/`**{...}` expansion supplying `rows=` isn't visible to
+    the plain keyword lookup, so a row-scoped call written that way would
+    otherwise be read as unrestricted (no `rows=` found) and wrongly
+    establish/keep a whole-column entry — treated the same as an explicit
+    `rows=[...]` (invalidate, don't establish) since it MIGHT be
+    row-restricted and this parser can't tell.
     """
     var_map = _list_var_map(source)
     out: dict[str, str] = {}
@@ -1655,12 +1742,15 @@ def _fmt_column_map(source: str) -> dict[str, str]:
             ]
             val = positionals[0] if positionals else None
         rows_val = _kwarg_value(block, "rows")
-        if rows_val is not None and rows_val.strip() != "None":
+        has_expansion = any(p.strip().startswith("**") for p in _split_top_level_quoted(block))
+        row_restricted = has_expansion or (rows_val is not None and rows_val.strip() != "None")
+        if row_restricted:
             if val is None or val.strip() == "None":
                 out.clear()
             else:
                 for col in _resolve_columns_list(val, var_map):
-                    out.pop(col, None)
+                    if out.get(col) != name:
+                        out.pop(col, None)
             continue
         if val is None or val.strip() == "None":
             out.clear()
