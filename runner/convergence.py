@@ -850,6 +850,13 @@ def _compute_data_hash(
 # --------------------------------------------------------------------------- #
 _DQ_STRING = re.compile(r'"((?:[^"\\]|\\.)*)"', re.S)
 _SQ_STRING = re.compile(r"'((?:[^'\\]|\\.)*)'", re.S)
+# Triple-quoted literals, checked BEFORE the single-quote patterns above so
+# a triple-double-quoted string containing an ordinary embedded double
+# quote (`"""The "Best" Sales"""`) isn't misread as three single strings
+# ending at the first embedded `"`. Non-greedy so it stops at the first
+# genuine `"""`/`'''`, not the last one in the source.
+_TQ_DQ_STRING = re.compile(r'"""((?:\\.|(?!""").)*?)"""', re.S)
+_TQ_SQ_STRING = re.compile(r"'''((?:\\.|(?!''').)*?)'''", re.S)
 
 
 def _find_quoted_strings(text: str) -> list[str]:
@@ -941,6 +948,29 @@ def _extract_text_literal(value_text: str) -> str | None:
     while i < n:
         c = v[i]
         if c in "'\"":
+            # Try the TRIPLE-quote pattern first — checking the single-quote
+            # one first would match just the opening `"` of `"""..."""` as
+            # an empty string and misread an embedded ordinary quote
+            # (`"""The "Best" Sales"""`) as the literal's end.
+            triple = c * 3
+            if v[i : i + 3] == triple:
+                tpat = _TQ_DQ_STRING if c == '"' else _TQ_SQ_STRING
+                tm = tpat.match(v, i)
+                if tm:
+                    j = i - 1
+                    while j >= 0 and v[j].isalpha():
+                        j -= 1
+                    prefix = v[j + 1 : i].lower()
+                    if "f" in prefix and "{" in tm.group(1):
+                        return None
+                    try:
+                        decoded = ast.literal_eval(v[j + 1 : tm.end()])
+                    except Exception:
+                        decoded = tm.group(1)
+                    parts.append(decoded)
+                    spans.append((j + 1, tm.end()))
+                    i = tm.end()
+                    continue
             pat = _DQ_STRING if c == '"' else _SQ_STRING
             mm = pat.match(v, i)
             if mm:
@@ -1489,8 +1519,8 @@ def _hlines_active(source: str) -> bool:
     return False
 
 
-def _fmt_column_map(source: str) -> dict[str, list[str]]:
-    """Best-effort `{source column -> [fmt_* names applied]}`.
+def _fmt_column_map(source: str) -> dict[str, str]:
+    """Best-effort `{source column -> the EFFECTIVE fmt_* name}`.
 
     Feeds the per-column semantic `fmt_*` check (against `SEMANTIC_TYPES`).
     Reads the `columns=` kwarg (or first positional) of each `.fmt_*(...)`
@@ -1502,9 +1532,17 @@ def _fmt_column_map(source: str) -> dict[str, list[str]]:
     "every row" default) is EXCLUDED entirely — it doesn't format the whole
     column, so it must not satisfy a whole-column semantic-type check the
     same way a full-column call does.
+
+    When the SAME column is formatted more than once
+    (`.fmt_percent(columns="rate").fmt_number(columns="rate")`), only the
+    LAST call actually renders — `fmt_*` calls don't stack, each later one
+    replaces the formatting of every column it targets. `_fmt_calls`
+    yields calls in source order, so simply overwriting on each occurrence
+    naturally keeps only the effective (last) one per column, rather than
+    accumulating every formatter ever applied.
     """
     var_map = _list_var_map(source)
-    out: dict[str, list[str]] = {}
+    out: dict[str, str] = {}
     for name, block in _fmt_calls(source):
         rows_val = _kwarg_value(block, "rows")
         if rows_val is not None and rows_val.strip() != "None":
@@ -1518,7 +1556,7 @@ def _fmt_column_map(source: str) -> dict[str, list[str]]:
             ]
             val = positionals[0] if positionals else None
         for col in _resolve_columns_list(val, var_map):
-            out.setdefault(col, []).append(name)
+            out[col] = name
     return out
 
 
