@@ -316,33 +316,37 @@ def _vlines_active(source: str) -> bool:
             style_val = positionals[0] if positionals else None
         if style_val is None:
             continue
-        bm = re.search(r"style\s*\.\s*borders\s*\(", style_val)
-        if not bm:
-            continue
-        open_idx = bm.end() - 1
-        close_idx = _scan_balanced_paren(style_val, open_idx)
-        borders_block = style_val[open_idx + 1 : close_idx] if close_idx is not None else None
-        if borders_block is None:
-            continue
-        # A `style="none"`/`"hidden"` on the border itself disables it
-        # regardless of which sides were named — a left/right side with no
-        # visible border style renders no divider at all.
-        border_style_val = _kwarg_value(borders_block, "style")
-        if border_style_val is not None:
-            unquoted = _unquote(border_style_val)
-            if unquoted and unquoted.strip().lower() in ("none", "hidden", ""):
+        # `style=` accepts a single style OR a list of them (the same
+        # `Loc | list[Loc]`-shaped API `tab_style` uses for `locations=`),
+        # e.g. `style=[style.borders(sides="top"), style.borders(sides=
+        # "left")]` — inspect EVERY `style.borders(...)` occurrence, not
+        # just the first, so a divider named anywhere in the list counts.
+        for bm in re.finditer(r"style\s*\.\s*borders\s*\(", style_val):
+            open_idx = bm.end() - 1
+            close_idx = _scan_balanced_paren(style_val, open_idx)
+            if close_idx is None:
                 continue
-        sides_val = _kwarg_value(borders_block, "sides")
-        if sides_val is None:
-            positionals = [
-                p for p in _split_top_level(borders_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
-            ]
-            sides_val = positionals[0] if positionals else None
-        # Only an actual "left"/"right" token counts — a purely horizontal
-        # `sides=["top", "bottom"]` is a row rule, not a column divider, and
-        # must not be misread as one just because it's a bracketed list.
-        if sides_val and re.search(r"['\"](?:left|right)['\"]", sides_val):
-            return True
+            borders_block = style_val[open_idx + 1 : close_idx]
+            # A `style="none"`/`"hidden"` on the border itself disables it
+            # regardless of which sides were named — a left/right side with
+            # no visible border style renders no divider at all.
+            border_style_val = _kwarg_value(borders_block, "style")
+            if border_style_val is not None:
+                unquoted = _unquote(border_style_val)
+                if unquoted and unquoted.strip().lower() in ("none", "hidden", ""):
+                    continue
+            sides_val = _kwarg_value(borders_block, "sides")
+            if sides_val is None:
+                positionals = [
+                    p for p in _split_top_level(borders_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                sides_val = positionals[0] if positionals else None
+            # Only an actual "left"/"right" token counts — a purely
+            # horizontal `sides=["top", "bottom"]` is a row rule, not a
+            # column divider, and must not be misread as one just because
+            # it's a bracketed list.
+            if sides_val and re.search(r"['\"](?:left|right)['\"]", sides_val):
+                return True
     return False
 
 
@@ -401,21 +405,18 @@ _FMT_KWARGS = (
 
 
 def _fmt_calls(source: str) -> list[tuple[str, str]]:
-    """Every `.fmt_*(...)` call as (name, arg-block), via a balanced-paren scan."""
+    """Every `.fmt_*(...)` call as (name, arg-block), via `_scan_balanced_paren`
+    (quote-aware — an unmatched paren character inside a formatted column's
+    string argument, e.g. `.fmt_number(columns="Sales (USD")`, must not
+    break extraction, same as every other call-block scan in this module).
+    """
     out: list[tuple[str, str]] = []
     for m in re.finditer(r"\.(fmt_[a-z_]+)\s*\(", source):
         name = m.group(1)
         open_idx = m.end() - 1
-        depth = 0
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    out.append((name, source[open_idx + 1 : j]))
-                    break
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            out.append((name, source[open_idx + 1 : close_idx]))
     return out
 
 
@@ -936,6 +937,13 @@ def _extract_text_literal(value_text: str) -> str | None:
         for k in range(s, e):
             covered[k] = 1
     leftover = "".join(ch for idx, ch in enumerate(v) if not covered[idx])
+    # A `#` in `leftover` is never inside a matched string (those spans are
+    # already excluded above), so it's always the start of a genuine Python
+    # comment — strip `#`-to-end-of-line before deciding whether anything
+    # dynamic is left. A comment alongside otherwise-static text
+    # (`("Sales FY 2025"  # concise heading\n)`) must not make static text
+    # look unresolvable.
+    leftover = re.sub(r"#[^\n]*", "", leftover)
     if leftover.strip():
         return None
     return "".join(parts)
@@ -1138,6 +1146,14 @@ def _resolve_columns_list(value_text: str | None, var_map: dict[str, list[str]])
         return []
     if ident in var_map and re.fullmatch(r"[A-Za-z_]\w*", ident):
         return sorted(var_map[ident])
+    # A column-selector expression (great_tables/polars `cs.starts_with(...)`
+    # and friends) is not a literal column reference — its quoted operand
+    # ("rate_") is a PATTERN, not itself a column name, and the columns it
+    # actually selects (rate_q1, rate_q2, ...) can't be known without the
+    # real schema. Extracting that operand as though it were one concrete
+    # column is worse than admitting it's unresolvable.
+    if re.match(r"^cs\s*\.\s*\w+\s*\(", ident):
+        return []
     return _find_quoted_strings(value_text)
 
 
@@ -1359,6 +1375,13 @@ def _bold_columns(source: str) -> list[str]:
             if close_idx is None:
                 continue
             body_args = loc_val[open_idx + 1 : close_idx]
+            # A `rows=[...]`-restricted location bolds only a subset of
+            # cells, not the whole column — must not count as the required
+            # whole-column hero emphasis (same row-scope exclusion already
+            # applied to fmt_column_map/color_mechanics).
+            rows_val = _kwarg_value(body_args, "rows")
+            if rows_val is not None and rows_val.strip() != "None":
+                continue
             cols_val = _kwarg_value(body_args, "columns")
             if cols_val is None:
                 # Quote-aware (see _heatmap_columns_raw): a column name can
