@@ -527,10 +527,14 @@ def match_measure_by_value(
     """Which candidate column is "the same measure" as `truth_col`, by value.
 
     Scores every VISIBLE, non-structural candidate column against
-    `truth_col` via `column_match_fraction` and returns the first (leftmost,
-    by the candidate DataFrame's own column order — the same tie-break
-    `palettes.md` uses for primary/secondary measure assignment) column
-    clearing `threshold`. None if no candidate column clears it.
+    `truth_col` via `column_match_fraction` and returns the column with the
+    HIGHEST fraction among those clearing `threshold` — leftmost (by the
+    candidate DataFrame's own column order, the same tie-break
+    `palettes.md` uses for primary/secondary measure assignment) is only
+    the tie-break for an EQUAL score, not a reason to stop at the first
+    column that merely clears the bar (an earlier column matching 19/20
+    values must not win over a later column matching all 20). None if no
+    candidate column clears it.
 
     The stub column, the group column, and every `cols_hide(...)`-hidden
     column are excluded from the search: a candidate that hides a raw copy
@@ -542,13 +546,14 @@ def match_measure_by_value(
     excluded = {candidate_fp.get("stub_column"), candidate_fp.get("group_column")}
     excluded |= set(candidate_fp.get("hidden_columns") or [])
     best_col: str | None = None
+    best_frac: float | None = None
     for col in candidate_fp.get("columns", {}):
         if col in excluded:
             continue
         frac = column_match_fraction(candidate_fp, truth_fp, col, truth_col)
         if frac is not None and frac >= threshold:
-            best_col = col
-            break
+            if best_frac is None or frac > best_frac:
+                best_col, best_frac = col, frac
     return best_col
 
 
