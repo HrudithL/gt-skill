@@ -724,6 +724,36 @@ def _find_stub_tint_hue(source: str) -> str | None:
     return _unquote(_kwarg_value(blocks[0], "hue")) or "unknown"
 
 
+def _stub_tint_present(source: str) -> bool:
+    """True if a stub tint is applied, by EITHER accepted mechanism.
+
+    The `stub_tint(gt, *, hue)` runtime helper is one way; a literal
+    `tab_style(style=style.fill(color=...), locations=loc.stub())` call is
+    the other (what `towny_growth_trends.py` actually uses) — both are
+    equally valid per the outcome-only scoring rule.
+    """
+    if _find_stub_tint_hue(source) is not None:
+        return True
+    for block in _call_arg_blocks(source, "tab_style"):
+        loc_val = _kwarg_value(block, "locations")
+        if loc_val is None:
+            positionals = [
+                p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            loc_val = positionals[1] if len(positionals) >= 2 else None
+        if loc_val is None or not re.search(r"loc\s*\.\s*stub\s*\(", loc_val):
+            continue
+        style_val = _kwarg_value(block, "style")
+        if style_val is None:
+            positionals = [
+                p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            style_val = positionals[0] if positionals else None
+        if style_val and re.search(r"style\s*\.\s*fill\s*\(", style_val):
+            return True
+    return False
+
+
 def _constructor_col_present(gt_blocks: list[str], kw: str) -> bool:
     """True if any GT(...) block sets `kw=<an actual column>` (not None).
 
@@ -1451,6 +1481,19 @@ def _color_mechanics(source: str) -> list[dict]:
     `columns` is an actual `list[str]` (via `_resolve_columns_list`), not a
     comma-joined string — a column name can itself contain a comma, which a
     joined-then-split representation can't distinguish from two columns.
+
+    `palette` is the palette/hue name (`_palette_of_block` for a literal
+    `data_color`, the `hue=` kwarg for `heatmap`) — needed by the
+    comparator to classify each colored measure as sequential vs.
+    diverging and to check for a same-family hue collision between two
+    measures, neither of which `_extract_palettes`/`_color_signature`
+    (which report palettes independent of which measure they belong to)
+    can answer on their own.
+
+    `domain` is the raw `domain=` kwarg text (None if omitted) — kept
+    per-entry rather than relying on `_domain_signature`'s OWN list, which
+    is SORTED (for stable repeat-vs-repeat comparison) and so cannot be
+    zipped positionally against this list, which is TRUE SOURCE ORDER.
     """
     var_map = _list_var_map(source)
     entries: list[tuple[int, dict]] = []
@@ -1468,6 +1511,8 @@ def _color_mechanics(source: str) -> list[dict]:
             cols_val = positionals[0] if positionals else None
         entries.append((pos, {
             "columns": _resolve_columns_list(cols_val, var_map),
+            "palette": _palette_of_block(block),
+            "domain": _kwarg_value(block, "domain"),
             "na_color": _kwarg_or_default(block, "na_color"),
             "truncate": _kwarg_or_default(block, "truncate"),
             "autocolor_text": _kwarg_or_default(block, "autocolor_text"),
@@ -1475,6 +1520,8 @@ def _color_mechanics(source: str) -> list[dict]:
     for pos, block in _bare_call_blocks_pos(source, "heatmap"):
         entries.append((pos, {
             "columns": _resolve_columns_list(_heatmap_columns_raw(block), var_map),
+            "palette": _unquote(_kwarg_value(block, "hue")) or "default",
+            "domain": _kwarg_value(block, "domain"),
             "na_color": "#808080",
             "truncate": "False",
             "autocolor_text": "True",
@@ -1856,6 +1903,7 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         "grouping_present": grouping_present,
         "stub_present": stub_present,
         "stub_tint_hue": _find_stub_tint_hue(source),
+        "stub_tint_present": _stub_tint_present(source),
         "columns_signature": _columns_signature(source),
         "fmt_signature": _fmt_signature(source),
         "domain_signature": _domain_signature(source),
