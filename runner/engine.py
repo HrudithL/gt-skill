@@ -95,14 +95,17 @@ _VARIANT_SOURCES: dict[str, tuple[Path, str]] = {
 
 
 def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
-    """Build an ephemeral `.claude` root mounting exactly one skill for this variant.
+    """Build ``run_dir/.claude`` as a real directory mounting exactly one skill.
 
-    Every with-skill variant gets its own copied `.claude` under ``run_dir`` (no
-    variant returns the repo `.claude` as-is, so a run never sees more than the
-    one skill it is testing). The repo `.claude` contents *other than* ``skills/``
-    (e.g. ``settings.local.json``) are mirrored so permissions match the project;
-    ``skills/`` then holds only ``<mounted name>/``, copied verbatim from the
-    variant's source directory:
+    Rebuilt from scratch on every call (rmtree + recreate in place), so a run
+    never sees more than the one skill it is testing — regardless of what a
+    previous call (a different variant, or a stale baseline run) left behind.
+    No per-variant staging directory or symlink indirection: there's only ever
+    one name involved (``.claude``), so there's nothing "stale" to hunt down by
+    name — the rebuild-in-place already guarantees isolation. The repo
+    `.claude` contents *other than* ``skills/`` (e.g. ``settings.local.json``)
+    are mirrored so permissions match the project; ``skills/`` then holds only
+    ``<mounted name>/``, copied verbatim from the variant's source directory:
 
     - ``prose`` → the minimal, script-free ``great-tables`` skill.
     - ``scripted`` → the ``great-tables-ci`` skill (same skeleton + the checker
@@ -114,72 +117,71 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
         raise ValueError(
             f"skill_variant must be one of {SKILL_VARIANTS}, got {skill_variant!r}"
         )
+    # run_dir/.claude and ROOT/.claude now share a name (unlike the old
+    # .claude-<variant> scheme, which never collided with the source by
+    # construction). If run_dir ever resolved to ROOT, the rmtree below would
+    # delete the project's real skill sources before copying from them.
+    if run_dir.resolve() == ROOT.resolve():
+        raise ValueError("run_dir must not be the repository root (ROOT)")
     src, mounted = _VARIANT_SOURCES[skill_variant]
 
-    eph = run_dir / f".claude-{skill_variant}"
-    if eph.exists():
-        shutil.rmtree(eph)
-    eph.mkdir(parents=True)
+    claude_dir = run_dir / ".claude"
+    if claude_dir.is_symlink() or claude_dir.exists():
+        if claude_dir.is_symlink():
+            claude_dir.unlink()
+        else:
+            shutil.rmtree(claude_dir)
+    claude_dir.mkdir(parents=True)
 
     # Mirror everything except skills/ so permissions etc. match the real project.
     for item in (ROOT / ".claude").iterdir():
         if item.name == "skills":
             continue
         if item.is_dir():
-            shutil.copytree(item, eph / item.name)
+            shutil.copytree(item, claude_dir / item.name)
         else:
-            shutil.copy2(item, eph / item.name)
+            shutil.copy2(item, claude_dir / item.name)
 
-    skills_dst = eph / "skills"
+    skills_dst = claude_dir / "skills"
     skills_dst.mkdir()
     # Copy the selected skill verbatim as the mounted skill. symlinks=False
     # follows the CI skill's references/assets symlinks and copies real files.
     shutil.copytree(src, skills_dst / mounted, symlinks=False)
-    return eph
+    return claude_dir
 
 
 def _clear_mounted_helpers(run_dir: Path) -> None:
-    """Remove helper-script symlinks a PREVIOUS variant mounted into ``run_dir``.
+    """Remove helper-script symlinks a PREVIOUS call mounted into ``run_dir``.
 
     The mount block below symlinks each mounted skill's ``scripts/*.py`` directly
     into ``run_dir`` (so ``import gt_consistency`` / ``python gt_check.py`` /
     ``import gt_house_style`` resolve with ``cwd=run_dir``). Those links are only
-    ever ADDED, so when a ``run_dir`` is reused for a DIFFERENT variant they
-    linger — a prior ``scripted`` run's ``gt_check.py``/``gt_consistency.py``
-    would stay importable in a later ``prose`` or baseline ``none`` run and
-    contaminate the "no-script" condition (a critical variant-isolation bug).
+    ever ADDED, so if ``run_dir`` is ever reused for a DIFFERENT variant (e.g. a
+    hand-written script calling ``engine.run()`` twice against the same dir —
+    the CLI/web app never do this, since every ``repeat_N``/``baseline`` dir is
+    created fresh) they'd linger: a prior ``scripted`` run's
+    ``gt_check.py``/``gt_consistency.py`` would stay importable in a later
+    ``prose`` or baseline ``none`` run and contaminate the "no-script" condition
+    (a critical variant-isolation bug).
 
-    Every harness helper link resolves into one of this harness's ephemeral
-    ``.claude-<variant>`` skill roots under ``run_dir``, so we identify them by
-    that target lineage and unlink them. The ``.claude`` mount symlink is skipped
-    (re-pointed separately) and the data-file symlink (target has no
-    ``.claude-*`` component) is never touched.
+    Every harness helper link resolves into ``run_dir/.claude``, so we identify
+    them by that target and unlink them. The ``.claude`` directory itself is
+    skipped (rebuilt separately by ``_prepare_skill_root``, or removed outright
+    for the baseline) and the data-file symlink (target has no ``.claude``
+    component) is never touched.
     """
+    claude_dir = run_dir / ".claude"
     for entry in run_dir.iterdir():
         if entry.name == ".claude":
-            continue  # the mount symlink itself; re-pointed by the caller
+            continue  # rebuilt in place, or removed, by the caller
         if not entry.is_symlink():
             continue
-        target = os.readlink(entry)
-        if any(part.startswith(".claude-") for part in Path(target).parts):
-            entry.unlink()
-
-
-def _clear_stale_skill_roots(run_dir: Path, keep: str | None) -> None:
-    """Remove ephemeral ``.claude-<variant>`` roots left by OTHER variants.
-
-    ``_prepare_skill_root`` only rmtree's the CURRENT variant's ``.claude-<v>``
-    dir, so a prior variant's materialized ``scripts/`` (the real files the stale
-    helper links pointed at) survive a ``run_dir`` reuse. ``keep`` is the current
-    variant's dir name to preserve (``None`` for the baseline, which keeps none),
-    so a reused ``run_dir`` exposes ONLY the current variant's mechanics.
-    """
-    for entry in run_dir.glob(".claude-*"):
-        if entry.is_symlink() or not entry.is_dir():
+        target = Path(os.readlink(entry))
+        try:
+            target.relative_to(claude_dir)
+        except ValueError:
             continue
-        if keep is not None and entry.name == keep:
-            continue
-        shutil.rmtree(entry, ignore_errors=True)
+        entry.unlink()
 
 
 # Harness-specific rendering instructions appended to the claude_code system
@@ -454,35 +456,29 @@ async def run(
         data_link.symlink_to(data_path)
 
     # Baseline (BASELINE_VARIANT) sees NO .claude at all: skip skill-root prep
-    # and the symlink entirely, and remove any stale .claude a previous variant
-    # left in this run_dir. With-skill variants each get their own ephemeral
-    # skill root symlinked in (see _prepare_skill_root), mounting exactly one
-    # skill under its name.
+    # entirely, and remove any .claude a previous call left in this run_dir.
+    # With-skill variants get a real `.claude` rebuilt in place (see
+    # _prepare_skill_root), mounting exactly one skill under its name.
     is_baseline = skill_variant == BASELINE_VARIANT
     mounted_skill = None if is_baseline else _VARIANT_SOURCES[skill_variant][1]
-    claude_link = run_dir / ".claude"
+    claude_dir = run_dir / ".claude"
     skill_root: Path | None = None
 
-    # Variant isolation (critical): before mounting the current variant, strip
-    # any helper-script symlinks AND materialized `.claude-<other>` roots a prior
-    # variant left in this reused run_dir, so it exposes ONLY the current
-    # variant's mechanics. For prose and baseline `none` this guarantees NO
-    # helper scripts remain importable in the run cwd.
-    current_eph_name = None if is_baseline else f".claude-{skill_variant}"
+    # Variant isolation: strip any helper-script symlinks a prior call left in
+    # this run_dir before mounting the current variant, so run_dir exposes ONLY
+    # the current variant's mechanics (the CLI/web app never reuse a run_dir
+    # across variants — every repeat_N/baseline dir is created fresh — but
+    # _prepare_skill_root's own rebuild-in-place isn't enough by itself to
+    # catch these, since they live in run_dir, not under .claude).
     _clear_mounted_helpers(run_dir)
-    _clear_stale_skill_roots(run_dir, keep=current_eph_name)
 
     if is_baseline:
-        if claude_link.is_symlink():
-            claude_link.unlink()
-        elif claude_link.exists():
-            shutil.rmtree(claude_link)
+        if claude_dir.is_symlink():
+            claude_dir.unlink()
+        elif claude_dir.exists():
+            shutil.rmtree(claude_dir)
     else:
         skill_root = _prepare_skill_root(run_dir, skill_variant)
-        if claude_link.is_symlink():
-            claude_link.unlink()  # re-point a stale link from a previous variant
-        if not claude_link.exists():
-            claude_link.symlink_to(skill_root)
 
     # (R11) No per-file Chrome shim is symlinked in anymore: the CDP attach lives
     # in the venv `.pth` startup hook (_ensure_sidecar_hook above), so a generated
