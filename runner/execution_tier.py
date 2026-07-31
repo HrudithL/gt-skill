@@ -259,6 +259,14 @@ def values_close(a: Any, b: Any, *, rel_tol: float = _REL_TOL, abs_tol: float = 
     different formula differs by far more than this). Otherwise, string
     equality after `str().strip()` (case-sensitive — labels/categories are
     not free-form prose, unlike the caption keyword check).
+
+    A genuine text value that happens to spell "NaN" (a categorical/text
+    column, not a missing float) coerces via `float()` to a real NaN on
+    both sides, and `math.isclose(nan, nan)` is ALWAYS False per IEEE
+    semantics — so two textually-identical "NaN" strings would otherwise
+    incorrectly read as not matching. Falls back to string equality
+    whenever either coerced value is NaN, rather than trusting
+    `math.isclose` with it.
     """
     if a is None and b is None:
         return True
@@ -266,33 +274,32 @@ def values_close(a: Any, b: Any, *, rel_tol: float = _REL_TOL, abs_tol: float = 
         return False
     try:
         fa, fb = float(a), float(b)
+        if math.isnan(fa) or math.isnan(fb):
+            return str(a).strip() == str(b).strip()
         return math.isclose(fa, fb, rel_tol=rel_tol, abs_tol=abs_tol)
     except (TypeError, ValueError):
         return str(a).strip() == str(b).strip()
 
 
+# Reserved for a genuinely missing (`None`) row/group identifier -- a
+# control-character sentinel that no real, user-authored identifier text
+# could ever normalize to, so it can never collide with the literal text
+# "None" (str(None) and str("None") would otherwise both casefold to the
+# same "none" and be treated as the same entity).
+_MISSING_ID = "\x00__MISSING__\x00"
+
+
 def normalize_id(x: Any) -> str:
-    """Canonical form of a row/entity identifier for set comparison."""
-    return str(x).strip().casefold()
+    """Canonical form of a row/entity identifier for set comparison.
 
-
-def _value_distance(a: Any, b: Any) -> float:
-    """Numeric closeness of `a`/`b` for greedy nearest-match alignment
-    (`_shared_pairs`) -- NOT a pass/fail check like `values_close`, just an
-    ordering to pick the best available pairing among several candidates
-    for the same repeated stub key. Both None -> 0 (closest possible);
-    exactly one None -> infinity (never the best choice over a real
-    value); both numeric -> absolute difference; otherwise 0 if equal
-    strings else infinity.
+    `None` (a genuinely absent identifier) normalizes to the reserved
+    `_MISSING_ID` sentinel, kept distinct from the literal text "None" --
+    without this, a candidate row with a missing stub value and a truth
+    row whose stub literally reads "None" would incorrectly compare equal.
     """
-    if a is None and b is None:
-        return 0.0
-    if a is None or b is None:
-        return float("inf")
-    try:
-        return abs(float(a) - float(b))
-    except (TypeError, ValueError):
-        return 0.0 if str(a).strip() == str(b).strip() else float("inf")
+    if x is None:
+        return _MISSING_ID
+    return str(x).strip().casefold()
 
 
 def row_set_identity(
@@ -379,6 +386,36 @@ def _row_keys(row_ids: list, group_ids: list | None) -> list[tuple]:
     return [_row_key(rid, gid) for rid, gid in zip(row_ids, group_ids)]
 
 
+def _max_bipartite_matching(n_left: int, adjacency: dict[int, list[int]]) -> dict[int, int]:
+    """Maximum-cardinality bipartite matching (Kuhn's augmenting-path
+    algorithm) between `n_left` left nodes (0..n_left-1) and whatever right
+    nodes appear in `adjacency`'s value lists. Returns `{left: right}` for
+    a matching of maximum size.
+
+    Used by `_shared_pairs` to find the assignment of candidate-to-truth
+    occurrences (for one repeated stub key) that maximizes the COUNT of
+    within-tolerance pairs, independent of which order either side lists
+    its rows in. O(V*E), fine here since a repeated-key group is a handful
+    of rows in practice, never a large fraction of a whole table.
+    """
+    match_right: dict[int, int] = {}  # right -> left
+
+    def try_assign(u: int, visited: set[int]) -> bool:
+        for v in adjacency.get(u, []):
+            if v in visited:
+                continue
+            visited.add(v)
+            if v not in match_right or try_assign(match_right[v], visited):
+                match_right[v] = u
+                return True
+        return False
+
+    for u in range(n_left):
+        try_assign(u, set())
+
+    return {u: v for v, u in match_right.items()}
+
+
 def _shared_pairs(
     candidate_fp: dict, truth_fp: dict, candidate_col: str, truth_col: str,
 ) -> list[tuple[Any, Any]]:
@@ -406,37 +443,58 @@ def _shared_pairs(
         # every group). A plain {key: i} dict would keep only the LAST
         # truth occurrence of a repeated key, silently losing every earlier
         # occurrence instead of aligning it with anything -- so every
-        # occurrence's index is kept. FIFO consumption (candidate's Nth
-        # occurrence <-> truth's Nth occurrence) assumes row order
-        # corresponds, but row order/count is explicitly never graded
-        # elsewhere (row_set_identity is order-blind by design) -- a
-        # candidate that reproduces the same rows/values in a different
-        # order must still match. So each candidate occurrence instead
-        # greedily claims whichever remaining truth occurrence of the SAME
-        # key has the CLOSEST value in the very column being compared --
-        # value proximity is the only available disambiguator once the key
-        # (and group, if usable) is already tied, and it naturally
-        # reproduces FIFO's result when order and values agree.
-        truth_by_key: dict[tuple, list[int]] = {}
-        for i, key in enumerate(truth_keys):
-            truth_by_key.setdefault(key, []).append(i)
-        pairs = []
+        # occurrence's index is kept, grouped by key.
+        #
+        # Row order/count is explicitly never graded elsewhere
+        # (row_set_identity is order-blind by design), so a candidate that
+        # reproduces the same rows/values in a different order must still
+        # score as a full match. A GREEDY nearest-value assignment (tried
+        # first) is still order-dependent in an adversarial sense: eagerly
+        # committing an early, merely-closest (not actually close) pairing
+        # can consume the one truth value a LATER, genuinely-correct
+        # candidate needed, cascading into a run of false mismatches purely
+        # from where the bad value happens to sit. The fix is a proper
+        # maximum-CARDINALITY bipartite matching restricted to `values_close`
+        # edges (_max_bipartite_matching below): it finds the assignment
+        # that maximizes the COUNT of within-tolerance pairs regardless of
+        # order, which is the actual scoring objective. Any candidate/truth
+        # occurrences left over after that (real mismatches, or a count
+        # imbalance) are paired off arbitrarily just so every candidate row
+        # still gets SOME partner for the fraction's denominator -- none of
+        # them can be "close" (the matching already claimed every possible
+        # close pair), so how they're paired among themselves doesn't
+        # change the resulting fraction.
+        cand_by_key: dict[tuple, list[int]] = {}
         for i, key in enumerate(cand_keys):
-            indices = truth_by_key.get(key)
-            if not indices or i >= len(cand_cols[candidate_col]):
+            cand_by_key.setdefault(key, []).append(i)
+        truth_by_key: dict[tuple, list[int]] = {}
+        for j, key in enumerate(truth_keys):
+            truth_by_key.setdefault(key, []).append(j)
+
+        cand_values = cand_cols[candidate_col]
+        truth_values = truth_cols[truth_col]
+        pairs = []
+        for key, cand_positions in cand_by_key.items():
+            truth_positions = truth_by_key.get(key)
+            if not truth_positions:
                 continue
-            cand_val = cand_cols[candidate_col][i]
-            best_pos, best_dist = 0, None
-            for pos, j in enumerate(indices):
-                if j >= len(truth_cols[truth_col]):
-                    continue
-                dist = _value_distance(cand_val, truth_cols[truth_col][j])
-                if best_dist is None or dist < best_dist:
-                    best_dist, best_pos = dist, pos
-            if best_dist is None:
+            cis = [i for i in cand_positions if i < len(cand_values)]
+            tjs = [j for j in truth_positions if j < len(truth_values)]
+            if not cis or not tjs:
                 continue
-            j = indices.pop(best_pos)
-            pairs.append((cand_val, truth_cols[truth_col][j]))
+            adjacency = {
+                ci: [tj for tj in range(len(tjs)) if values_close(cand_values[cis[ci]], truth_values[tjs[tj]])]
+                for ci in range(len(cis))
+            }
+            matching = _max_bipartite_matching(len(cis), adjacency)  # ci -> tj
+            leftover_tjs = iter(tj for tj in range(len(tjs)) if tj not in matching.values())
+            for ci in range(len(cis)):
+                tj = matching.get(ci)
+                if tj is None:
+                    tj = next(leftover_tjs, None)
+                    if tj is None:
+                        continue  # more candidate occurrences than truth ones for this key
+                pairs.append((cand_values[cis[ci]], truth_values[tjs[tj]]))
         return pairs
     n = min(len(cand_cols[candidate_col]), len(truth_cols[truth_col]))
     return list(zip(cand_cols[candidate_col][:n], truth_cols[truth_col][:n]))
