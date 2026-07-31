@@ -182,10 +182,11 @@ def _bare_call_blocks(source: str, func: str) -> list[str]:
     are caught — matching `gt_check.py`'s leniency so the two enforcement layers
     agree. The leading `(?<![\\w.])` still means `heatmap` never matches inside
     `add_heatmap` (a longer identifier), and the qualifier is a single level so a
-    chained `df.x.stripe(` is not caught.
+    chained `df.x.stripe(` is not caught. `(?<!def )` excludes a script's own
+    `def heatmap(...):` declaration of the same name from being read as a call.
     """
     blocks: list[str] = []
-    for m in re.finditer(rf"(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
+    for m in re.finditer(rf"(?<!def )(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
         open_idx = m.end() - 1
         depth = 0
         for j in range(open_idx, len(source)):
@@ -312,6 +313,14 @@ def _vlines_active(source: str) -> bool:
                     break
         if borders_block is None:
             continue
+        # A `style="none"`/`"hidden"` on the border itself disables it
+        # regardless of which sides were named — a left/right side with no
+        # visible border style renders no divider at all.
+        border_style_val = _kwarg_value(borders_block, "style")
+        if border_style_val is not None:
+            unquoted = _unquote(border_style_val)
+            if unquoted and unquoted.strip().lower() in ("none", "hidden", ""):
+                continue
         sides_val = _kwarg_value(borders_block, "sides")
         if sides_val is None:
             positionals = [
@@ -818,12 +827,19 @@ def _extract_text_literal(value_text: str) -> str | None:
     literal template text — `{year}` is never what actually renders, and
     fabricating "Sales for {year}" as though it were the real title would be
     worse than admitting the text isn't known statically.
+
+    Likewise, anything OTHER than plain adjacent-literal concatenation
+    (Python only allows whitespace/comments between two adjacent string
+    literals) also returns None — a `+ str(year)` operator, a method chain,
+    an f-string prefix, etc. left over once every matched literal span is
+    removed means the value is a dynamic expression, not static text.
     """
     v = value_text.strip()
     m = re.match(r"^(?:html|md)\s*\(\s*(.*)\)\s*$", v, re.S)
     if m:
         v = m.group(1).strip()
     parts: list[str] = []
+    spans: list[tuple[int, int]] = []
     i, n = 0, len(v)
     while i < n:
         c = v[i]
@@ -838,10 +854,18 @@ def _extract_text_literal(value_text: str) -> str | None:
                 if "f" in prefix and "{" in mm.group(1):
                     return None
                 parts.append(mm.group(1))
+                spans.append((j + 1, mm.end()))
                 i = mm.end()
                 continue
         i += 1
     if not parts:
+        return None
+    covered = bytearray(n)
+    for s, e in spans:
+        for k in range(s, e):
+            covered[k] = 1
+    leftover = "".join(ch for idx, ch in enumerate(v) if not covered[idx])
+    if leftover.strip():
         return None
     return "".join(parts).replace('\\"', '"').replace("\\'", "'")
 
@@ -923,7 +947,7 @@ def _tab_header_text(source: str, kwarg: str) -> str | None:
     return None
 
 
-def _source_note_texts(source: str) -> list[str]:
+def _source_note_texts(source: str) -> list[str | None]:
     """Literal text of every `.tab_source_note(...)` call, in source order.
 
     Step 6's convention (CONSISTENCY_DEV.md) is caption first, source second —
@@ -932,8 +956,15 @@ def _source_note_texts(source: str) -> list[str]:
     candidate when both are present. This function only extracts the raw
     ordered text; interpreting which slot is which is the comparator's job,
     not the parser's.
+
+    ONE entry per call, always — a call whose text can't be resolved
+    statically (a dynamic expression, an f-string with an interpolation)
+    contributes `None` rather than being dropped. Dropping it would shift
+    every later call's text one slot earlier, so a table with an unresolved
+    caption followed by a resolvable source note would misreport the source
+    text as though it were the caption.
     """
-    texts: list[str] = []
+    texts: list[str | None] = []
     for block in _call_arg_blocks(source, "tab_source_note"):
         val = _kwarg_value_quoted_aware(block, "source_note")
         if val is None:
@@ -941,11 +972,7 @@ def _source_note_texts(source: str) -> list[str]:
                 p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
             ]
             val = positionals[0] if positionals else None
-        if val is None:
-            continue
-        text = _extract_text_literal(val)
-        if text is not None:
-            texts.append(text)
+        texts.append(_extract_text_literal(val) if val is not None else None)
     return texts
 
 
@@ -988,13 +1015,25 @@ def _list_var_map(source: str) -> dict[str, list[str]]:
     return out
 
 
+# Sentinel `_resolve_columns_token`/`_fmt_column_map` use for an explicit
+# `columns=None` — the documented great_tables meaning is "every column",
+# not a column literally named "None"; callers that attribute per-column
+# data (e.g. `_fmt_column_map`) must treat this as unresolvable-per-column
+# rather than fabricating a fake `"None"` column entry.
+_ALL_COLUMNS = "(all)"
+
+
 def _resolve_columns_token(value_text: str | None, var_map: dict[str, list[str]]) -> str:
     """Like `_columns_token`, but a bare identifier resolves through
     `var_map` first (e.g. `density_cols` -> its list's real column names)
-    before falling back to the identifier text itself.
+    before falling back to the identifier text itself. A literal `None`
+    (great_tables' "apply to every column" default) resolves to the
+    `_ALL_COLUMNS` sentinel rather than the fake column name `"None"`.
     """
     if value_text is not None:
         ident = value_text.strip()
+        if ident == "None":
+            return _ALL_COLUMNS
         if ident in var_map and re.fullmatch(r"[A-Za-z_]\w*", ident):
             return ",".join(sorted(var_map[ident]))
     return _columns_token(value_text)
@@ -1025,7 +1064,7 @@ def _call_arg_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
 def _bare_call_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
     """Position-paired variant of `_bare_call_blocks` (see `_call_arg_blocks_pos`)."""
     out: list[tuple[int, str]] = []
-    for m in re.finditer(rf"(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
+    for m in re.finditer(rf"(?<!def )(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
         open_idx = m.end() - 1
         depth = 0
         for j in range(open_idx, len(source)):
@@ -1038,6 +1077,16 @@ def _bare_call_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
                     out.append((m.start(), source[open_idx + 1 : j]))
                     break
     return out
+
+
+# `great_tables.GT.data_color`'s OWN defaults when a kwarg is omitted
+# (verified against the installed `great_tables==0.22.0`: the constructor
+# kwarg defaults to `None`, but `_data_color/base.py` substitutes this
+# literal hex whenever `na_color is None`) — a LITERAL `.data_color(...)`
+# call that omits these renders IDENTICALLY to one that states them, and to
+# an equivalent `heatmap(...)` helper call, so all three must report the
+# same mechanics rather than two `None`s and one explicit value.
+_DATA_COLOR_DEFAULTS = {"na_color": "#808080", "truncate": "False", "autocolor_text": "True"}
 
 
 def _color_mechanics(source: str) -> list[dict]:
@@ -1054,16 +1103,24 @@ def _color_mechanics(source: str) -> list[dict]:
     pinned values (`PALETTE["neutral"]["na_cell"]` = `#808080`,
     `truncate=False`, `autocolor_text=True`) internally, so a `heatmap(...)`
     call reports those FIXED values rather than looking for (and never
-    finding) kwargs that can't be there.
+    finding) kwargs that can't be there. A literal `.data_color(...)` call
+    that omits any of the three gets the SAME materialized defaults
+    (`_DATA_COLOR_DEFAULTS`), since that's what actually renders.
     """
     var_map = _list_var_map(source)
     entries: list[tuple[int, dict]] = []
     for pos, block in _call_arg_blocks_pos(source, "data_color"):
+        cols_val = _kwarg_value(block, "columns")
+        if cols_val is None:
+            positionals = [
+                p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            cols_val = positionals[0] if positionals else None
         entries.append((pos, {
-            "columns": _resolve_columns_token(_kwarg_value(block, "columns"), var_map),
-            "na_color": _unquote(_kwarg_value(block, "na_color")),
-            "truncate": _unquote(_kwarg_value(block, "truncate")),
-            "autocolor_text": _unquote(_kwarg_value(block, "autocolor_text")),
+            "columns": _resolve_columns_token(cols_val, var_map),
+            "na_color": _unquote(_kwarg_value(block, "na_color")) or _DATA_COLOR_DEFAULTS["na_color"],
+            "truncate": _unquote(_kwarg_value(block, "truncate")) or _DATA_COLOR_DEFAULTS["truncate"],
+            "autocolor_text": _unquote(_kwarg_value(block, "autocolor_text")) or _DATA_COLOR_DEFAULTS["autocolor_text"],
         }))
     for pos, block in _bare_call_blocks_pos(source, "heatmap"):
         entries.append((pos, {
@@ -1090,12 +1147,16 @@ def _render_params(source: str) -> dict:
     Raw source text per kwarg (not coerced to float) — the comparator's fit-
     order check compares against the documented default and can parse these
     itself; keeping them as text avoids silently swallowing a non-literal
-    value (e.g. `zoom=ZOOM_DEFAULT`).
+    value (e.g. `zoom=ZOOM_DEFAULT`). A literal `.gtsave(...)` call that
+    omits `zoom`/`expand` renders with `great_tables.GT.gtsave`'s own
+    defaults (`zoom=2.0`, `expand=5` — verified against the installed
+    `great_tables==0.22.0` signature), so those are materialized too, the
+    same way the `finalize(...)` branch already materializes its defaults.
     """
     blocks = _call_arg_blocks(source, "gtsave")
     if blocks:
+        out: dict[str, str] = {"zoom": "2.0", "expand": "5"}
         block = blocks[0]
-        out: dict[str, str] = {}
         for kw in ("zoom", "expand", "vwidth", "vheight"):
             v = _kwarg_value(block, kw)
             if v is not None:
@@ -1142,30 +1203,58 @@ def _bold_columns(source: str) -> list[str]:
         loc_val = loc_val or ""
         if not re.search(r"weight\s*=\s*['\"]bold['\"]", style_val):
             continue
-        if not re.search(r"loc\s*\.\s*body\s*\(", loc_val):
+        body_m = re.search(r"loc\s*\.\s*body\s*\(", loc_val)
+        if not body_m:
             continue
-        m = re.search(r"columns\s*=\s*(\[[^\]]*\]|['\"][^'\"]+['\"])", loc_val)
-        if m:
-            out.extend(re.findall(r"['\"]([^'\"]+)['\"]", m.group(1)))
+        # Extract loc.body(...)'s OWN args so a positional call
+        # (`loc.body("sales")`) is read the same as `loc.body(columns="sales")`.
+        open_idx = body_m.end() - 1
+        depth = 0
+        body_args = None
+        for j in range(open_idx, len(loc_val)):
+            c = loc_val[j]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    body_args = loc_val[open_idx + 1 : j]
+                    break
+        if body_args is None:
+            continue
+        cols_val = _kwarg_value(body_args, "columns")
+        if cols_val is None:
+            positionals = [
+                p for p in _split_top_level(body_args) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            cols_val = positionals[0] if positionals else None
+        if cols_val:
+            out.extend(re.findall(r"['\"]([^'\"]+)['\"]", cols_val))
     return out
 
 
 def _hlines_active(source: str) -> bool:
     """True if body-row hairlines (`table_body_hlines_*`) are set to non-none.
 
-    An explicit `table_body_hlines_style="none"` is authoritative and
-    disables the line regardless of any `_width`/`_color` also being set
-    (those are meaningless once style disables rendering) — checked first
-    so it can't be overridden by the generic per-kwarg scan below.
+    Uses the LAST occurrence of each of `style`/`width`/`color` independently
+    — a script commonly chains multiple `.tab_options(...)` calls, and a
+    later call's kwarg overrides an earlier one for that same attribute
+    (`.tab_options(table_body_hlines_style="none").tab_options(
+    table_body_hlines_style="solid")` renders WITH hairlines; reading only
+    the first match would get this backwards). An explicit LAST
+    `table_body_hlines_style="none"` is authoritative and disables the line
+    regardless of any `_width`/`_color` also being set (those are
+    meaningless once style disables rendering).
     """
-    style_m = re.search(r"table_body_hlines_style\s*=\s*['\"]([^'\"]+)['\"]", source)
-    if style_m and style_m.group(1).strip().lower() in ("none", "hidden", ""):
+    def _last(attr: str) -> str | None:
+        matches = re.findall(rf"table_body_hlines_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
+        return matches[-1] if matches else None
+
+    style = _last("style")
+    if style is not None and style.strip().lower() in ("none", "hidden", ""):
         return False
-    for m in re.finditer(
-        r"table_body_hlines_(?:style|width|color)\s*=\s*['\"]([^'\"]+)['\"]",
-        source,
-    ):
-        if m.group(1).strip().lower() not in ("none", "hidden", ""):
+    for v in (style, _last("width"), _last("color")):
+        if v is not None and v.strip().lower() not in ("none", "hidden", ""):
             return True
     return False
 
@@ -1176,8 +1265,9 @@ def _fmt_column_map(source: str) -> dict[str, list[str]]:
     Feeds the per-column semantic `fmt_*` check (against `SEMANTIC_TYPES`).
     Reads the `columns=` kwarg (or first positional) of each `.fmt_*(...)`
     call via the same `_columns_token` used by the color-signature helpers;
-    a call with no parseable column target contributes nothing rather than
-    being guessed.
+    a call with no parseable column target, or an explicit `columns=None`
+    (`_ALL_COLUMNS` — "every column", not a column literally named "None"),
+    contributes nothing rather than being guessed or fabricated.
     """
     var_map = _list_var_map(source)
     out: dict[str, list[str]] = {}
@@ -1189,7 +1279,7 @@ def _fmt_column_map(source: str) -> dict[str, list[str]]:
             ]
             val = positionals[0] if positionals else None
         token = _resolve_columns_token(val, var_map)
-        if token == "(cols?)":
+        if token in ("(cols?)", _ALL_COLUMNS):
             continue
         for col in token.split(","):
             out.setdefault(col, []).append(name)
