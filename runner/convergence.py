@@ -197,7 +197,9 @@ def _scan_balanced_bracket(text: str, open_idx: int) -> int | None:
 
     Used by `_list_var_map`: a column name containing a literal `]`
     (`hero_cols = ["Profit ] share"]`) must not be misread as closing the
-    list early.
+    list early. Triple-quote-aware too, for the same reason
+    `_scan_balanced_paren` is — a triple-quoted element containing a `]`
+    character must not close early either.
     """
     depth = 0
     quote: str | None = None
@@ -208,12 +210,16 @@ def _scan_balanced_bracket(text: str, open_idx: int) -> int | None:
             if c == "\\" and i + 1 < n:
                 i += 2
                 continue
-            if c == quote:
+            if text[i : i + len(quote)] == quote:
+                i += len(quote)
                 quote = None
+                continue
             i += 1
             continue
         if c in "'\"":
-            quote = c
+            quote = c * 3 if text[i : i + 3] == c * 3 else c
+            i += len(quote)
+            continue
         elif c == "[":
             depth += 1
         elif c == "]":
