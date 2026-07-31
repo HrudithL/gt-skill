@@ -272,12 +272,25 @@ def _extract_palettes(source: str) -> list[str]:
 
 
 def _vlines_active(source: str) -> bool:
-    """True if any column-divider (vlines) style/width/color is set to non-none."""
+    """True if a column-group divider is present, by EITHER accepted mechanism.
+
+    A table-wide `*_vlines_*` `tab_options` kwarg is one way; a per-boundary
+    `tab_style(style=style.borders(sides="left"/"right", ...), ...)` call is
+    the other (what `towny_growth_trends.py` actually uses for its spanner
+    dividers) — both are equally valid per the outcome-only scoring rule, so
+    either must count.
+    """
     for m in re.finditer(
         r"(?:table_body|column_labels)_vlines_(?:style|width|color)\s*=\s*['\"]([^'\"]+)['\"]",
         source,
     ):
         if m.group(1).strip().lower() not in ("none", "hidden", ""):
+            return True
+    for block in _call_arg_blocks(source, "tab_style"):
+        style_val = _kwarg_value(block, "style") or ""
+        if re.search(r"style\s*\.\s*borders\s*\(", style_val) and re.search(
+            r"sides\s*=\s*(\[[^\]]*\]|['\"](?:left|right)['\"])", style_val
+        ):
             return True
     return False
 
@@ -737,6 +750,283 @@ def _compute_data_hash(
     return None
 
 
+# --------------------------------------------------------------------------- #
+# Comparator Tier-1 additions (09-ground-truth-comparator.md §6) — new
+# source-parsed fields the convergence report never needed but the ground-
+# truth comparator's check functions do: spanner presence, data_color
+# mechanics beyond the palette name, render params, the actual text of
+# title/subtitle/caption/source (not just presence booleans), bold/hero
+# detection, summary-row presence, body hairlines, and a per-column fmt map.
+# --------------------------------------------------------------------------- #
+_DQ_STRING = re.compile(r'"((?:[^"\\]|\\.)*)"', re.S)
+_SQ_STRING = re.compile(r"'((?:[^'\\]|\\.)*)'", re.S)
+
+
+def _extract_text_literal(value_text: str) -> str | None:
+    """Best-effort literal text of a kwarg value: unwrap one `html(...)`/`md(...)`
+    call, then concatenate every quoted string segment found inside (Python's
+    implicit adjacent-string-literal concatenation, e.g. a subtitle split
+    across two lines). None when no quoted string is present (e.g. a bare
+    variable reference) — text is never fabricated from something that isn't
+    a string literal in the source.
+
+    Each segment is matched by ITS OWN quote character (`"..."` or `'...'`),
+    not `['"]` interchangeably — free-text titles routinely contain an
+    apostrophe (`"Ontario's Fastest-Growing Towns"`), and a quote-agnostic
+    match would misread that apostrophe as the string's closing quote.
+    """
+    v = value_text.strip()
+    m = re.match(r"^(?:html|md)\s*\(\s*(.*)\)\s*$", v, re.S)
+    if m:
+        v = m.group(1).strip()
+    parts: list[str] = []
+    i, n = 0, len(v)
+    while i < n:
+        pat = _DQ_STRING if v[i] == '"' else _SQ_STRING if v[i] == "'" else None
+        if pat is not None:
+            mm = pat.match(v, i)
+            if mm:
+                parts.append(mm.group(1))
+                i = mm.end()
+                continue
+        i += 1
+    if not parts:
+        return None
+    return "".join(parts).replace('\\"', '"').replace("\\'", "'")
+
+
+def _split_top_level_quoted(text: str) -> list[str]:
+    """Like `_split_top_level`, but a comma inside a string literal is NOT a
+    split point. Free-text call args (title/subtitle/source_note) routinely
+    contain commas in prose; the plain bracket-depth-only splitter would
+    truncate the value at the first in-string comma.
+    """
+    parts: list[str] = []
+    depth = 0
+    quote: str | None = None
+    cur: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if quote:
+            cur.append(c)
+            if c == "\\" and i + 1 < n:
+                cur.append(text[i + 1])
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            i += 1
+            continue
+        if c in "'\"":
+            quote = c
+            cur.append(c)
+        elif c in "([{":
+            depth += 1
+            cur.append(c)
+        elif c in ")]}":
+            depth -= 1
+            cur.append(c)
+        elif c == "," and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+        i += 1
+    parts.append("".join(cur))
+    return [p for p in (p.strip() for p in parts) if p != ""]
+
+
+def _kwarg_value_quoted_aware(block: str, name: str) -> str | None:
+    """Like `_kwarg_value`, split via `_split_top_level_quoted` instead."""
+    for part in _split_top_level_quoted(block):
+        m = re.match(rf"{re.escape(name)}\s*=\s*(.+)", part, re.S)
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+def _tab_header_text(source: str, kwarg: str) -> str | None:
+    """Literal text of `tab_header(<kwarg>=...)` (title/subtitle), if set."""
+    for block in _call_arg_blocks(source, "tab_header"):
+        val = _kwarg_value_quoted_aware(block, kwarg)
+        if val is not None:
+            return _extract_text_literal(val)
+    return None
+
+
+def _source_note_texts(source: str) -> list[str]:
+    """Literal text of every `.tab_source_note(...)` call, in source order.
+
+    Step 6's convention (CONSISTENCY_DEV.md) is caption first, source second —
+    each `tab_source_note` renders on its own stacked footer line in call
+    order — so index 0 is the caption candidate and index 1 the source
+    candidate when both are present. This function only extracts the raw
+    ordered text; interpreting which slot is which is the comparator's job,
+    not the parser's.
+    """
+    texts: list[str] = []
+    for block in _call_arg_blocks(source, "tab_source_note"):
+        val = _kwarg_value_quoted_aware(block, "source_note")
+        if val is None:
+            positionals = [
+                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            val = positionals[0] if positionals else None
+        if val is None:
+            continue
+        text = _extract_text_literal(val)
+        if text is not None:
+            texts.append(text)
+    return texts
+
+
+def _list_var_map(source: str) -> dict[str, list[str]]:
+    """Best-effort ``{variable name -> [quoted strings]}`` for simple
+    list-literal assignments (e.g. ``density_cols = ["density_1996", ...]``).
+
+    Lets the per-column Tier-1 fields below (``fmt_column_map``,
+    ``color_mechanics``) resolve a ``columns=density_cols``-style reference
+    back to real column names — the idiomatic style this repo's own
+    ground-truth scripts use for facet columns — without touching
+    `_columns_token`/`_color_signature` (the convergence report's existing,
+    unrelated repeat-vs-repeat contract, left unchanged on purpose).
+    """
+    out: dict[str, list[str]] = {}
+    for m in re.finditer(r"^([A-Za-z_]\w*)\s*=\s*\[", source, re.M):
+        name = m.group(1)
+        open_idx = m.end() - 1
+        depth = 0
+        body = None
+        for j in range(open_idx, len(source)):
+            c = source[j]
+            if c == "[":
+                depth += 1
+            elif c == "]":
+                depth -= 1
+                if depth == 0:
+                    body = source[open_idx + 1 : j]
+                    break
+        if body is None:
+            continue
+        cols = re.findall(r"""['"]([^'"]+)['"]""", body)
+        if cols:
+            out[name] = cols
+    return out
+
+
+def _resolve_columns_token(value_text: str | None, var_map: dict[str, list[str]]) -> str:
+    """Like `_columns_token`, but a bare identifier resolves through
+    `var_map` first (e.g. `density_cols` -> its list's real column names)
+    before falling back to the identifier text itself.
+    """
+    if value_text is not None:
+        ident = value_text.strip()
+        if ident in var_map and re.fullmatch(r"[A-Za-z_]\w*", ident):
+            return ",".join(sorted(var_map[ident]))
+    return _columns_token(value_text)
+
+
+def _color_mechanics(source: str) -> list[dict]:
+    """One dict per colored-measure call (`data_color`/`heatmap`), in source
+    order: `columns`, `na_color`, `truncate`, `autocolor_text` — the Big-Color
+    mechanics beyond the palette name already covered by `_extract_palettes`/
+    `_color_signature`.
+    """
+    var_map = _list_var_map(source)
+    out: list[dict] = []
+    for block in _call_arg_blocks(source, "data_color"):
+        out.append({
+            "columns": _resolve_columns_token(_kwarg_value(block, "columns"), var_map),
+            "na_color": _unquote(_kwarg_value(block, "na_color")),
+            "truncate": _unquote(_kwarg_value(block, "truncate")),
+            "autocolor_text": _unquote(_kwarg_value(block, "autocolor_text")),
+        })
+    for block in _bare_call_blocks(source, "heatmap"):
+        out.append({
+            "columns": _heatmap_columns(block),
+            "na_color": _unquote(_kwarg_value(block, "na_color")),
+            "truncate": _unquote(_kwarg_value(block, "truncate")),
+            "autocolor_text": _unquote(_kwarg_value(block, "autocolor_text")),
+        })
+    return out
+
+
+def _render_params(source: str) -> dict:
+    """`zoom`/`expand`/`vwidth`/`vheight` off the first `.gtsave(...)` call.
+
+    Raw source text per kwarg (not coerced to float) — the comparator's fit-
+    order check compares against the documented default (`zoom=2.0`) and can
+    parse these itself; keeping them as text avoids silently swallowing a
+    non-literal value (e.g. `zoom=ZOOM_DEFAULT`).
+    """
+    blocks = _call_arg_blocks(source, "gtsave")
+    if not blocks:
+        return {}
+    block = blocks[0]
+    out: dict[str, str] = {}
+    for kw in ("zoom", "expand", "vwidth", "vheight"):
+        v = _kwarg_value(block, kw)
+        if v is not None:
+            out[kw] = v.strip()
+    return out
+
+
+def _bold_columns(source: str) -> list[str]:
+    """Columns targeted by a bold `tab_style(style=style.text(weight="bold"),
+    locations=loc.body(columns=...))` call — the hero-emphasis mechanism used
+    when the hero column isn't a colored measure. Best-effort: only counts
+    `tab_style` blocks whose `style=` value literally sets a bold weight.
+    """
+    out: list[str] = []
+    for block in _call_arg_blocks(source, "tab_style"):
+        style_val = _kwarg_value(block, "style") or ""
+        if not re.search(r"weight\s*=\s*['\"]bold['\"]", style_val):
+            continue
+        loc_val = _kwarg_value(block, "locations") or ""
+        m = re.search(r"columns\s*=\s*(\[[^\]]*\]|['\"][^'\"]+['\"])", loc_val)
+        if m:
+            out.extend(re.findall(r"['\"]([^'\"]+)['\"]", m.group(1)))
+    return out
+
+
+def _hlines_active(source: str) -> bool:
+    """True if body-row hairlines (`table_body_hlines_*`) are set to non-none."""
+    for m in re.finditer(
+        r"table_body_hlines_(?:style|width|color)\s*=\s*['\"]([^'\"]+)['\"]",
+        source,
+    ):
+        if m.group(1).strip().lower() not in ("none", "hidden", ""):
+            return True
+    return False
+
+
+def _fmt_column_map(source: str) -> dict[str, list[str]]:
+    """Best-effort `{source column -> [fmt_* names applied]}`.
+
+    Feeds the per-column semantic `fmt_*` check (against `SEMANTIC_TYPES`).
+    Reads the `columns=` kwarg (or first positional) of each `.fmt_*(...)`
+    call via the same `_columns_token` used by the color-signature helpers;
+    a call with no parseable column target contributes nothing rather than
+    being guessed.
+    """
+    var_map = _list_var_map(source)
+    out: dict[str, list[str]] = {}
+    for name, block in _fmt_calls(source):
+        val = _kwarg_value(block, "columns")
+        if val is None:
+            positionals = [
+                p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            val = positionals[0] if positionals else None
+        token = _resolve_columns_token(val, var_map)
+        if token == "(cols?)":
+            continue
+        for col in token.split(","):
+            out.setdefault(col, []).append(name)
+    return out
+
+
 def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
     """Parse a `table.py` source string into the design choices the rules pin down.
 
@@ -821,6 +1111,20 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         "domain_signature": _domain_signature(source),
         "color_signature": _color_signature(source),
         "data_hash": data_hash,
+        # Comparator Tier-1 additions (09-ground-truth-comparator.md §6):
+        "spanner_present": bool(_call_arg_blocks(source, "tab_spanner")),
+        "color_mechanics": _color_mechanics(source),
+        "render_params": _render_params(source),
+        "title_text": _tab_header_text(source, "title"),
+        "subtitle_text": _tab_header_text(source, "subtitle"),
+        "source_note_texts": _source_note_texts(source),
+        "bold_columns": _bold_columns(source),
+        "summary_row_present": bool(
+            _call_arg_blocks(source, "grand_summary_rows")
+            or _call_arg_blocks(source, "summary_rows")
+        ),
+        "hairlines_present": _hlines_active(source),
+        "fmt_column_map": _fmt_column_map(source),
     }
 
 
