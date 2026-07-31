@@ -78,15 +78,17 @@ population growth, 1996–2021"):
    a table titled "population growth trends" that contains zero
    population data reads as incomplete regardless of how well it answers
    the density question.
-2. **Entity/category scope: match the request's term to ALL data rows it
-   plausibly covers, not a narrower literal subset** — "Ontario towns"
-   in ordinary usage means "Ontario municipalities" generically; if the
-   data has a type/category column (e.g. `csd_type` with `town`/`city`/
-   `township`/`municipality`/`village`), don't silently filter to only the
-   rows whose type-value literally matches the request's word. State the
-   scope actually used (e.g. "all municipality types" vs. "town-type
-   records only") so the choice, once made, is explicit rather than a
-   silent, unstated filter.
+2. **Entity/category scope: ALWAYS match the request's term to every data
+   row it plausibly covers — never the narrower literal subset.**
+   "Ontario towns" in ordinary usage means "Ontario municipalities"
+   generically; if the data has a type/category column (e.g. `csd_type`
+   with `town`/`city`/`township`/`municipality`/`village`), include every
+   type, not just the rows whose type-value literally matches the
+   request's word ("town-type records only" is NOT an acceptable
+   alternative reading — it's the narrower literal subset this rule
+   exists to rule out). State the scope in the subtitle/source note (e.g.
+   "all municipality types") so the choice is explicit, not because there
+   are two valid options to pick between.
 3. **A stated date range always means the FULL span, not a sub-period** —
    "from 1996 to 2021" compares `value_2021` against `value_1996`, never a
    single interior period, unless the request names that period
@@ -123,14 +125,19 @@ population growth, 1996–2021"):
    overrides the ranking metric found in step 1. The baseline guard from
    step 3 applies to EVERY individual period's delta too, not just the
    overall ranking figure — a period whose starting value is zero/negative
-   makes that one cell's percentage undefined. **`sub_missing` alone does
-   NOT catch this** — confirmed by direct test: `(0 - 5) / 0` computes to
-   `inf`, and `sub_missing` only substitutes `None`/`NaN`, so an
-   unmasked `inf` renders as the literal text `"inf%"`, not `"—"`. Mask it
-   explicitly first — e.g. `df["pct"] = df["pct"].replace([float("inf"),
-   float("-inf")], None)` (or compute with `np.where(start > 0, ..., None)`
-   up front) — THEN call `sub_missing`, without discarding the rest of
-   that row.
+   makes that one cell's percentage undefined, and **not always in an
+   obviously-broken way**: a zero baseline computes to `inf` (`sub_missing`
+   does NOT catch this — confirmed by direct test: it only substitutes
+   `None`/`NaN`, so an unmasked `inf` renders as the literal text
+   `"inf%"`), but a *negative* baseline computes to a finite,
+   sign-reversed, equally-meaningless value (confirmed: `(5 - (-10)) /
+   (-10)` = `-1.5`, i.e. "-150%" — a plausible-looking number that passes
+   right through `sub_missing` uncaught). Mask on the condition, not the
+   symptom: compute with `np.where(start > 0, (end - start) / start,
+   None)` so both the zero-baseline (`inf`) and negative-baseline
+   (finite-but-meaningless) cases become `None` up front — confirmed by
+   direct test to render `"—"` for both — THEN call `sub_missing`, without
+   discarding the rest of that row.
 
 This narrows the ambiguity considerably but — being a precedence over
 natural-language phrasing, not a closed-form algorithm — does not
