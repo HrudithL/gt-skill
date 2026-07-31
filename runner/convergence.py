@@ -54,15 +54,21 @@ CONVERGENCE_FIELDS = [
 ]
 
 # Palette hexes lifted from references/palettes.md (§1 solids + washed tints,
-# §2 neutrals). Used to label a heading-band color with its Dark-Academia hue
-# family via nearest-neighbour in RGB. Neutrals collapse to "grey".
+# §2 neutrals) PLUS the great-tables-house skill's "accent"/"accent_tint"
+# tiers (house_table.py's PALETTE) -- the brighter, more-saturated pairing
+# that skill uses ONLY for the column-label band/stub/group headers. Used to
+# label a heading-band color with its Dark-Academia hue family via
+# nearest-neighbour in RGB. Neutrals collapse to "grey". Without the
+# accent/accent_tint hexes here, a house-format-compliant band (which uses
+# accent_tint, not the older washed tier) misclassifies as its nearest
+# neutral instead of its actual hue family.
 _FAMILY_HEXES: dict[str, list[str]] = {
-    "navy": ["#22384F", "#EAF0F6"],
-    "forest": ["#2F4A38", "#EAF1EC"],
-    "oxblood": ["#5C2E2E", "#F5EBEB"],
-    "espresso": ["#4A3A2C", "#F1EADD"],
-    "ochre": ["#9A7B33", "#F5EFDC"],
-    "tan": ["#8A7452", "#EFE7D6"],
+    "navy": ["#22384F", "#EAF0F6", "#1B5A85", "#C9E0F0"],
+    "forest": ["#2F4A38", "#EAF1EC", "#2E7350", "#CFEAD9"],
+    "oxblood": ["#5C2E2E", "#F5EBEB", "#A23A3A", "#F4D6D6"],
+    "espresso": ["#4A3A2C", "#F1EADD", "#8A6238", "#EEDFC7"],
+    "ochre": ["#9A7B33", "#F5EFDC", "#B8912E", "#F6E8BE"],
+    "tan": ["#8A7452", "#EFE7D6", "#9C8258", "#EFE3CE"],
     "grey": [
         "#F0F0F0", "#F6F6F6", "#E8E8E8", "#CCCCCC",
         "#BDBDBD", "#D0D0D0", "#808080", "#FFFFFF", "#000000",
