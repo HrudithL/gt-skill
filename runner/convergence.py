@@ -287,10 +287,41 @@ def _vlines_active(source: str) -> bool:
         if m.group(1).strip().lower() not in ("none", "hidden", ""):
             return True
     for block in _call_arg_blocks(source, "tab_style"):
-        style_val = _kwarg_value(block, "style") or ""
-        if re.search(r"style\s*\.\s*borders\s*\(", style_val) and re.search(
-            r"sides\s*=\s*(\[[^\]]*\]|['\"](?:left|right)['\"])", style_val
-        ):
+        style_val = _kwarg_value(block, "style")
+        if style_val is None:
+            positionals = [
+                p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            style_val = positionals[0] if positionals else None
+        if style_val is None:
+            continue
+        bm = re.search(r"style\s*\.\s*borders\s*\(", style_val)
+        if not bm:
+            continue
+        open_idx = bm.end() - 1
+        depth = 0
+        borders_block = None
+        for j in range(open_idx, len(style_val)):
+            c = style_val[j]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    borders_block = style_val[open_idx + 1 : j]
+                    break
+        if borders_block is None:
+            continue
+        sides_val = _kwarg_value(borders_block, "sides")
+        if sides_val is None:
+            positionals = [
+                p for p in _split_top_level(borders_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            sides_val = positionals[0] if positionals else None
+        # Only an actual "left"/"right" token counts — a purely horizontal
+        # `sides=["top", "bottom"]` is a row rule, not a column divider, and
+        # must not be misread as one just because it's a bracketed list.
+        if sides_val and re.search(r"['\"](?:left|right)['\"]", sides_val):
             return True
     return False
 
@@ -516,10 +547,12 @@ def _columns_token(value_text: str | None) -> str:
     return stripped or "(cols?)"
 
 
-def _heatmap_columns(block: str) -> str:
-    """Colored-column token for a `heatmap(gt, columns, ...)` call.
-
-    `columns` may be the 2nd positional arg or a `columns=` kwarg.
+def _heatmap_columns_raw(block: str) -> str | None:
+    """Raw (untokenized) `columns` value text for a `heatmap(gt, columns, ...)`
+    call — the 2nd positional arg or a `columns=` kwarg. Shared by
+    `_heatmap_columns` (tokenized, for `_color_signature`) and
+    `_color_mechanics` (var-map-resolved, so `heatmap(gt, change_cols, ...)`
+    resolves to real column names instead of the literal identifier).
     """
     val = _kwarg_value(block, "columns")
     if val is None:
@@ -528,7 +561,12 @@ def _heatmap_columns(block: str) -> str:
         ]
         if len(positionals) >= 2:  # positionals[0] is the gt object
             val = positionals[1]
-    return _columns_token(val)
+    return val
+
+
+def _heatmap_columns(block: str) -> str:
+    """Colored-column token for a `heatmap(gt, columns, ...)` call."""
+    return _columns_token(_heatmap_columns_raw(block))
 
 
 def _color_signature(source: str) -> str:
@@ -774,6 +812,12 @@ def _extract_text_literal(value_text: str) -> str | None:
     not `['"]` interchangeably — free-text titles routinely contain an
     apostrophe (`"Ontario's Fastest-Growing Towns"`), and a quote-agnostic
     match would misread that apostrophe as the string's closing quote.
+
+    An f-string segment with an unresolved `{...}` interpolation (e.g.
+    `f"Sales for {year}"`) makes the WHOLE value return None rather than the
+    literal template text — `{year}` is never what actually renders, and
+    fabricating "Sales for {year}" as though it were the real title would be
+    worse than admitting the text isn't known statically.
     """
     v = value_text.strip()
     m = re.match(r"^(?:html|md)\s*\(\s*(.*)\)\s*$", v, re.S)
@@ -782,10 +826,17 @@ def _extract_text_literal(value_text: str) -> str | None:
     parts: list[str] = []
     i, n = 0, len(v)
     while i < n:
-        pat = _DQ_STRING if v[i] == '"' else _SQ_STRING if v[i] == "'" else None
-        if pat is not None:
+        c = v[i]
+        if c in "'\"":
+            pat = _DQ_STRING if c == '"' else _SQ_STRING
             mm = pat.match(v, i)
             if mm:
+                j = i - 1
+                while j >= 0 and v[j].isalpha():
+                    j -= 1
+                prefix = v[j + 1 : i].lower()
+                if "f" in prefix and "{" in mm.group(1):
+                    return None
                 parts.append(mm.group(1))
                 i = mm.end()
                 continue
@@ -846,10 +897,27 @@ def _kwarg_value_quoted_aware(block: str, name: str) -> str | None:
     return None
 
 
+_TAB_HEADER_POSITIONAL_INDEX = {"title": 0, "subtitle": 1}
+
+
 def _tab_header_text(source: str, kwarg: str) -> str | None:
-    """Literal text of `tab_header(<kwarg>=...)` (title/subtitle), if set."""
+    """Literal text of `tab_header(<kwarg>=...)` (title/subtitle), if set.
+
+    Falls back to the positional form (`tab_header("Sales", "FY 2025")` —
+    `title` is positional arg 0, `subtitle` is arg 1) when the keyword isn't
+    present, so a validly-documented positional call isn't read as absent.
+    """
     for block in _call_arg_blocks(source, "tab_header"):
         val = _kwarg_value_quoted_aware(block, kwarg)
+        if val is None:
+            idx = _TAB_HEADER_POSITIONAL_INDEX.get(kwarg)
+            if idx is not None:
+                positionals = [
+                    p for p in _split_top_level_quoted(block)
+                    if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                if idx < len(positionals):
+                    val = positionals[idx]
         if val is not None:
             return _extract_text_literal(val)
     return None
@@ -909,9 +977,14 @@ def _list_var_map(source: str) -> dict[str, list[str]]:
                     break
         if body is None:
             continue
-        cols = re.findall(r"""['"]([^'"]+)['"]""", body)
-        if cols:
-            out[name] = cols
+        # Every top-level element must be a bare quoted string literal — a
+        # comprehension (`[c for c in df.columns if c.startswith("pct_")]`)
+        # or any other non-literal expression must NOT resolve, or a single
+        # quoted substring inside it (e.g. "pct_") would be misread as the
+        # variable's one-and-only column name.
+        elems = _split_top_level_quoted(body)
+        if elems and all(re.fullmatch(r"""['"][^'"]*['"]""", e) for e in elems):
+            out[name] = [e[1:-1] for e in elems]
     return out
 
 
@@ -927,63 +1000,150 @@ def _resolve_columns_token(value_text: str | None, var_map: dict[str, list[str]]
     return _columns_token(value_text)
 
 
+def _call_arg_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
+    """Like `_call_arg_blocks`, paired with each match's source offset.
+
+    Needed to interleave-sort calls of two different function names
+    (`data_color` / `heatmap`) by true source order — see `_color_mechanics`.
+    """
+    out: list[tuple[int, str]] = []
+    for m in re.finditer(rf"\.{re.escape(func)}\s*\(", source):
+        open_idx = m.end() - 1
+        depth = 0
+        for j in range(open_idx, len(source)):
+            c = source[j]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    out.append((m.start(), source[open_idx + 1 : j]))
+                    break
+    return out
+
+
+def _bare_call_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
+    """Position-paired variant of `_bare_call_blocks` (see `_call_arg_blocks_pos`)."""
+    out: list[tuple[int, str]] = []
+    for m in re.finditer(rf"(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
+        open_idx = m.end() - 1
+        depth = 0
+        for j in range(open_idx, len(source)):
+            c = source[j]
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth == 0:
+                    out.append((m.start(), source[open_idx + 1 : j]))
+                    break
+    return out
+
+
 def _color_mechanics(source: str) -> list[dict]:
-    """One dict per colored-measure call (`data_color`/`heatmap`), in source
-    order: `columns`, `na_color`, `truncate`, `autocolor_text` — the Big-Color
-    mechanics beyond the palette name already covered by `_extract_palettes`/
-    `_color_signature`.
+    """One dict per colored-measure call (`data_color`/`heatmap`), in TRUE
+    source order (both call kinds interleave-sorted by match offset, so a
+    script mixing `heatmap(...)` and `.data_color(...)` calls doesn't get
+    all of one kind before the other): `columns`, `na_color`, `truncate`,
+    `autocolor_text` — the Big-Color mechanics beyond the palette name
+    already covered by `_extract_palettes`/`_color_signature`.
+
+    `heatmap(gt, columns, *, kind, hue, domain=None)` (the scripted skill's
+    helper, `gt_consistency.py`) does not accept `na_color`/`truncate`/
+    `autocolor_text` as call-site kwargs at all — it always applies its own
+    pinned values (`PALETTE["neutral"]["na_cell"]` = `#808080`,
+    `truncate=False`, `autocolor_text=True`) internally, so a `heatmap(...)`
+    call reports those FIXED values rather than looking for (and never
+    finding) kwargs that can't be there.
     """
     var_map = _list_var_map(source)
-    out: list[dict] = []
-    for block in _call_arg_blocks(source, "data_color"):
-        out.append({
+    entries: list[tuple[int, dict]] = []
+    for pos, block in _call_arg_blocks_pos(source, "data_color"):
+        entries.append((pos, {
             "columns": _resolve_columns_token(_kwarg_value(block, "columns"), var_map),
             "na_color": _unquote(_kwarg_value(block, "na_color")),
             "truncate": _unquote(_kwarg_value(block, "truncate")),
             "autocolor_text": _unquote(_kwarg_value(block, "autocolor_text")),
-        })
-    for block in _bare_call_blocks(source, "heatmap"):
-        out.append({
-            "columns": _heatmap_columns(block),
-            "na_color": _unquote(_kwarg_value(block, "na_color")),
-            "truncate": _unquote(_kwarg_value(block, "truncate")),
-            "autocolor_text": _unquote(_kwarg_value(block, "autocolor_text")),
-        })
-    return out
+        }))
+    for pos, block in _bare_call_blocks_pos(source, "heatmap"):
+        entries.append((pos, {
+            "columns": _resolve_columns_token(_heatmap_columns_raw(block), var_map),
+            "na_color": "#808080",
+            "truncate": "False",
+            "autocolor_text": "True",
+        }))
+    entries.sort(key=lambda e: e[0])
+    return [d for _, d in entries]
 
 
 def _render_params(source: str) -> dict:
-    """`zoom`/`expand`/`vwidth`/`vheight` off the first `.gtsave(...)` call.
+    """`zoom`/`expand`/`vwidth`/`vheight` off the render call.
+
+    Prefers a literal `.gtsave(...)` call. Falls back to a bare
+    `finalize(gt, path=..., **overrides)` call (the scripted skill's
+    helper, `gt_consistency.py`) when no literal `gtsave` is present:
+    `finalize` always calls `gtsave` with `{"expand": 15, "zoom": 2.0}` as
+    defaults, letting any of its own kwargs override them — so those two
+    defaults are reported unless an explicit override is parseable in the
+    `finalize(...)` call, mirroring what actually renders.
 
     Raw source text per kwarg (not coerced to float) — the comparator's fit-
-    order check compares against the documented default (`zoom=2.0`) and can
-    parse these itself; keeping them as text avoids silently swallowing a
-    non-literal value (e.g. `zoom=ZOOM_DEFAULT`).
+    order check compares against the documented default and can parse these
+    itself; keeping them as text avoids silently swallowing a non-literal
+    value (e.g. `zoom=ZOOM_DEFAULT`).
     """
     blocks = _call_arg_blocks(source, "gtsave")
-    if not blocks:
-        return {}
-    block = blocks[0]
-    out: dict[str, str] = {}
-    for kw in ("zoom", "expand", "vwidth", "vheight"):
-        v = _kwarg_value(block, kw)
-        if v is not None:
-            out[kw] = v.strip()
-    return out
+    if blocks:
+        block = blocks[0]
+        out: dict[str, str] = {}
+        for kw in ("zoom", "expand", "vwidth", "vheight"):
+            v = _kwarg_value(block, kw)
+            if v is not None:
+                out[kw] = v.strip()
+        return out
+
+    finalize_blocks = _bare_call_blocks(source, "finalize")
+    if finalize_blocks:
+        out = {"expand": "15", "zoom": "2.0"}
+        block = finalize_blocks[0]
+        for kw in ("zoom", "expand", "vwidth", "vheight"):
+            v = _kwarg_value(block, kw)
+            if v is not None:
+                out[kw] = v.strip()
+        return out
+
+    return {}
 
 
 def _bold_columns(source: str) -> list[str]:
     """Columns targeted by a bold `tab_style(style=style.text(weight="bold"),
     locations=loc.body(columns=...))` call — the hero-emphasis mechanism used
     when the hero column isn't a colored measure. Best-effort: only counts
-    `tab_style` blocks whose `style=` value literally sets a bold weight.
+    `tab_style` blocks whose `style=` value literally sets a bold weight AND
+    whose `locations=` is a `loc.body(...)` call — a bold COLUMN LABEL
+    (`loc.column_labels(...)`) is a different thing (header emphasis, not a
+    hero-value emphasis) and must not be counted here. Both `style=`/
+    `locations=` keywords and the equivalent positional form
+    (`tab_style(style.text(...), loc.body(...))`) are recognized.
     """
     out: list[str] = []
     for block in _call_arg_blocks(source, "tab_style"):
-        style_val = _kwarg_value(block, "style") or ""
+        style_val = _kwarg_value(block, "style")
+        loc_val = _kwarg_value(block, "locations")
+        if style_val is None or loc_val is None:
+            positionals = [
+                p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            if style_val is None and len(positionals) >= 1:
+                style_val = positionals[0]
+            if loc_val is None and len(positionals) >= 2:
+                loc_val = positionals[1]
+        style_val = style_val or ""
+        loc_val = loc_val or ""
         if not re.search(r"weight\s*=\s*['\"]bold['\"]", style_val):
             continue
-        loc_val = _kwarg_value(block, "locations") or ""
+        if not re.search(r"loc\s*\.\s*body\s*\(", loc_val):
+            continue
         m = re.search(r"columns\s*=\s*(\[[^\]]*\]|['\"][^'\"]+['\"])", loc_val)
         if m:
             out.extend(re.findall(r"['\"]([^'\"]+)['\"]", m.group(1)))
@@ -991,7 +1151,16 @@ def _bold_columns(source: str) -> list[str]:
 
 
 def _hlines_active(source: str) -> bool:
-    """True if body-row hairlines (`table_body_hlines_*`) are set to non-none."""
+    """True if body-row hairlines (`table_body_hlines_*`) are set to non-none.
+
+    An explicit `table_body_hlines_style="none"` is authoritative and
+    disables the line regardless of any `_width`/`_color` also being set
+    (those are meaningless once style disables rendering) — checked first
+    so it can't be overridden by the generic per-kwarg scan below.
+    """
+    style_m = re.search(r"table_body_hlines_style\s*=\s*['\"]([^'\"]+)['\"]", source)
+    if style_m and style_m.group(1).strip().lower() in ("none", "hidden", ""):
+        return False
     for m in re.finditer(
         r"table_body_hlines_(?:style|width|color)\s*=\s*['\"]([^'\"]+)['\"]",
         source,
