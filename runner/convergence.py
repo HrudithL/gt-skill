@@ -125,26 +125,57 @@ def _classify_hue(hexstr: str) -> str:
     return best_family
 
 
+def _scan_balanced_paren(text: str, open_idx: int) -> int | None:
+    """Index of the `)` matching the `(` at `open_idx` in `text`.
+
+    Quote-aware: a `(`/`)` character INSIDE a string literal (e.g.
+    `title="Sales (preliminary"`) does not affect depth — a naive
+    char-by-char count would misread that unmatched `(` as opening a new
+    nesting level, throw off the whole depth count, and never find the
+    call's real closing paren (returning None / no block at all for
+    perfectly valid, statically-static source). Returns None if the parens
+    never balance before the end of `text` (an actually-malformed/partial
+    source snippet).
+    """
+    depth = 0
+    quote: str | None = None
+    i, n = open_idx, len(text)
+    while i < n:
+        c = text[i]
+        if quote:
+            if c == "\\" and i + 1 < n:
+                i += 2
+                continue
+            if c == quote:
+                quote = None
+            i += 1
+            continue
+        if c in "'\"":
+            quote = c
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
 def _call_arg_blocks(source: str, func: str) -> list[str]:
     """Return the argument text of every `.<func>(...)` call in `source`.
 
-    A simple balanced-paren scan, so nested calls / lists inside the args
-    (e.g. `domain=[df[...].min(), ...]`) are handled. Parens inside string
-    literals are not specially handled, which is fine for these scripts.
+    A quote-aware balanced-paren scan (`_scan_balanced_paren`), so nested
+    calls / lists inside the args (e.g. `domain=[df[...].min(), ...]`) are
+    handled, AND an unmatched paren character inside a string argument
+    (`title="Sales (preliminary"`) doesn't break the whole block extraction.
     """
     blocks: list[str] = []
     for m in re.finditer(rf"\.{re.escape(func)}\s*\(", source):
         open_idx = m.end() - 1
-        depth = 0
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    blocks.append(source[open_idx + 1 : j])
-                    break
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            blocks.append(source[open_idx + 1 : close_idx])
     return blocks
 
 
@@ -158,16 +189,9 @@ def _gt_constructor_blocks(source: str) -> list[str]:
     blocks: list[str] = []
     for m in re.finditer(r"(?<![\w.])GT\s*\(", source):
         open_idx = m.end() - 1
-        depth = 0
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    blocks.append(source[open_idx + 1 : j])
-                    break
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            blocks.append(source[open_idx + 1 : close_idx])
     return blocks
 
 
@@ -189,16 +213,9 @@ def _bare_call_blocks(source: str, func: str) -> list[str]:
     blocks: list[str] = []
     for m in re.finditer(rf"(?<!def )(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
         open_idx = m.end() - 1
-        depth = 0
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    blocks.append(source[open_idx + 1 : j])
-                    break
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            blocks.append(source[open_idx + 1 : close_idx])
     return blocks
 
 
@@ -303,17 +320,8 @@ def _vlines_active(source: str) -> bool:
         if not bm:
             continue
         open_idx = bm.end() - 1
-        depth = 0
-        borders_block = None
-        for j in range(open_idx, len(style_val)):
-            c = style_val[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    borders_block = style_val[open_idx + 1 : j]
-                    break
+        close_idx = _scan_balanced_paren(style_val, open_idx)
+        borders_block = style_val[open_idx + 1 : close_idx] if close_idx is not None else None
         if borders_block is None:
             continue
         # A `style="none"`/`"hidden"` on the border itself disables it
@@ -815,6 +823,31 @@ _DQ_STRING = re.compile(r'"((?:[^"\\]|\\.)*)"', re.S)
 _SQ_STRING = re.compile(r"'((?:[^'\\]|\\.)*)'", re.S)
 
 
+def _find_quoted_strings(text: str) -> list[str]:
+    """Every quoted string literal's content in `text`, matched by ITS OWN
+    quote character — NOT `['"]` interchangeably. A quote-agnostic
+    `re.findall(r"['\"]([^'\"]+)['\"]", ...)` misreads an apostrophe inside
+    a double-quoted string (`columns="Owner's share"`) as the string's
+    closing quote and returns the truncated `"Owner"`; matching each
+    literal by its own opening delimiter (like `_extract_text_literal`
+    already does for header/caption text) reads the whole `"Owner's
+    share"` correctly.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in "'\"":
+            pat = _DQ_STRING if c == '"' else _SQ_STRING
+            m = pat.match(text, i)
+            if m:
+                out.append(m.group(1))
+                i = m.end()
+                continue
+        i += 1
+    return out
+
+
 def _extract_text_literal(value_text: str) -> str | None:
     """Best-effort literal text of a kwarg value: unwrap one `html(...)`/`md(...)`
     call, then concatenate every quoted string segment found inside (Python's
@@ -965,25 +998,30 @@ def _tab_header_text(source: str, kwarg: str) -> str | None:
     `title` is positional arg 0, `subtitle` is arg 1) when the keyword isn't
     present, so a validly-documented positional call isn't read as absent.
 
-    Uses the LAST `tab_header(...)` call in the source — a script that calls
-    it more than once (`.tab_header("Old").tab_header("New")`) renders the
-    LATER one, so reading the first would report stale text.
+    Uses ONLY the LAST `tab_header(...)` call in the source — a script that
+    calls it more than once (`.tab_header("Old").tab_header("New")`)
+    renders the LATER one, in full: if that later call omits a field
+    (`.tab_header(title="Old", subtitle="Stale").tab_header(title="New")`),
+    the rendered header has NO subtitle at all, not the earlier call's
+    stale one — great_tables replaces the whole header per call, it
+    doesn't merge fields across calls. So only the last call's block is
+    ever consulted; an earlier call's value never leaks through.
     """
-    result: str | None = None
-    for block in _call_arg_blocks(source, "tab_header"):
-        val = _kwarg_value_quoted_aware(block, kwarg)
-        if val is None:
-            idx = _TAB_HEADER_POSITIONAL_INDEX.get(kwarg)
-            if idx is not None:
-                positionals = [
-                    p for p in _split_top_level_quoted(block)
-                    if not re.match(r"[A-Za-z_]\w*\s*=", p)
-                ]
-                if idx < len(positionals):
-                    val = positionals[idx]
-        if val is not None:
-            result = _extract_text_literal(val)
-    return result
+    blocks = _call_arg_blocks(source, "tab_header")
+    if not blocks:
+        return None
+    block = blocks[-1]
+    val = _kwarg_value_quoted_aware(block, kwarg)
+    if val is None:
+        idx = _TAB_HEADER_POSITIONAL_INDEX.get(kwarg)
+        if idx is not None:
+            positionals = [
+                p for p in _split_top_level_quoted(block)
+                if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            if idx < len(positionals):
+                val = positionals[idx]
+    return _extract_text_literal(val) if val is not None else None
 
 
 def _source_note_texts(source: str) -> list[str | None]:
@@ -1100,7 +1138,7 @@ def _resolve_columns_list(value_text: str | None, var_map: dict[str, list[str]])
         return []
     if ident in var_map and re.fullmatch(r"[A-Za-z_]\w*", ident):
         return sorted(var_map[ident])
-    return re.findall(r"""['"]((?:[^'"\\]|\\.)*)['"]""", value_text)
+    return _find_quoted_strings(value_text)
 
 
 def _call_arg_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
@@ -1112,16 +1150,9 @@ def _call_arg_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
     out: list[tuple[int, str]] = []
     for m in re.finditer(rf"\.{re.escape(func)}\s*\(", source):
         open_idx = m.end() - 1
-        depth = 0
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    out.append((m.start(), source[open_idx + 1 : j]))
-                    break
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            out.append((m.start(), source[open_idx + 1 : close_idx]))
     return out
 
 
@@ -1130,16 +1161,9 @@ def _bare_call_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
     out: list[tuple[int, str]] = []
     for m in re.finditer(rf"(?<!def )(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
         open_idx = m.end() - 1
-        depth = 0
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    out.append((m.start(), source[open_idx + 1 : j]))
-                    break
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            out.append((m.start(), source[open_idx + 1 : close_idx]))
     return out
 
 
@@ -1249,9 +1273,13 @@ def _render_params(source: str) -> dict:
     When there are MULTIPLE `.gtsave(...)` calls (e.g. an earlier debug/
     preview render before the final one), prefers whichever call's target
     path contains `table.png` — the harness's mandated output filename —
-    over just taking the first. Falls back to the LAST call (last-wins,
-    consistent with the other multi-call fields above) when none of them
-    mentions `table.png` explicitly (e.g. a variable path).
+    over just taking the first. When SEVERAL calls target `table.png`
+    (writing it more than once), the LAST one is the one whose parameters
+    actually produced the final artifact (it overwrote every earlier
+    write), so the loop keeps scanning rather than stopping at the first
+    match. Falls back to the LAST call overall (last-wins, consistent with
+    the other multi-call fields above) when none of them mentions
+    `table.png` explicitly (e.g. a variable path).
     """
     blocks = _call_arg_blocks(source, "gtsave")
     if blocks:
@@ -1264,8 +1292,7 @@ def _render_params(source: str) -> dict:
                 ]
                 file_val = positionals[0] if positionals else None
             if file_val and "table.png" in file_val:
-                block = b
-                break
+                block = b  # keep scanning -- a LATER table.png write wins
         out: dict[str, str] = {"zoom": "2.0", "expand": "5"}
         for kw in ("zoom", "expand", "vwidth", "vheight"):
             v = _kwarg_value(block, kw)
@@ -1322,41 +1349,33 @@ def _bold_columns(source: str) -> list[str]:
         loc_val = loc_val or ""
         if not re.search(r"weight\s*=\s*['\"]bold['\"]", style_val):
             continue
-        body_m = re.search(r"loc\s*\.\s*body\s*\(", loc_val)
-        if not body_m:
-            continue
-        # Extract loc.body(...)'s OWN args so a positional call
-        # (`loc.body("sales")`) is read the same as `loc.body(columns="sales")`.
-        open_idx = body_m.end() - 1
-        depth = 0
-        body_args = None
-        for j in range(open_idx, len(loc_val)):
-            c = loc_val[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    body_args = loc_val[open_idx + 1 : j]
-                    break
-        if body_args is None:
-            continue
-        cols_val = _kwarg_value(body_args, "columns")
-        if cols_val is None:
-            # Quote-aware (see _heatmap_columns_raw): a column name can
-            # itself contain a comma.
-            positionals = [
-                p for p in _split_top_level_quoted(body_args)
-                if not re.match(r"[A-Za-z_]\w*\s*=", p)
-            ]
-            cols_val = positionals[0] if positionals else None
-        if cols_val:
-            # Resolve a list-variable reference (e.g. `loc.body(columns=
-            # hero_cols)`) through var_map, the same as the other
-            # per-column fields, before falling back to plain quoted names.
-            # _resolve_columns_list (not _resolve_columns_token) avoids the
-            # join-then-split ambiguity for a column name containing a comma.
-            out.extend(_resolve_columns_list(cols_val, var_map))
+        # `locations=` accepts a single Loc OR a list of them
+        # (`[loc.body(columns="sales"), loc.body(columns="profit")]` —
+        # `tab_style`'s documented `Loc | list[Loc]` signature) — iterate
+        # every `loc.body(...)` occurrence, not just the first.
+        for body_m in re.finditer(r"loc\s*\.\s*body\s*\(", loc_val):
+            open_idx = body_m.end() - 1
+            close_idx = _scan_balanced_paren(loc_val, open_idx)
+            if close_idx is None:
+                continue
+            body_args = loc_val[open_idx + 1 : close_idx]
+            cols_val = _kwarg_value(body_args, "columns")
+            if cols_val is None:
+                # Quote-aware (see _heatmap_columns_raw): a column name can
+                # itself contain a comma.
+                positionals = [
+                    p for p in _split_top_level_quoted(body_args)
+                    if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                cols_val = positionals[0] if positionals else None
+            if cols_val:
+                # Resolve a list-variable reference (e.g. `loc.body(columns=
+                # hero_cols)`) through var_map, the same as the other
+                # per-column fields, before falling back to plain quoted
+                # names. _resolve_columns_list (not _resolve_columns_token)
+                # avoids the join-then-split ambiguity for a column name
+                # containing a comma.
+                out.extend(_resolve_columns_list(cols_val, var_map))
     return out
 
 
@@ -1512,7 +1531,13 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         "color_signature": _color_signature(source),
         "data_hash": data_hash,
         # Comparator Tier-1 additions (09-ground-truth-comparator.md §6):
-        "spanner_present": bool(_call_arg_blocks(source, "tab_spanner")),
+        # tab_spanner_delim(...) also renders column-group spanners (from a
+        # delimiter in column names), not just an explicit tab_spanner(...)
+        # call -- both count as "a spanner is present."
+        "spanner_present": bool(
+            _call_arg_blocks(source, "tab_spanner")
+            or _call_arg_blocks(source, "tab_spanner_delim")
+        ),
         "color_mechanics": _color_mechanics(source),
         "render_params": _render_params(source),
         "title_text": _tab_header_text(source, "title"),
