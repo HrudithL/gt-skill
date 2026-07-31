@@ -326,9 +326,9 @@ def _find_run(run_id: str) -> Path | None:
 
 
 def _run_tree(root: Path, rel: Path | None = None) -> list[dict]:
-    """Nested listing of a run dir. Symlinks (data snapshot, .claude link,
-    helper links) show as leaves and are not followed, so the mounted skill
-    under .claude-<variant>/ is browsable without cycles. Noise is skipped."""
+    """Nested listing of a run dir. Symlinks (data snapshot, helper links) show
+    as leaves and are not followed, so the mounted skill under .claude/ is
+    browsable without cycles. Noise is skipped."""
     base = root if rel is None else root / rel
     out: list[dict] = []
     try:
