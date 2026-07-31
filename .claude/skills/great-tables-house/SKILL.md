@@ -24,6 +24,27 @@ procedure.**
 
 That's the whole workflow. Nothing else to read.
 
+## The non-negotiable base — every table, no exceptions
+
+Before you call `finalize()`, confirm every one of these is actually in
+your script — they are not "pattern-match if it seems relevant," they are
+unconditional, regardless of how simple the request looks:
+
+1. **Title AND subtitle** — both, always.
+2. **A source note** — always; a generic one ("Source: provided dataset.")
+   beats none.
+3. **The boxed frame** — `frame(gt)`.
+4. **At most 2 colored measures, total** — never one heatmap per numeric
+   column. Three or more `heatmap(...)`/`data_color(...)` calls in one
+   script is a bug, not a choice.
+5. **`finalize(gt, path="table.png")`** as the final call.
+
+Full detail and the reasoning for each lives in `references/RULES.md`'s
+"THE NON-NEGOTIABLE BASE" section (read it — this list is the summary, not
+the whole rule). Everything else — a stub, a group, a spanner, a status
+chip, a summary row — stays genuinely conditional on the data; only the
+five items above are unconditional.
+
 ## What this skill deliberately does NOT have
 
 - **No numbered flowchart.** `great-tables`/`great-tables-ci` drive every
