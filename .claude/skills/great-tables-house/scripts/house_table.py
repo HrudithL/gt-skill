@@ -165,17 +165,27 @@ def frame(gt, color=None, width="1px", style="solid"):
     )
 
 
-def finalize(gt, path="house_table.png", **overrides):
+def finalize(gt, path="table.png", **overrides):
     """Save the table with the house-format ``gtsave`` defaults.
 
     WHAT: calls ``gt.gtsave(path, expand=15, zoom=2.0, **overrides)`` — a
     raised outer margin and a retina zoom, with any keyword in
     ``overrides`` (e.g. ``vwidth``/``vheight``) taking precedence.
 
-    WHY: the default 5px ``gtsave`` margin crowds the frame border against
-    the image edge; ``zoom=2.0`` keeps text crisp at normal viewing sizes.
-    If a table renders too big, grow room/zoom before ever shrinking font
-    size (see ``references/RULES.md``'s font-size fit order).
+    WHY ``path`` defaults to ``"table.png"``: that's the mandatory renderer
+    target this skill (and the harness that runs it) expects — see
+    ``SKILL.md``'s "The mandatory renderer" section. A real table script
+    that imports this helper and calls ``finalize(gt)`` with no explicit
+    path should produce the expected file, not silently write something
+    else. The demo below passes an explicit ``path="house_table.png"`` to
+    override this default, since its output is the reference render, not a
+    generated table.
+
+    WHY the other defaults: the default 5px ``gtsave`` margin crowds the
+    frame border against the image edge; ``zoom=2.0`` keeps text crisp at
+    normal viewing sizes. If a table renders too big, grow room/zoom before
+    ever shrinking font size (see ``references/RULES.md``'s font-size fit
+    order).
     """
     opts = {"expand": 15, "zoom": 2.0}
     opts.update(overrides)
@@ -255,7 +265,54 @@ def stub_tint(gt, *, hue):
     return gt.tab_style(style=style.fill(color=color), locations=loc.stub())
 
 
-def heatmap(gt, columns, *, kind, hue, domain=None):
+def _is_missing(value):
+    """True if ``value`` is a missing scalar — ``None`` / NaN / ``pd.NA`` / null.
+
+    ``value != value`` is ``True`` for float NaN, but pandas' *nullable*
+    dtypes (``pd.NA``) make ``pd.NA != pd.NA`` return ``pd.NA`` itself, and
+    ``bool(pd.NA)`` raises (its truth value is ambiguous) rather than
+    returning ``False`` — so a bare ``value != value`` check silently
+    crashes on nullable columns instead of just being wrong. The ``except``
+    below treats that ambiguity as "yes, missing."
+    """
+    if value is None:
+        return True
+    try:
+        return bool(value != value)
+    except (TypeError, ValueError):
+        return True
+
+
+def _column_min_max(data, cols):
+    """Return ``(lo, hi)`` as floats across every column in ``cols``, skipping NaN/NA.
+
+    A column that is entirely missing yields NaN (float dtype) or ``pd.NA``
+    (nullable dtype) from ``.min()``/``.max()`` — never a plain Python
+    ``None`` — so a naive ``is None`` guard lets a ``[nan, nan]`` domain
+    through, and ``float(pd.NA)`` raises outright. Skip any column whose
+    min/max is missing; raise a clear error only if EVERY selected column is
+    entirely missing (no numeric extent exists to build a domain from at
+    all), rather than an opaque numpy/pandas crash.
+    """
+    lo = None
+    hi = None
+    for col in cols:
+        series = data[col]
+        c_min, c_max = series.min(), series.max()
+        if _is_missing(c_min) or _is_missing(c_max):
+            continue
+        c_min, c_max = float(c_min), float(c_max)
+        lo = c_min if lo is None else min(lo, c_min)
+        hi = c_max if hi is None else max(hi, c_max)
+    if lo is None or hi is None:
+        raise ValueError(
+            "heatmap(): every selected column %r is all-missing (no numeric "
+            "values to build a domain from)" % (cols,)
+        )
+    return lo, hi
+
+
+def heatmap(gt, columns, *, kind, hue, domain=None, reverse=False):
     """Color one measure's column(s) by value — the mechanical half of Big Color.
 
     ``columns``: str or list of column names colored together under one
@@ -272,12 +329,23 @@ def heatmap(gt, columns, *, kind, hue, domain=None):
     RdYlGn), or any other string, passed straight through as an explicit
     palette NAME.
 
-    ``domain``: when ``None``, computed from ``columns`` across the GT's
-    own data — sequential gets the full ``[min, max]``; diverging gets a
-    **symmetric** ``[-M, M]`` with ``M = max(abs(min), abs(max))``. Pass an
-    explicit ``domain`` to override (e.g. to exclude a summary/total row
-    from the color scale so it doesn't compress the real data's range —
-    see ``revenue`` in ``build_house_table`` below for exactly this case).
+    ``domain``: when ``None``, computed from ``columns`` across the GT's own
+    data (missing-only columns are skipped rather than crashing — see
+    ``_column_min_max``) — sequential gets the full ``[min, max]``;
+    diverging gets a **symmetric** ``[-M, M]`` with ``M = max(abs(min),
+    abs(max))``. Pass an explicit ``domain`` to override (e.g. to exclude a
+    summary/total row from the color scale so it doesn't compress the real
+    data's range — see ``revenue`` in ``build_house_table`` below for
+    exactly this case).
+
+    ``reverse``: for a **diverging** measure where positive genuinely means
+    *worse* (cost overrun, error rate, latency, churn — "more is worse"),
+    pass ``reverse=True`` so the palette's low/high ends swap (green stays
+    "good" = negative, red stays "bad" = positive) instead of literally
+    reversing the color list. Ignored for ``kind="sequential"`` (a plain
+    magnitude has no good/bad orientation to flip). This is the parameter
+    ``references/RULES.md``'s "Percent / rate / change" rule tells callers
+    to pass.
 
     THE GOTCHA this function exists to prevent: ``fmt_percent`` expects
     *fractional* values (``0.12`` renders as ``12%``) — a percent column
@@ -291,9 +359,7 @@ def heatmap(gt, columns, *, kind, hue, domain=None):
     """
     cols = [columns] if isinstance(columns, str) else list(columns)
     if domain is None:
-        data = gt._tbl_data
-        lo = min(float(data[c].min()) for c in cols)
-        hi = max(float(data[c].max()) for c in cols)
+        lo, hi = _column_min_max(gt._tbl_data, cols)
         if kind == "diverging":
             m = max(abs(lo), abs(hi))
             domain = [-m, m] if m != 0 else [-1.0, 1.0]
@@ -315,6 +381,7 @@ def heatmap(gt, columns, *, kind, hue, domain=None):
         na_color=PALETTE["neutral"]["na_cell"],
         truncate=False,
         autocolor_text=True,
+        reverse=reverse,
     )
 
 
@@ -337,6 +404,14 @@ def status_chip(gt, column, meaning):
     decorative, it always encodes good/bad/neutral, resolved the same
     deterministic way regardless of whether the underlying data is
     continuous or discrete.
+
+    A missing cell (``None``/NaN/``pd.NA`` — e.g. a nullable pandas string
+    dtype) is skipped rather than compared: ``v == value`` on a ``pd.NA``
+    scalar returns ``pd.NA`` itself, and ``bool(pd.NA)`` raises (ambiguous
+    truth value) instead of being simply ``False``, which would otherwise
+    crash this function on the exact kind of missing status cell
+    ``sub_missing(missing_text="—")`` is meant to handle gracefully
+    elsewhere.
     """
     fills = {
         "good": PALETTE["solid"]["forest"],
@@ -347,7 +422,7 @@ def status_chip(gt, column, meaning):
     for value, state in meaning.items():
         if state not in fills:
             raise ValueError("status_chip(): meaning must map to 'good'/'bad'/'neutral', got %r" % (state,))
-        rows = [i for i, v in enumerate(values) if v == value]
+        rows = [i for i, v in enumerate(values) if not _is_missing(v) and v == value]
         if not rows:
             continue
         gt = gt.tab_style(
