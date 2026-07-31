@@ -103,10 +103,15 @@ population growth, 1996–2021"):
    strictly positive starting value — a measure that can legitimately
    start at zero or negative (revenue from a new product, profit from a
    loss) makes `(end - start) / start` divide-by-zero or produce a
-   sign-reversed, meaningless result. When the baseline can be
-   zero/negative, fall back to absolute change instead and say so in the
-   subtitle/source note, rather than applying the percentage formula
-   blindly.
+   sign-reversed, meaningless result. If the request left the metric
+   **unstated** (just "growth"/"fastest-growing"), fall back to absolute
+   change for the whole table when the baseline can be zero/negative, and
+   say so in the subtitle/source note. If the request **explicitly** asked
+   for a rate/percentage specifically, don't silently swap the whole
+   table to a different metric — instead **exclude only the rows with a
+   non-positive baseline** from the ranking (a rate is genuinely undefined
+   for them, not just inconvenient to compute) and note the exclusion, so
+   the metric actually answers what was asked for the rows it can.
 4. **"Show X across all periods, with changes between each period" means
    BOTH, not one or the other** — when a request separately names the
    per-checkpoint values ("density changes across all census years") AND
