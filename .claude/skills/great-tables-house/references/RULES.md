@@ -74,9 +74,17 @@ population growth, 1996–2021"):
    An explicitly named metric ("top 15 by revenue") always wins outright,
    full stop, no further judgment needed.
 2. **A stated date range always means the FULL span, not a sub-period** —
-   "from 1996 to 2021" computes growth as `value_2021 vs. value_1996`,
-   never a single interior period, unless the request names that period
-   specifically.
+   "from 1996 to 2021" compares `value_2021` against `value_1996`, never a
+   single interior period, unless the request names that period
+   specifically. Compare them as a **percentage/relative change**
+   (`(value_2021 - value_1996) / value_1996`), not an absolute difference,
+   whenever the request says "growth," "fastest-growing," or "rate" —
+   ordinary usage of "fastest-growing" means highest relative growth rate
+   (a small town doubling in size is "faster-growing" than a large city
+   adding the same absolute headcount), the same convention "fastest-
+   growing companies/cities" lists use elsewhere. Use absolute change
+   instead only when the request explicitly asks for a magnitude ("added
+   the most residents," "grew by the largest number").
 3. **"Show X across all periods, with changes between each period" means
    BOTH, not one or the other** — when a request separately names the
    per-checkpoint values ("density changes across all census years") AND
@@ -139,12 +147,19 @@ EXACTLY as `{x}` — it is not a Python format-spec slot, so
 f-string evaluation. Write `:+.1f` (or any format spec) inside the braces
 and the substring no longer matches `{x}` at all, so **nothing gets
 replaced and every cell renders the literal text `{x:+.1f}%`** — silently,
-with no exception raised. Confirmed by direct test: `fmt_number(columns=
-"x", pattern="{x:+.1f}%")` renders literal `{x:+.1f}%` in every cell,
-while `fmt_number(columns="x", pattern="{x}%", force_sign=True,
-decimals=1)` renders `+86.5%` / `−12.3%` correctly — `decimals=` still
-needs to be passed explicitly (it defaults to `2`, so omitting it here
-would render `+86.50%`, not `+86.5%`); `pattern=` is only for wrapping the
+with no exception raised. Confirmed by direct test:
+`fmt_number(columns="x", pattern="{x:+.1f}%")` renders literal
+`{x:+.1f}%` in every cell. For a genuine **percent** column, fix it with
+`fmt_percent`, not a `fmt_number` + manual `%` suffix (a `%`-suffixed
+`fmt_number` call is cosmetically similar but semantically wrong for a
+percent value — it skips `fmt_percent`'s scale handling and locale-aware
+percent formatting, contradicting this section's own rule above):
+`fmt_percent(columns="x", decimals=1, scale_values=False,
+force_sign=True)` renders `+86.5%` / `−12.3%` correctly for already-scaled
+inputs like `86.5` (`scale_values=True`, the default, is for fractional
+inputs like `0.865`) — `decimals=` still needs to be passed explicitly (it
+defaults to `2`, so omitting it here would render `+86.50%`, not
+`+86.5%`); `pattern=` is only for wrapping the
 already-formatted number in literal text (a unit suffix, parentheses,
 etc.), never for a format spec.
 
