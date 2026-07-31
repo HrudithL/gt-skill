@@ -421,14 +421,18 @@ def status_chip(gt, column, meaning):
     underlying data's original row order (this table's own demo rows
     happen to already be sorted by group, so it wouldn't show the bug, but
     a caller whose source rows interleave groups would silently color the
-    wrong cells). When the table has a stub (``rowname_col=``), target rows
-    by their **row NAME** instead — a string, matched to the row's actual
-    identity regardless of how ``great_tables`` reorders it for display —
-    by reading ``gt._stub.rows`` (each entry's ``.rowname``, in original
-    data order, one per row of ``gt._tbl_data``). Without a stub there is
-    no row name to match against, so integer display positions are used as
-    a fallback (correct as long as the table has no ``groupname_col``, or
-    its groups already appear in source-row order).
+    wrong cells). An earlier version of this function targeted rows by
+    their stub row NAME instead of position to sidestep that — but a stub
+    label is not guaranteed unique across groups (two different groups can
+    each have a row named "Large"), and ``loc.body(rows=[name])`` matches
+    EVERY row sharing that name, so a repeated label could still pick up
+    the wrong fill. The actually-correct fix is ``gt._stub.group_indices_map()``:
+    it returns ``(original_row_index, group_info)`` tuples in the exact
+    order ``great_tables`` will render them (grouped if ``groupname_col=``
+    is set, identity order otherwise) — enumerating it gives a
+    ``original_index -> display_position`` mapping that is correct
+    regardless of grouping AND regardless of whether stub labels repeat,
+    since it never relies on row identity being unique at all.
     """
     fills = {
         "good": PALETTE["solid"]["forest"],
@@ -436,15 +440,14 @@ def status_chip(gt, column, meaning):
         "neutral": PALETTE["solid"]["tan"],
     }
     values = gt._tbl_data[column]
-    rownames = [r.rowname for r in gt._stub.rows]
-    has_stub = all(name is not None for name in rownames) and len(rownames) == len(values)
+    display_order = [int(orig_idx) for orig_idx, _group in gt._stub.group_indices_map()]
+    display_position_of = {orig_idx: pos for pos, orig_idx in enumerate(display_order)}
     for value, state in meaning.items():
         if state not in fills:
             raise ValueError("status_chip(): meaning must map to 'good'/'bad'/'neutral', got %r" % (state,))
-        if has_stub:
-            selector = [name for name, v in zip(rownames, values) if not _is_missing(v) and v == value]
-        else:
-            selector = [i for i, v in enumerate(values) if not _is_missing(v) and v == value]
+        selector = [
+            display_position_of[i] for i, v in enumerate(values) if not _is_missing(v) and v == value
+        ]
         if not selector:
             continue
         gt = gt.tab_style(
@@ -472,11 +475,20 @@ def summary_row(gt, row_index, *, bold=True):
     (``#BDBDBD``, ~1.5px, vs. the default hairline between ordinary rows)
     and, by default, bold text weight to ``row_index`` (a 0-based display
     position, per ``loc.body()``'s indexing — not a DataFrame index).
+
+    Applies to **both** ``loc.body()`` (the value cells) AND ``loc.stub()``
+    (the row label) — a table with ``rowname_col=`` set has its row label
+    live in a structurally separate stub column, and styling only the body
+    would leave the summary row's own label unbolded and un-ruled, which
+    reads as an inconsistent, half-applied treatment. ``loc.stub(rows=...)``
+    is harmless to call even when the table has no stub at all (it simply
+    matches nothing).
     """
     styles = [style.borders(sides="top", color=PALETTE["neutral"]["structural_rule"], weight="1.5px")]
     if bold:
         styles.append(style.text(weight="bold"))
-    return gt.tab_style(style=styles, locations=loc.body(rows=[row_index]))
+    gt = gt.tab_style(style=styles, locations=loc.body(rows=[row_index]))
+    return gt.tab_style(style=styles, locations=loc.stub(rows=[row_index]))
 
 
 def group_emphasis(gt, *, hue="grey"):
