@@ -914,6 +914,12 @@ def _find_quoted_strings(text: str) -> list[str]:
     literal semantics — `\\'`/`\\u0020`/etc. resolve to the actual
     characters, not the literal escape sequence), falling back to the raw
     matched text only if `literal_eval` itself fails.
+
+    An f-string with an unresolved `{...}` interpolation
+    (`f"{metric}_rate"`) contributes NOTHING for that match — the runtime
+    column name is whatever `metric` evaluates to, not the literal
+    template text — matching `_extract_text_literal`'s identical guard for
+    header/caption text.
     """
     out: list[str] = []
     i, n = 0, len(text)
@@ -923,6 +929,13 @@ def _find_quoted_strings(text: str) -> list[str]:
             pat = _DQ_STRING if c == '"' else _SQ_STRING
             m = pat.match(text, i)
             if m:
+                j = i - 1
+                while j >= 0 and text[j].isalpha():
+                    j -= 1
+                prefix = text[j + 1 : i].lower()
+                if "f" in prefix and "{" in m.group(1):
+                    i = m.end()
+                    continue
                 try:
                     out.append(ast.literal_eval(text[i : m.end()]))
                 except Exception:
@@ -1053,7 +1066,11 @@ def _split_top_level_quoted(text: str) -> list[str]:
     """Like `_split_top_level`, but a comma inside a string literal is NOT a
     split point. Free-text call args (title/subtitle/source_note) routinely
     contain commas in prose; the plain bracket-depth-only splitter would
-    truncate the value at the first in-string comma.
+    truncate the value at the first in-string comma. Triple-quoted
+    delimiters (three matching quote characters) are tracked as a single
+    unit too, the same as `_scan_balanced_paren` — otherwise a
+    triple-quoted string containing an embedded ordinary quote followed by
+    a comma would close early and treat the comma as a real split point.
     """
     parts: list[str] = []
     depth = 0
@@ -1063,18 +1080,23 @@ def _split_top_level_quoted(text: str) -> list[str]:
     while i < n:
         c = text[i]
         if quote:
-            cur.append(c)
             if c == "\\" and i + 1 < n:
-                cur.append(text[i + 1])
+                cur.append(text[i : i + 2])
                 i += 2
                 continue
-            if c == quote:
+            if text[i : i + len(quote)] == quote:
+                cur.append(quote)
+                i += len(quote)
                 quote = None
+                continue
+            cur.append(c)
             i += 1
             continue
         if c in "'\"":
-            quote = c
-            cur.append(c)
+            quote = c * 3 if text[i : i + 3] == c * 3 else c
+            cur.append(quote)
+            i += len(quote)
+            continue
         elif c in "([{":
             depth += 1
             cur.append(c)
@@ -1186,6 +1208,16 @@ def _list_var_map(source: str) -> dict[str, list[str]]:
         body = source[open_idx + 1 : close_idx] if close_idx is not None else None
         if body is None:
             continue
+        # The bracketed literal must be the COMPLETE assignment value — a
+        # compound expression (`hero_cols = ["sales"] + ["profit"]`) means
+        # the real runtime value has more columns than just this one
+        # literal, so treating it as the whole answer would silently drop
+        # the rest. Only whitespace/a comment/end-of-statement may follow
+        # the closing bracket.
+        after = source[close_idx + 1 :]
+        after_line = after.split("\n", 1)[0]
+        if after_line.strip() and not after_line.strip().startswith("#"):
+            continue
         # Every top-level element must be a bare quoted string literal — a
         # comprehension (`[c for c in df.columns if c.startswith("pct_")]`)
         # or any other non-literal expression must NOT resolve, or a single
@@ -1294,13 +1326,21 @@ def _bare_call_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
 _DATA_COLOR_DEFAULTS = {"na_color": "#808080", "truncate": "False", "autocolor_text": "True"}
 
 
-def _kwarg_or_default(block: str, name: str) -> str:
+def _kwarg_or_default(block: str, name: str) -> str | None:
     """`_unquote(_kwarg_value(block, name))`, defaulting when omitted OR
     explicitly `None` (`na_color=None` is documented as "use the default,"
     identical to not passing it at all — a bare unquoted `"None"` must not
     be treated as a real, different value from the default it explicitly
     requests).
+
+    Returns `None` (unresolved, NOT the default) when `block` contains a
+    `**overrides`/`**{...}` expansion — it could set this exact kwarg to
+    something this parser can't see, so asserting the safe default could
+    mask a genuinely different rendered value (same reasoning as
+    `_render_params`'s `**`-expansion guard).
     """
+    if any(p.strip().startswith("**") for p in _split_top_level_quoted(block)):
+        return None
     v = _unquote(_kwarg_value(block, name))
     if v is None or v == "None":
         return _DATA_COLOR_DEFAULTS[name]
