@@ -72,27 +72,30 @@ summary/total row (see below). Column labels, the stub, and group headers
 are all quieter than that, and quieter than each other:
 
 1. **Column-label band** — `band(gt, hue=...)` — the house DEFAULT is the
-   subtle `washed` tint (light, not a solid fill). The heatmap is the
-   star of the table, not the header; a deeply-saturated band competes
-   with it even though it sits above the body. Reach for `shade="dark"`
-   (a solid `accent` fill + white text) only for a pure categorical/text
-   table with no heatmap at all, where the band IS the color story.
-2. **Stub** — `stub_tint(gt, hue=...)` — the visibly-tinted `accent_tint`
-   (a clearly-colored but not solid surface), separating row labels from
-   value columns.
+   `accent_tint` (a clearly-visible light tint, not a solid fill) — the
+   MORE visible of the band/stub pairing, since the band spans every
+   column and sits right under the title. The heatmap is still the star
+   of the table, not the header; reach for `shade="dark"` (a solid
+   `accent` fill + white text) only for a pure categorical/text table with
+   no heatmap at all, where the band IS the color story.
+2. **Stub** — `stub_tint(gt, hue=...)` — the quieter `washed` tint. A
+   narrower, secondary surface next to the more prominent band, so it
+   stays subtler rather than competing with it.
 3. **Group headers** — `group_emphasis(gt)` — bold weight + the `#BDBDBD`
    structural rule ONLY, deliberately **no background fill**. A group
    label is a section break, not a result worth its own highlight.
-4. **Row stripe** — `stripe(gt, hue=...)` — the barely-there `washed`
-   tint, the quietest surface in the table.
+4. **Row stripe** — `stripe(gt)` — always the flat neutral grey, NEVER
+   tinted to the table's hue (unlike band/stub) — an alternating tinted
+   fill reads as busy across many rows in a way a single flat surface
+   doesn't.
 
-Pass the SAME hue to `band()`/`stub_tint()`/`stripe()` so the theme reads
-as one thing. This hierarchy is what keeps the heatmap the star: nothing
-in the structural furniture is louder than a light tint, so a heatmap's
-own gradient (pale to deep, varying row by row) is the only element on the
-page that visually "moves." See `house_table.py`'s `band(gt, hue="navy")`
-/ `stub_tint(gt, hue="navy")` / `group_emphasis(gt)` /
-`stripe(gt, hue="navy")` calls for the worked example.
+Pass the SAME hue to `band()`/`stub_tint()` so the theme reads as one
+thing. This hierarchy is what keeps the heatmap the star: nothing in the
+structural furniture is as loud as a heatmap's own gradient (pale to deep,
+varying row by row), which stays the only element on the page that
+visually "moves." See `house_table.py`'s `band(gt, hue="navy")` /
+`stub_tint(gt, hue="navy")` / `group_emphasis(gt)` / `stripe(gt)` calls for
+the worked example.
 
 ## Summary / total rows
 
