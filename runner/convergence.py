@@ -143,15 +143,20 @@ def _scan_balanced_paren(text: str, open_idx: int) -> int | None:
     char-by-char count would misread that unmatched `(` as opening a new
     nesting level, throw off the whole depth count, and never find the
     call's real closing paren (returning None / no block at all for
-    perfectly valid, statically-static source). Comment-aware too: a `#`
-    outside any string starts a comment that runs to end-of-line, and a
-    stray `(` inside an inline comment (`title="Sales",  # preliminary (`)
-    must not affect depth either. Returns None if the parens never balance
-    before the end of `text` (an actually-malformed/partial source
+    perfectly valid, statically-static source). Handles TRIPLE-quoted
+    strings (a run of three matching quote characters, Python's other
+    string-literal form) as a single delimiter too — checking only one
+    quote char at a time would treat a triple-quoted string containing a
+    comma or paren as ending at the first of the three opening quote
+    characters. Comment-aware too: a
+    `#` outside any string starts a comment that runs to end-of-line, and
+    a stray `(` inside an inline comment (`title="Sales",  # preliminary
+    (`) must not affect depth either. Returns None if the parens never
+    balance before the end of `text` (an actually-malformed/partial source
     snippet).
     """
     depth = 0
-    quote: str | None = None
+    quote: str | None = None  # the open delimiter: None, a 1-char, or 3-char string
     in_comment = False
     i, n = open_idx, len(text)
     while i < n:
@@ -165,17 +170,53 @@ def _scan_balanced_paren(text: str, open_idx: int) -> int | None:
             if c == "\\" and i + 1 < n:
                 i += 2
                 continue
+            if text[i : i + len(quote)] == quote:
+                i += len(quote)
+                quote = None
+                continue
+            i += 1
+            continue
+        if c in "'\"":
+            quote = c * 3 if text[i : i + 3] == c * 3 else c
+            i += len(quote)
+            continue
+        elif c == "#":
+            in_comment = True
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def _scan_balanced_bracket(text: str, open_idx: int) -> int | None:
+    """Like `_scan_balanced_paren`, for `[`/`]` instead of `(`/`)`.
+
+    Used by `_list_var_map`: a column name containing a literal `]`
+    (`hero_cols = ["Profit ] share"]`) must not be misread as closing the
+    list early.
+    """
+    depth = 0
+    quote: str | None = None
+    i, n = open_idx, len(text)
+    while i < n:
+        c = text[i]
+        if quote:
+            if c == "\\" and i + 1 < n:
+                i += 2
+                continue
             if c == quote:
                 quote = None
             i += 1
             continue
         if c in "'\"":
             quote = c
-        elif c == "#":
-            in_comment = True
-        elif c == "(":
+        elif c == "[":
             depth += 1
-        elif c == ")":
+        elif c == "]":
             depth -= 1
             if depth == 0:
                 return i
@@ -1141,17 +1182,8 @@ def _list_var_map(source: str) -> dict[str, list[str]]:
     for m in re.finditer(r"^[ \t]*([A-Za-z_]\w*)\s*(?::[^=\n]+)?=\s*\[", source, re.M):
         name = m.group(1)
         open_idx = m.end() - 1
-        depth = 0
-        body = None
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "[":
-                depth += 1
-            elif c == "]":
-                depth -= 1
-                if depth == 0:
-                    body = source[open_idx + 1 : j]
-                    break
+        close_idx = _scan_balanced_bracket(source, open_idx)
+        body = source[open_idx + 1 : close_idx] if close_idx is not None else None
         if body is None:
             continue
         # Every top-level element must be a bare quoted string literal — a
@@ -1335,6 +1367,21 @@ def _color_mechanics(source: str) -> list[dict]:
     return [d for _, d in entries]
 
 
+def _targets_table_png(value_text: str) -> bool:
+    """True if a `gtsave`/`finalize` path argument's value is EXACTLY
+    `table.png` (optionally `./table.png`) — the harness's mandated output
+    location, not merely a path whose BASENAME happens to be `table.png`.
+    A plain `"table.png" in value_text` substring check would also match
+    `"backup/table.png"`, a genuinely different file in a subdirectory
+    that the harness never reads — matching by basename alone would make
+    the exact same mistake (its basename is ALSO `table.png`).
+    """
+    unquoted = (_unquote(value_text) or value_text).strip()
+    if unquoted.startswith("./"):
+        unquoted = unquoted[2:]
+    return unquoted == "table.png"
+
+
 def _render_params(source: str) -> dict:
     """`zoom`/`expand`/`vwidth`/`vheight` off the render call.
 
@@ -1376,7 +1423,7 @@ def _render_params(source: str) -> dict:
                     p for p in _split_top_level_quoted(b) if not re.match(r"[A-Za-z_]\w*\s*=", p)
                 ]
                 file_val = positionals[0] if positionals else None
-            if file_val and "table.png" in file_val:
+            if file_val and _targets_table_png(file_val):
                 block = b  # keep scanning -- a LATER table.png write wins
         # Same **overrides/**{...} guard as the finalize(...) branch below:
         # an expansion can override the materialized defaults with values
@@ -1403,7 +1450,7 @@ def _render_params(source: str) -> dict:
                     p for p in _split_top_level_quoted(b) if not re.match(r"[A-Za-z_]\w*\s*=", p)
                 ]
                 path_val = positionals[1] if len(positionals) >= 2 else None  # positionals[0] is `gt`
-            if path_val and "table.png" in path_val:
+            if path_val and _targets_table_png(path_val):
                 block = b
         # A `**overrides`/`**{...}` expansion can override the defaults with
         # values this parser can't see (it isn't a literal `kwarg=value`) --
@@ -1540,6 +1587,13 @@ def _fmt_column_map(source: str) -> dict[str, str]:
     yields calls in source order, so simply overwriting on each occurrence
     naturally keeps only the effective (last) one per column, rather than
     accumulating every formatter ever applied.
+
+    A LATER call that targets EVERY column (`columns=None`, or `columns`
+    omitted entirely — both mean "every column" per the documented
+    default) invalidates every column tracked so far, even though its own
+    full target set can't be enumerated without the real schema: every
+    prior per-column entry is now stale (overwritten by this call), so it
+    must not survive as though it were still the effective formatter.
     """
     var_map = _list_var_map(source)
     out: dict[str, str] = {}
@@ -1555,6 +1609,9 @@ def _fmt_column_map(source: str) -> dict[str, str]:
                 p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
             ]
             val = positionals[0] if positionals else None
+        if val is None or val.strip() == "None":
+            out.clear()
+            continue
         for col in _resolve_columns_list(val, var_map):
             out[col] = name
     return out
