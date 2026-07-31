@@ -41,14 +41,19 @@ it" cost you an item on this list.
 
 ## Ambiguous measures / selection criteria — pick ONE definition, STATE it
 
-A request like "top 15 fastest-growing towns... density changes... with
-percentage changes between each period" has more than one reasonable
-reading: fastest-growing by total population growth, or by density
-growth, over the full period or the latest one? Does "density changes"
-mean showing the density value at each year, the period-over-period
-delta, or both? None of these readings is wrong, but picking one **without
-saying so** is why the same prompt can render a genuinely different table
-each time — a real inconsistency, not a stylistic one.
+A request like "Create a table showing **population growth trends** for
+the top 15 fastest-growing Ontario towns, comparing their density changes
+across all census years from 1996 to 2021, with the percentage changes
+between each period" mixes two different questions: what to **rank/select
+by** (which 15 towns make the list), and what to **display** for those
+towns once selected (which columns appear). Conflating the two — e.g.
+ranking by whichever measure happens to sit nearest the superlative
+phrase, regardless of which one the request actually frames as the
+subject — silently answers a different leaderboard than the one asked
+for. None of the *display* choices below are wrong on their own, but
+picking any of them **without saying so** is why the same prompt can
+render a genuinely different table each time — a real inconsistency, not
+a stylistic one.
 
 **"Pick one and state it" is not enough by itself** — two independent runs
 can each honestly state a different pick and still diverge. Resolve the
@@ -56,24 +61,29 @@ pick with a deterministic precedence, in this order, then STATE the
 result in the subtitle or a source note (e.g. "ranked by overall
 population growth, 1996–2021"):
 
-1. **An explicitly named metric wins outright** — "top 15 by revenue"
-   names its metric; use exactly that column, no further judgment needed.
-2. **No metric named ⇒ use the measure-shaped noun closest to the ranking
-   phrase in the sentence**, not just any plausible metric elsewhere in
-   the request. In "fastest-growing towns... density changes...", "density
-   changes" is the very next clause after "fastest-growing" — rank by
-   overall density growth, not population growth, even though population
-   columns exist in the data too.
-3. **A stated date range always means the FULL span, not a sub-period** —
+1. **Find the ranking/selection metric FIRST, separately from the display
+   columns** — it's usually the request's stated TOPIC (the noun phrase
+   right after "a table showing/of...", typically at the very start),
+   not whatever measure happens to sit nearest "top N"/"fastest-growing"
+   in the sentence. In "showing **population growth trends** for the top
+   15 fastest-growing... towns, comparing their **density changes**...",
+   the topic clause names population growth — rank/select by population
+   growth. "Comparing their density changes..." is a SEPARATE instruction
+   about what to display for the towns already selected, not a competing
+   ranking criterion, even though it sits right next to "fastest-growing."
+   An explicitly named metric ("top 15 by revenue") always wins outright,
+   full stop, no further judgment needed.
+2. **A stated date range always means the FULL span, not a sub-period** —
    "from 1996 to 2021" computes growth as `value_2021 vs. value_1996`,
    never a single interior period, unless the request names that period
    specifically.
-4. **"Show X across all periods, with changes between each period" means
+3. **"Show X across all periods, with changes between each period" means
    BOTH, not one or the other** — when a request separately names the
    per-checkpoint values ("density changes across all census years") AND
    the between-period deltas ("percentage changes between each period"),
    include both as separate columns rather than picking one representation
-   to stand in for the other.
+   to stand in for the other. This is a *display* choice — it never
+   overrides the ranking metric found in step 1.
 
 This narrows the ambiguity considerably but — being a precedence over
 natural-language phrasing, not a closed-form algorithm — does not
@@ -82,8 +92,8 @@ conceivable prompt; genuinely irreducible ambiguity still gets resolved by
 judgment. STATING the resolved definition (not just making the same
 mechanical pick) is still what makes an individual table's numbers
 reproducible and defensible on its own. Do all of this BEFORE organizing
-columns — it decides which columns exist at all, not just how they're
-formatted.
+columns — it decides which columns (and which 15 rows) exist at all, not
+just how they're formatted.
 
 ## Data-cleaning gotchas (fix these before any `fmt_*`/`data_color` call)
 
