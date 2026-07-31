@@ -377,6 +377,13 @@ def _row_key(row_id: Any, group_id: Any | None) -> tuple:
     return (normalize_id(group_id) if group_id is not None else None, normalize_id(row_id))
 
 
+# Sentinel key `_shared_pairs` assigns to EVERY row when neither side has a
+# stub to align by — every row is then "the same key" and goes through the
+# same maximum-bipartite-matching path as a repeated stub label, rather
+# than a position-dependent zip.
+_ALL_ONE_KEY = ("*", "*")
+
+
 def _row_keys(row_ids: list, group_ids: list | None) -> list[tuple]:
     """`_row_key` for every row, gated on `group_ids` genuinely being present.
 
@@ -427,15 +434,20 @@ def _shared_pairs(
     candidate_fp: dict, truth_fp: dict, candidate_col: str, truth_col: str,
 ) -> list[tuple[Any, Any]]:
     """Value pairs for `candidate_col`/`truth_col`, aligned by stub row id
-    (and row-group id, when BOTH sides provide one — see `_row_keys`).
+    (and row-group id, when BOTH sides provide one — see `_row_keys`), via
+    a maximum-cardinality bipartite matching within each repeated key.
 
-    Falls back to positional alignment (by `row_order` index) when either
-    side has no stub — the best available alignment without a named key.
+    Row order/count is explicitly never graded elsewhere (row_set_identity
+    is order-blind by design), so alignment must never depend on which
+    position a value happens to sit at — including when there's no stub
+    at all (see `_ALL_ONE_KEY` below).
     """
     cand_cols = candidate_fp.get("columns", {})
     truth_cols = truth_fp.get("columns", {})
     if candidate_col not in cand_cols or truth_col not in truth_cols:
         return []
+    cand_values = cand_cols[candidate_col]
+    truth_values = truth_cols[truth_col]
     cand_ids = candidate_fp.get("row_ids")
     truth_ids = truth_fp.get("row_ids")
     if cand_ids and truth_ids:
@@ -444,67 +456,70 @@ def _shared_pairs(
         use_groups = bool(candidate_fp.get("row_group_ids")) and bool(truth_fp.get("row_group_ids"))
         cand_keys = _row_keys(cand_ids, candidate_fp.get("row_group_ids") if use_groups else None)
         truth_keys = _row_keys(truth_ids, truth_fp.get("row_group_ids") if use_groups else None)
-        # A key can legitimately repeat -- most commonly when grouping ISN'T
-        # usable for alignment (one side lacks it) but the stub label itself
-        # repeats across what were distinct groups (e.g. "S"/"M" reused in
-        # every group). A plain {key: i} dict would keep only the LAST
-        # truth occurrence of a repeated key, silently losing every earlier
-        # occurrence instead of aligning it with anything -- so every
-        # occurrence's index is kept, grouped by key.
-        #
-        # Row order/count is explicitly never graded elsewhere
-        # (row_set_identity is order-blind by design), so a candidate that
-        # reproduces the same rows/values in a different order must still
-        # score as a full match. A GREEDY nearest-value assignment (tried
-        # first) is still order-dependent in an adversarial sense: eagerly
-        # committing an early, merely-closest (not actually close) pairing
-        # can consume the one truth value a LATER, genuinely-correct
-        # candidate needed, cascading into a run of false mismatches purely
-        # from where the bad value happens to sit. The fix is a proper
-        # maximum-CARDINALITY bipartite matching restricted to `values_close`
-        # edges (_max_bipartite_matching below): it finds the assignment
-        # that maximizes the COUNT of within-tolerance pairs regardless of
-        # order, which is the actual scoring objective. Any candidate/truth
-        # occurrences left over after that (real mismatches, or a count
-        # imbalance) are paired off arbitrarily just so every candidate row
-        # still gets SOME partner for the fraction's denominator -- none of
-        # them can be "close" (the matching already claimed every possible
-        # close pair), so how they're paired among themselves doesn't
-        # change the resulting fraction.
-        cand_by_key: dict[tuple, list[int]] = {}
-        for i, key in enumerate(cand_keys):
-            cand_by_key.setdefault(key, []).append(i)
-        truth_by_key: dict[tuple, list[int]] = {}
-        for j, key in enumerate(truth_keys):
-            truth_by_key.setdefault(key, []).append(j)
+    else:
+        # No stub on one (or both) sides -- there's no named identity to
+        # align by at all, so every row is equally "the same key" and falls
+        # into the one-key-group matching below (NOT a positional zip,
+        # which would make an unstubbed candidate that reproduces the same
+        # values in a different order score as a mismatch).
+        cand_keys = [_ALL_ONE_KEY] * len(cand_values)
+        truth_keys = [_ALL_ONE_KEY] * len(truth_values)
 
-        cand_values = cand_cols[candidate_col]
-        truth_values = truth_cols[truth_col]
-        pairs = []
-        for key, cand_positions in cand_by_key.items():
-            truth_positions = truth_by_key.get(key)
-            if not truth_positions:
-                continue
-            cis = [i for i in cand_positions if i < len(cand_values)]
-            tjs = [j for j in truth_positions if j < len(truth_values)]
-            if not cis or not tjs:
-                continue
-            adjacency = {
-                ci: [tj for tj in range(len(tjs)) if values_close(cand_values[cis[ci]], truth_values[tjs[tj]])]
-                for ci in range(len(cis))
-            }
-            matching = _max_bipartite_matching(len(cis), adjacency)  # ci -> tj
-            leftover_tjs = iter(tj for tj in range(len(tjs)) if tj not in matching.values())
-            for ci in range(len(cis)):
-                tj = matching.get(ci)
+    # A key can legitimately repeat -- most commonly when grouping ISN'T
+    # usable for alignment (one side lacks it) but the stub label itself
+    # repeats across what were distinct groups (e.g. "S"/"M" reused in
+    # every group), OR because every row shares the single `_ALL_ONE_KEY`
+    # (the no-stub case above). A plain {key: i} dict would keep only the
+    # LAST occurrence of a repeated key, silently losing every earlier one
+    # instead of aligning it with anything -- so every occurrence's index
+    # is kept, grouped by key.
+    #
+    # A GREEDY nearest-value assignment (tried first, historically) is
+    # still order-dependent in an adversarial sense: eagerly committing an
+    # early, merely-closest (not actually close) pairing can consume the
+    # one truth value a LATER, genuinely-correct candidate needed,
+    # cascading into a run of false mismatches purely from where a bad
+    # value happens to sit. The fix is a proper maximum-CARDINALITY
+    # bipartite matching restricted to `values_close` edges
+    # (_max_bipartite_matching below): it finds the assignment that
+    # maximizes the COUNT of within-tolerance pairs regardless of order,
+    # which is the actual scoring objective. Any candidate/truth
+    # occurrences left over after that (real mismatches, or a count
+    # imbalance) are paired off arbitrarily just so every candidate row
+    # still gets SOME partner for the fraction's denominator -- none of
+    # them can be "close" (the matching already claimed every possible
+    # close pair), so how they're paired among themselves doesn't change
+    # the resulting fraction.
+    cand_by_key: dict[tuple, list[int]] = {}
+    for i, key in enumerate(cand_keys):
+        cand_by_key.setdefault(key, []).append(i)
+    truth_by_key: dict[tuple, list[int]] = {}
+    for j, key in enumerate(truth_keys):
+        truth_by_key.setdefault(key, []).append(j)
+
+    pairs = []
+    for key, cand_positions in cand_by_key.items():
+        truth_positions = truth_by_key.get(key)
+        if not truth_positions:
+            continue
+        cis = [i for i in cand_positions if i < len(cand_values)]
+        tjs = [j for j in truth_positions if j < len(truth_values)]
+        if not cis or not tjs:
+            continue
+        adjacency = {
+            ci: [tj for tj in range(len(tjs)) if values_close(cand_values[cis[ci]], truth_values[tjs[tj]])]
+            for ci in range(len(cis))
+        }
+        matching = _max_bipartite_matching(len(cis), adjacency)  # ci -> tj
+        leftover_tjs = iter(tj for tj in range(len(tjs)) if tj not in matching.values())
+        for ci in range(len(cis)):
+            tj = matching.get(ci)
+            if tj is None:
+                tj = next(leftover_tjs, None)
                 if tj is None:
-                    tj = next(leftover_tjs, None)
-                    if tj is None:
-                        continue  # more candidate occurrences than truth ones for this key
-                pairs.append((cand_values[cis[ci]], truth_values[tjs[tj]]))
-        return pairs
-    n = min(len(cand_cols[candidate_col]), len(truth_cols[truth_col]))
-    return list(zip(cand_cols[candidate_col][:n], truth_cols[truth_col][:n]))
+                    continue  # more candidate occurrences than truth ones for this key
+            pairs.append((cand_values[cis[ci]], truth_values[tjs[tj]]))
+    return pairs
 
 
 def column_match_fraction(candidate_fp: dict, truth_fp: dict, candidate_col: str, truth_col: str) -> float | None:
