@@ -99,19 +99,21 @@ population growth, 1996–2021"):
    growing companies/cities" lists use elsewhere. Use absolute change
    instead only when the request explicitly asks for a magnitude ("added
    the most residents," "grew by the largest number"). **Guard the
-   baseline first**: a percentage/relative change is only meaningful for a
-   strictly positive starting value — a measure that can legitimately
-   start at zero or negative (revenue from a new product, profit from a
-   loss) makes `(end - start) / start` divide-by-zero or produce a
-   sign-reversed, meaningless result. If the request left the metric
-   **unstated** (just "growth"/"fastest-growing"), fall back to absolute
-   change for the whole table when the baseline can be zero/negative, and
-   say so in the subtitle/source note. If the request **explicitly** asked
-   for a rate/percentage specifically, don't silently swap the whole
-   table to a different metric — instead **exclude only the rows with a
-   non-positive baseline** from the ranking (a rate is genuinely undefined
-   for them, not just inconvenient to compute) and note the exclusion, so
-   the metric actually answers what was asked for the rows it can.
+   baseline first, against the ACTUAL data, not the measure's type in the
+   abstract**: check whether any eligible row's starting value is actually
+   zero/negative before doing anything about it — a measure that could
+   theoretically go negative (profit) but happens to be positive for
+   every eligible row needs no special handling at all; don't fall back to
+   absolute change just because the measure's category is capable of it.
+   When a real zero/negative baseline IS present: if the request left the
+   metric **unstated** (just "growth"/"fastest-growing"), fall back to
+   absolute change for the whole table and say so in the subtitle/source
+   note. If the request **explicitly** asked for a rate/percentage
+   specifically, don't silently swap the whole table to a different metric
+   — instead **exclude only the rows with a non-positive baseline** from
+   the ranking (a rate is genuinely undefined for them, not just
+   inconvenient to compute) and note the exclusion, so the metric actually
+   answers what was asked for the rows it can.
 4. **"Show X across all periods, with changes between each period" means
    BOTH, not one or the other** — when a request separately names the
    per-checkpoint values ("density changes across all census years") AND
@@ -121,9 +123,14 @@ population growth, 1996–2021"):
    overrides the ranking metric found in step 1. The baseline guard from
    step 3 applies to EVERY individual period's delta too, not just the
    overall ranking figure — a period whose starting value is zero/negative
-   makes that one cell's percentage undefined; render that cell via
-   `sub_missing`/`—` (see "Missing values" below) rather than a computed
-   but meaningless percentage, without discarding the rest of the row.
+   makes that one cell's percentage undefined. **`sub_missing` alone does
+   NOT catch this** — confirmed by direct test: `(0 - 5) / 0` computes to
+   `inf`, and `sub_missing` only substitutes `None`/`NaN`, so an
+   unmasked `inf` renders as the literal text `"inf%"`, not `"—"`. Mask it
+   explicitly first — e.g. `df["pct"] = df["pct"].replace([float("inf"),
+   float("-inf")], None)` (or compute with `np.where(start > 0, ..., None)`
+   up front) — THEN call `sub_missing`, without discarding the rest of
+   that row.
 
 This narrows the ambiguity considerably but — being a precedence over
 natural-language phrasing, not a closed-form algorithm — does not
