@@ -39,6 +39,116 @@ calling it, that's a sign you copied more of `house_table.py` than your
 table needs — remove the unused import, but never let "I didn't get to
 it" cost you an item on this list.
 
+## Ambiguous measures / selection criteria — pick ONE definition, STATE it
+
+A request like "Create a table showing **population growth trends** for
+the top 15 fastest-growing Ontario towns, comparing their density changes
+across all census years from 1996 to 2021, with the percentage changes
+between each period" mixes two different questions: what to **rank/select
+by** (which 15 towns make the list), and what to **display** for those
+towns once selected (which columns appear). Conflating the two — e.g.
+ranking by whichever measure happens to sit nearest the superlative
+phrase, regardless of which one the request actually frames as the
+subject — silently answers a different leaderboard than the one asked
+for. None of the *display* choices below are wrong on their own, but
+picking any of them **without saying so** is why the same prompt can
+render a genuinely different table each time — a real inconsistency, not
+a stylistic one.
+
+**"Pick one and state it" is not enough by itself** — two independent runs
+can each honestly state a different pick and still diverge. Resolve the
+pick with a deterministic precedence, in this order, then STATE the
+result in the subtitle or a source note (e.g. "ranked by overall
+population growth, 1996–2021"):
+
+1. **Find the ranking/selection metric FIRST, separately from the display
+   columns** — it's usually the request's stated TOPIC (the noun phrase
+   right after "a table showing/of...", typically at the very start),
+   not whatever measure happens to sit nearest "top N"/"fastest-growing"
+   in the sentence. In "showing **population growth trends** for the top
+   15 fastest-growing... towns, comparing their **density changes**...",
+   the topic clause names population growth — rank/select by population
+   growth. "Comparing their density changes..." is a SEPARATE instruction
+   about what to display for the towns already selected, not a competing
+   ranking criterion, even though it sits right next to "fastest-growing."
+   An explicitly named metric ("top 15 by revenue") always wins outright,
+   full stop, no further judgment needed. **If the topic measure and the
+   named display columns are different things** (population to rank by,
+   density to display), show BOTH as columns, not just the display one —
+   a table titled "population growth trends" that contains zero
+   population data reads as incomplete regardless of how well it answers
+   the density question.
+2. **Entity/category scope: ALWAYS match the request's term to every data
+   row it plausibly covers — never the narrower literal subset.**
+   "Ontario towns" in ordinary usage means "Ontario municipalities"
+   generically; if the data has a type/category column (e.g. `csd_type`
+   with `town`/`city`/`township`/`municipality`/`village`), include every
+   type, not just the rows whose type-value literally matches the
+   request's word ("town-type records only" is NOT an acceptable
+   alternative reading — it's the narrower literal subset this rule
+   exists to rule out). State the scope in the subtitle/source note (e.g.
+   "all municipality types") so the choice is explicit, not because there
+   are two valid options to pick between.
+3. **A stated date range always means the FULL span, not a sub-period** —
+   "from 1996 to 2021" compares `value_2021` against `value_1996`, never a
+   single interior period, unless the request names that period
+   specifically. Compare them as a **percentage/relative change**
+   (`(value_2021 - value_1996) / value_1996`), not an absolute difference,
+   whenever the request says "growth," "fastest-growing," or "rate" —
+   ordinary usage of "fastest-growing" means highest relative growth rate
+   (a small town doubling in size is "faster-growing" than a large city
+   adding the same absolute headcount), the same convention "fastest-
+   growing companies/cities" lists use elsewhere. Use absolute change
+   instead only when the request explicitly asks for a magnitude ("added
+   the most residents," "grew by the largest number"). **Guard the
+   baseline first, against the ACTUAL data, not the measure's type in the
+   abstract**: check whether any eligible row's starting value is actually
+   zero/negative before doing anything about it — a measure that could
+   theoretically go negative (profit) but happens to be positive for
+   every eligible row needs no special handling at all; don't fall back to
+   absolute change just because the measure's category is capable of it.
+   When a real zero/negative baseline IS present: if the request left the
+   metric **unstated** (just "growth"/"fastest-growing"), fall back to
+   absolute change for the whole table and say so in the subtitle/source
+   note. If the request **explicitly** asked for a rate/percentage
+   specifically, don't silently swap the whole table to a different metric
+   — instead **exclude only the rows with a non-positive baseline** from
+   the ranking (a rate is genuinely undefined for them, not just
+   inconvenient to compute) and note the exclusion, so the metric actually
+   answers what was asked for the rows it can.
+4. **"Show X across all periods, with changes between each period" means
+   BOTH, not one or the other** — when a request separately names the
+   per-checkpoint values ("density changes across all census years") AND
+   the between-period deltas ("percentage changes between each period"),
+   include both as separate columns rather than picking one representation
+   to stand in for the other. This is a *display* choice — it never
+   overrides the ranking metric found in step 1. The baseline guard from
+   step 3 applies to EVERY individual period's delta too, not just the
+   overall ranking figure — a period whose starting value is zero/negative
+   makes that one cell's percentage undefined, and **not always in an
+   obviously-broken way**: a zero baseline computes to `inf` (`sub_missing`
+   does NOT catch this — confirmed by direct test: it only substitutes
+   `None`/`NaN`, so an unmasked `inf` renders as the literal text
+   `"inf%"`), but a *negative* baseline computes to a finite,
+   sign-reversed, equally-meaningless value (confirmed: `(5 - (-10)) /
+   (-10)` = `-1.5`, i.e. "-150%" — a plausible-looking number that passes
+   right through `sub_missing` uncaught). Mask on the condition, not the
+   symptom: compute with `np.where(start > 0, (end - start) / start,
+   None)` so both the zero-baseline (`inf`) and negative-baseline
+   (finite-but-meaningless) cases become `None` up front — confirmed by
+   direct test to render `"—"` for both — THEN call `sub_missing`, without
+   discarding the rest of that row.
+
+This narrows the ambiguity considerably but — being a precedence over
+natural-language phrasing, not a closed-form algorithm — does not
+guarantee two runs land on byte-identical column choices for every
+conceivable prompt; genuinely irreducible ambiguity still gets resolved by
+judgment. STATING the resolved definition (not just making the same
+mechanical pick) is still what makes an individual table's numbers
+reproducible and defensible on its own. Do all of this BEFORE organizing
+columns — it decides which columns (and which 15 rows) exist at all, not
+just how they're formatted.
+
 ## Data-cleaning gotchas (fix these before any `fmt_*`/`data_color` call)
 
 - A currency string like `"$1,200"` or a percent string like `"12%"` is
@@ -69,6 +179,35 @@ above/below target) is the diverging **RdYlGn** measure —
 `yoy_change` in `house_table.py`. `positive=good` is the default
 orientation; pass `reverse=True` only when positive genuinely means worse
 (cost overrun, error rate, latency, churn).
+
+**Want an explicit `+`/`−` sign on a signed value?** Pass `force_sign=True`
+— do NOT hand-rewrite it with `pattern="{x:+.1f}%"`. `force_sign=True` is a
+plain keyword on `fmt_number`/`fmt_percent`/`fmt_currency`/`fmt_integer`
+(the formatters this skill actually uses); `fmt_scientific` is the one
+exception, with separate `force_sign_m=`/`force_sign_n=` keywords instead
+of a single `force_sign=`.
+
+`pattern=`'s `{x}` is a **literal substitution token** that must appear
+EXACTLY as `{x}` — it is not a Python format-spec slot, so
+`great_tables` does a plain string-replace of the substring `{x}`, not an
+f-string evaluation. Write `:+.1f` (or any format spec) inside the braces
+and the substring no longer matches `{x}` at all, so **nothing gets
+replaced and every cell renders the literal text `{x:+.1f}%`** — silently,
+with no exception raised. Confirmed by direct test:
+`fmt_number(columns="x", pattern="{x:+.1f}%")` renders literal
+`{x:+.1f}%` in every cell. For a genuine **percent** column, fix it with
+`fmt_percent`, not a `fmt_number` + manual `%` suffix (a `%`-suffixed
+`fmt_number` call is cosmetically similar but semantically wrong for a
+percent value — it skips `fmt_percent`'s scale handling and locale-aware
+percent formatting, contradicting this section's own rule above):
+`fmt_percent(columns="x", decimals=1, scale_values=False,
+force_sign=True)` renders `+86.5%` / `−12.3%` correctly for already-scaled
+inputs like `86.5` (`scale_values=True`, the default, is for fractional
+inputs like `0.865`) — `decimals=` still needs to be passed explicitly (it
+defaults to `2`, so omitting it here would render `+86.50%`, not
+`+86.5%`); `pattern=` is only for wrapping the
+already-formatted number in literal text (a unit suffix, parentheses,
+etc.), never for a format spec.
 
 ## Ranking / rank / position
 

@@ -251,6 +251,8 @@ The goal is never a literally empty report — it's a round whose comments stop 
 
 Note the outcome briefly on the PR ("remaining comments are stylistic nits / already addressed — stopping here") and move on. This is a judgment call the agent makes itself, the same way it makes any other §10.1 call — it is not a genuine fork to escalate.
 
+**Repeated out-of-scope findings cap the loop at 2-3 rounds.** If a round's findings are out-of-scope and the agent tells Codex (in the `@codex review` request) to stay within the PR's scope, and the next round comes back with the same or other out-of-scope content anyway, that is not a signal to keep re-requesting in hopes of a cleaner pass — Codex re-flagging out-of-scope items after being told the scope is itself evidence the loop has stopped being productive. Note this on the PR ("Codex kept raising out-of-scope items after being scoped down — stopping after round N") and move on rather than requesting further reviews on the same PR.
+
 The PR is eligible to merge up once **both** are true: the review has reached this stopping point — the requested review (findings or the clean issue comment) has, on its most recent round, either come back clean or surfaced nothing left worth fixing per the criteria above; or, when Codex is unavailable (rate-limited / no signal), the agent's **self-review** posted for your latest commit per the fallback above has been triaged the same way — AND any escalated forks are resolved by the human. None of this requires a spotless report; it requires that the feedback was actually considered each round and acted on where it mattered.
 
 ---
