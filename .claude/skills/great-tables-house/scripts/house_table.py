@@ -342,10 +342,12 @@ def heatmap(gt, columns, *, kind, hue, domain=None, reverse=False):
     *worse* (cost overrun, error rate, latency, churn — "more is worse"),
     pass ``reverse=True`` so the palette's low/high ends swap (green stays
     "good" = negative, red stays "bad" = positive) instead of literally
-    reversing the color list. Ignored for ``kind="sequential"`` (a plain
-    magnitude has no good/bad orientation to flip). This is the parameter
-    ``references/RULES.md``'s "Percent / rate / change" rule tells callers
-    to pass.
+    reversing the color list. Actually ignored (forced ``False``) for
+    ``kind="sequential"`` — a plain magnitude has no good/bad orientation to
+    flip, so passing ``True`` there would silently flip the intended
+    light-to-dark magnitude encoding instead of doing nothing. This is the
+    parameter ``references/RULES.md``'s "Percent / rate / change" rule tells
+    callers to pass.
 
     THE GOTCHA this function exists to prevent: ``fmt_percent`` expects
     *fractional* values (``0.12`` renders as ``12%``) — a percent column
@@ -381,7 +383,7 @@ def heatmap(gt, columns, *, kind, hue, domain=None, reverse=False):
         na_color=PALETTE["neutral"]["na_cell"],
         truncate=False,
         autocolor_text=True,
-        reverse=reverse,
+        reverse=reverse if kind == "diverging" else False,
     )
 
 
@@ -412,6 +414,21 @@ def status_chip(gt, column, meaning):
     crash this function on the exact kind of missing status cell
     ``sub_missing(missing_text="—")`` is meant to handle gracefully
     elsewhere.
+
+    ``loc.body(rows=...)`` interprets a list of INTEGERS as **display**
+    positions — but with ``groupname_col=`` set, ``great_tables`` renders
+    rows grouped into sections, which can reorder them relative to the
+    underlying data's original row order (this table's own demo rows
+    happen to already be sorted by group, so it wouldn't show the bug, but
+    a caller whose source rows interleave groups would silently color the
+    wrong cells). When the table has a stub (``rowname_col=``), target rows
+    by their **row NAME** instead — a string, matched to the row's actual
+    identity regardless of how ``great_tables`` reorders it for display —
+    by reading ``gt._stub.rows`` (each entry's ``.rowname``, in original
+    data order, one per row of ``gt._tbl_data``). Without a stub there is
+    no row name to match against, so integer display positions are used as
+    a fallback (correct as long as the table has no ``groupname_col``, or
+    its groups already appear in source-row order).
     """
     fills = {
         "good": PALETTE["solid"]["forest"],
@@ -419,15 +436,20 @@ def status_chip(gt, column, meaning):
         "neutral": PALETTE["solid"]["tan"],
     }
     values = gt._tbl_data[column]
+    rownames = [r.rowname for r in gt._stub.rows]
+    has_stub = all(name is not None for name in rownames) and len(rownames) == len(values)
     for value, state in meaning.items():
         if state not in fills:
             raise ValueError("status_chip(): meaning must map to 'good'/'bad'/'neutral', got %r" % (state,))
-        rows = [i for i, v in enumerate(values) if not _is_missing(v) and v == value]
-        if not rows:
+        if has_stub:
+            selector = [name for name, v in zip(rownames, values) if not _is_missing(v) and v == value]
+        else:
+            selector = [i for i, v in enumerate(values) if not _is_missing(v) and v == value]
+        if not selector:
             continue
         gt = gt.tab_style(
             style=[style.fill(color=fills[state]), style.text(color="white")],
-            locations=loc.body(columns=column, rows=rows),
+            locations=loc.body(columns=column, rows=selector),
         )
     return gt
 
@@ -553,7 +575,7 @@ def build_house_table():
     gt = humanize_labels(
         gt,
         products,
-        overrides={"units_sold": "Units Sold (000s)", "yoy_change": "YoY Change"},
+        overrides={"units_sold": "Units Sold", "yoy_change": "YoY Change"},
     )
 
     # Big Color: exactly 2 colored measures (the ceiling). `revenue` is the
