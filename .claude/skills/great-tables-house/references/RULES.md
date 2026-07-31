@@ -4,6 +4,41 @@ No flowchart here. Find the row below that matches your column's kind, then
 open `scripts/house_table.py` and find the function/section it names — copy
 and adapt that, not this file's prose.
 
+## THE NON-NEGOTIABLE BASE — every table gets ALL of these, no exceptions
+
+This is not a menu, and it is not conditional on whether a particular table
+"seems to need it." Every table this skill produces — no matter how simple
+the request looks — gets every item below. Treat this as a checklist to
+run through immediately before you call `finalize()`: if any box below is
+unchecked, the table isn't done yet.
+
+1. **Title AND subtitle, both, always** — `tab_header(title=..., subtitle=...)`.
+   A subtitle-less or title-less table is incomplete, full stop — there is
+   no data shape simple enough to skip this.
+2. **A source note, always** — `tab_source_note(source_note=...)`. If the
+   actual provenance is unknown, write a generic-but-real one ("Source:
+   provided dataset.") rather than omitting it — an unstated source is
+   still a gap, not a neutral default.
+3. **The boxed frame, always** — `frame(gt)`.
+4. **At most 2 colored measures, TOTAL, no exceptions** — `data_color`/
+   `heatmap()` calls across the WHOLE table, not per column-group and not
+   "one per numeric column." A table with 5 numeric columns still gets
+   **at most 2** heatmaps — pick the 1–2 that are actually the point of the
+   request and leave the rest uncolored (bold text at most). Three or more
+   `heatmap(...)` calls in one script is always a bug, never a stylistic
+   choice — if you catch yourself writing a third one, delete it.
+5. **`finalize(gt, path="table.png")`** — the mandatory render, always last.
+
+Everything else in this file — a stub, a group, a spanner, a status chip,
+a summary row, the striping/tint hierarchy — is genuinely conditional on
+what the data and request actually call for, and stays that way. The five
+items above are different in kind: they are the base every table stands
+on, never something to selectively adopt. If you imported a helper
+(`stripe`, `stub_tint`, `humanize_labels`, ...) and then don't end up
+calling it, that's a sign you copied more of `house_table.py` than your
+table needs — remove the unused import, but never let "I didn't get to
+it" cost you an item on this list.
+
 ## Data-cleaning gotchas (fix these before any `fmt_*`/`data_color` call)
 
 - A currency string like `"$1,200"` or a percent string like `"12%"` is
@@ -132,10 +167,11 @@ against the ceiling.
 
 ## Global constants
 
-- Frame: `frame(gt)` — `#CCCCCC`, 1px, all four sides.
-- Save: `finalize(gt, path=...)` — `expand=15`, `zoom=2.0`.
-- Title + subtitle: always present, centered (`tab_header`, see
-  `house_table.py`'s `tab_header` call).
+Frame/save/title/subtitle are covered by "THE NON-NEGOTIABLE BASE" at the
+top of this file — this section is just the remaining fit-and-finish
+constants:
+
+- Header alignment: title + subtitle centered (`tab_header`'s default).
 - Font size: shrink only as a last resort, in this order — bigger canvas
   (`gtsave(vwidth=..., vheight=...)`) → higher zoom (`gtsave(zoom=...)`) →
   smaller font.

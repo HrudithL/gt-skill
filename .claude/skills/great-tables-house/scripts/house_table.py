@@ -18,6 +18,20 @@ This file is two things at once:
    stub tint, band, frame, footnote, source note, and a missing value — and
    saves it to ``house_table.png`` next to this script.
 
+THE NON-NEGOTIABLE BASE (see ``references/RULES.md`` for the full rule):
+every table gets ALL of — (1) a title AND subtitle, (2) a source note (a
+generic one if the real provenance is unknown — never omitted), (3) the
+boxed frame (``frame(gt)``), (4) AT MOST 2 colored measures total across
+the whole table (never one heatmap per numeric column — a 3rd
+``heatmap()``/``data_color()`` call is always a bug), and (5)
+``finalize(gt, path="table.png")`` as the final call. These five are
+unconditional, unlike the stub/group/spanner/status-chip/summary-row
+choices below, which stay genuinely data-dependent. Importing a helper
+(``stripe``, ``stub_tint``, ``humanize_labels``, ...) and then not calling
+it is fine; skipping one of the five items above because your table
+"didn't seem to need it" is not — the demo below hits all five every time
+for exactly this reason.
+
 Why a single script instead of a flowchart + per-shape reference files (the
 ``great-tables`` / `great-tables-ci` design)? Those two skills solve
 "same input -> same output" with a **procedure**: a numbered decision
