@@ -62,6 +62,38 @@ exist — see the `product` column / `tab_stubhead("Product")` call in
 a grouping dimension, or a low-cardinality categorical is the organizing
 story — see `region` / `group_emphasis` in `house_table.py`.
 
+## Unified color theme — the band/stub/group/stripe hierarchy
+
+Pick ONE hue for the whole table (the DA hue-selection rule: match an
+existing heatmap's family first, else the data's subject, else Navy) and
+run every quiet structural surface through it — but not at the same
+strength. Only ONE row deserves its own distinct, highlighted treatment: a
+summary/total row (see below). Column labels, the stub, and group headers
+are all quieter than that, and quieter than each other:
+
+1. **Column-label band** — `band(gt, hue=...)` — the house DEFAULT is the
+   subtle `washed` tint (light, not a solid fill). The heatmap is the
+   star of the table, not the header; a deeply-saturated band competes
+   with it even though it sits above the body. Reach for `shade="dark"`
+   (a solid `accent` fill + white text) only for a pure categorical/text
+   table with no heatmap at all, where the band IS the color story.
+2. **Stub** — `stub_tint(gt, hue=...)` — the visibly-tinted `accent_tint`
+   (a clearly-colored but not solid surface), separating row labels from
+   value columns.
+3. **Group headers** — `group_emphasis(gt)` — bold weight + the `#BDBDBD`
+   structural rule ONLY, deliberately **no background fill**. A group
+   label is a section break, not a result worth its own highlight.
+4. **Row stripe** — `stripe(gt, hue=...)` — the barely-there `washed`
+   tint, the quietest surface in the table.
+
+Pass the SAME hue to `band()`/`stub_tint()`/`stripe()` so the theme reads
+as one thing. This hierarchy is what keeps the heatmap the star: nothing
+in the structural furniture is louder than a light tint, so a heatmap's
+own gradient (pale to deep, varying row by row) is the only element on the
+page that visually "moves." See `house_table.py`'s `band(gt, hue="navy")`
+/ `stub_tint(gt, hue="navy")` / `group_emphasis(gt)` /
+`stripe(gt, hue="navy")` calls for the worked example.
+
 ## Summary / total rows
 
 Add **only** when the request implies totals/aggregates; don't invent one
@@ -88,8 +120,9 @@ cell. See the injected `yoy_change` gap on `Zeta Kit` and the blank
 
 Hard rule, same as the other two skills: at most 2 columns get continuous
 color treatment (`data_color`/`heatmap`). A pure categorical/text table
-gets no fill at all — its anchor is the heading band
-(`band(gt, shade="dark", hue=...)`). `house_table.py` uses exactly 2:
+gets no fill at all — its anchor is the heading band, switched to
+`band(gt, shade="dark", hue=...)` for this no-heatmap case only (see
+"Unified color theme" below). `house_table.py` uses exactly 2:
 `revenue` (sequential) and `yoy_change` (diverging); `status` is a 3rd
 color story but is a categorical chip, not a heatmap, so it doesn't count
 against the ceiling.
