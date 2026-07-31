@@ -16,6 +16,7 @@ consistency metric. A baseline (no-skill) run is parsed too, for contrast.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -99,6 +100,16 @@ def _relative_luminance(rgb: tuple[int, int, int]) -> float:
     return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
 
 
+def _is_zero_length(v: str) -> bool:
+    """True for a CSS-style zero length (`"0px"`, `"0"`, `"0.0em"`, ...).
+
+    Shared by `_hlines_active`/`_vlines_active`: a zero-width/zero-weight
+    border or rule renders no visible line no matter what its style/color
+    say, so it must not count as "a divider/hairline is present."
+    """
+    return re.fullmatch(r"0+(\.0+)?(px|pt|em|rem|%)?", v.strip()) is not None
+
+
 def _band_shade(hexstr: str) -> str:
     """Classify a band hex as 'light' or 'dark' by luminance."""
     rgb = _hex_to_rgb(hexstr)
@@ -124,26 +135,115 @@ def _classify_hue(hexstr: str) -> str:
     return best_family
 
 
+def _scan_balanced_paren(text: str, open_idx: int) -> int | None:
+    """Index of the `)` matching the `(` at `open_idx` in `text`.
+
+    Quote-aware: a `(`/`)` character INSIDE a string literal (e.g.
+    `title="Sales (preliminary"`) does not affect depth — a naive
+    char-by-char count would misread that unmatched `(` as opening a new
+    nesting level, throw off the whole depth count, and never find the
+    call's real closing paren (returning None / no block at all for
+    perfectly valid, statically-static source). Handles TRIPLE-quoted
+    strings (a run of three matching quote characters, Python's other
+    string-literal form) as a single delimiter too — checking only one
+    quote char at a time would treat a triple-quoted string containing a
+    comma or paren as ending at the first of the three opening quote
+    characters. Comment-aware too: a
+    `#` outside any string starts a comment that runs to end-of-line, and
+    a stray `(` inside an inline comment (`title="Sales",  # preliminary
+    (`) must not affect depth either. Returns None if the parens never
+    balance before the end of `text` (an actually-malformed/partial source
+    snippet).
+    """
+    depth = 0
+    quote: str | None = None  # the open delimiter: None, a 1-char, or 3-char string
+    in_comment = False
+    i, n = open_idx, len(text)
+    while i < n:
+        c = text[i]
+        if in_comment:
+            if c == "\n":
+                in_comment = False
+            i += 1
+            continue
+        if quote:
+            if c == "\\" and i + 1 < n:
+                i += 2
+                continue
+            if text[i : i + len(quote)] == quote:
+                i += len(quote)
+                quote = None
+                continue
+            i += 1
+            continue
+        if c in "'\"":
+            quote = c * 3 if text[i : i + 3] == c * 3 else c
+            i += len(quote)
+            continue
+        elif c == "#":
+            in_comment = True
+        elif c == "(":
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
+def _scan_balanced_bracket(text: str, open_idx: int) -> int | None:
+    """Like `_scan_balanced_paren`, for `[`/`]` instead of `(`/`)`.
+
+    Used by `_list_var_map`: a column name containing a literal `]`
+    (`hero_cols = ["Profit ] share"]`) must not be misread as closing the
+    list early. Triple-quote-aware too, for the same reason
+    `_scan_balanced_paren` is — a triple-quoted element containing a `]`
+    character must not close early either.
+    """
+    depth = 0
+    quote: str | None = None
+    i, n = open_idx, len(text)
+    while i < n:
+        c = text[i]
+        if quote:
+            if c == "\\" and i + 1 < n:
+                i += 2
+                continue
+            if text[i : i + len(quote)] == quote:
+                i += len(quote)
+                quote = None
+                continue
+            i += 1
+            continue
+        if c in "'\"":
+            quote = c * 3 if text[i : i + 3] == c * 3 else c
+            i += len(quote)
+            continue
+        elif c == "[":
+            depth += 1
+        elif c == "]":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    return None
+
+
 def _call_arg_blocks(source: str, func: str) -> list[str]:
     """Return the argument text of every `.<func>(...)` call in `source`.
 
-    A simple balanced-paren scan, so nested calls / lists inside the args
-    (e.g. `domain=[df[...].min(), ...]`) are handled. Parens inside string
-    literals are not specially handled, which is fine for these scripts.
+    A quote-aware balanced-paren scan (`_scan_balanced_paren`), so nested
+    calls / lists inside the args (e.g. `domain=[df[...].min(), ...]`) are
+    handled, AND an unmatched paren character inside a string argument
+    (`title="Sales (preliminary"`) doesn't break the whole block extraction.
     """
     blocks: list[str] = []
     for m in re.finditer(rf"\.{re.escape(func)}\s*\(", source):
         open_idx = m.end() - 1
-        depth = 0
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    blocks.append(source[open_idx + 1 : j])
-                    break
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            blocks.append(source[open_idx + 1 : close_idx])
     return blocks
 
 
@@ -157,16 +257,9 @@ def _gt_constructor_blocks(source: str) -> list[str]:
     blocks: list[str] = []
     for m in re.finditer(r"(?<![\w.])GT\s*\(", source):
         open_idx = m.end() - 1
-        depth = 0
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    blocks.append(source[open_idx + 1 : j])
-                    break
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            blocks.append(source[open_idx + 1 : close_idx])
     return blocks
 
 
@@ -182,21 +275,15 @@ def _bare_call_blocks(source: str, func: str) -> list[str]:
     are caught — matching `gt_check.py`'s leniency so the two enforcement layers
     agree. The leading `(?<![\\w.])` still means `heatmap` never matches inside
     `add_heatmap` (a longer identifier), and the qualifier is a single level so a
-    chained `df.x.stripe(` is not caught.
+    chained `df.x.stripe(` is not caught. `(?<!def )` excludes a script's own
+    `def heatmap(...):` declaration of the same name from being read as a call.
     """
     blocks: list[str] = []
-    for m in re.finditer(rf"(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
+    for m in re.finditer(rf"(?<!def )(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
         open_idx = m.end() - 1
-        depth = 0
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    blocks.append(source[open_idx + 1 : j])
-                    break
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            blocks.append(source[open_idx + 1 : close_idx])
     return blocks
 
 
@@ -214,11 +301,13 @@ def _kwarg_value(block: str, name: str) -> str | None:
     """Raw source text of the top-level `name=<value>` kwarg in a call's args.
 
     Splits on top-level commas (so `columns=['a','b']` / `domain=[x, y]` stay
-    intact) and returns the value text of the first arg that *starts* with
-    `name=`. None if the kwarg is absent. Whitespace/newlines inside the value
-    are preserved for the caller to normalize.
+    intact, AND so a quoted value containing its own comma —
+    `columns="Sales, USD"` — isn't itself mistaken for a split point) and
+    returns the value text of the first arg that *starts* with `name=`. None
+    if the kwarg is absent. Whitespace/newlines inside the value are
+    preserved for the caller to normalize.
     """
-    for part in _split_top_level(block):
+    for part in _split_top_level_quoted(block):
         m = re.match(rf"{re.escape(name)}\s*=\s*(.+)", part, re.S)
         if m:
             return m.group(1).strip()
@@ -271,15 +360,80 @@ def _extract_palettes(source: str) -> list[str]:
     return sorted(palettes)
 
 
+def _has_active_tab_style_border(source: str, side_pattern: str) -> bool:
+    """True if a `tab_style(style=style.borders(sides=...), ...)` call
+    names a side matching `side_pattern` (a regex alternation like
+    `left|right` or `top|bottom`) with a visible (non-`none`/non-zero)
+    style and weight.
+
+    Shared by `_vlines_active` (column-group dividers, `left`/`right`) and
+    `_hlines_active` (row hairlines, `top`/`bottom`) — `tab_style` +
+    `style.borders(...)` is one mechanism that can render either, keyed
+    only by which `sides` value is named.
+    """
+    for block in _call_arg_blocks(source, "tab_style"):
+        style_val = _kwarg_value(block, "style")
+        if style_val is None:
+            positionals = [
+                p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            style_val = positionals[0] if positionals else None
+        if style_val is None:
+            continue
+        # `style=` accepts a single style OR a list of them (the same
+        # `Loc | list[Loc]`-shaped API `tab_style` uses for `locations=`),
+        # e.g. `style=[style.borders(sides="top"), style.borders(sides=
+        # "left")]` — inspect EVERY `style.borders(...)` occurrence, not
+        # just the first, so a border named anywhere in the list counts.
+        for bm in re.finditer(r"style\s*\.\s*borders\s*\(", style_val):
+            open_idx = bm.end() - 1
+            close_idx = _scan_balanced_paren(style_val, open_idx)
+            if close_idx is None:
+                continue
+            borders_block = style_val[open_idx + 1 : close_idx]
+            # A `style="none"`/`"hidden"` on the border itself disables it
+            # regardless of which sides were named.
+            border_style_val = _kwarg_value(borders_block, "style")
+            if border_style_val is not None:
+                unquoted = _unquote(border_style_val)
+                if unquoted and unquoted.strip().lower() in ("none", "hidden", ""):
+                    continue
+            # A zero-weight border (`weight="0px"`) is equally invisible
+            # regardless of style/sides.
+            weight_val = _kwarg_value(borders_block, "weight")
+            if weight_val is not None:
+                unquoted_weight = _unquote(weight_val)
+                if unquoted_weight and _is_zero_length(unquoted_weight):
+                    continue
+            sides_val = _kwarg_value(borders_block, "sides")
+            if sides_val is None:
+                positionals = [
+                    p for p in _split_top_level(borders_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                sides_val = positionals[0] if positionals else None
+            if sides_val and re.search(rf"['\"](?:{side_pattern})['\"]", sides_val):
+                return True
+    return False
+
+
 def _vlines_active(source: str) -> bool:
-    """True if any column-divider (vlines) style/width/color is set to non-none."""
+    """True if a column-group divider is present, by EITHER accepted mechanism.
+
+    A table-wide `*_vlines_*` `tab_options` kwarg is one way; a per-boundary
+    `tab_style(style=style.borders(sides="left"/"right", ...), ...)` call is
+    the other (what `towny_growth_trends.py` actually uses for its spanner
+    dividers) — both are equally valid per the outcome-only scoring rule, so
+    either must count. Only an actual "left"/"right" token counts — a
+    purely horizontal `sides=["top", "bottom"]` is a row rule (see
+    `_hlines_active`), not a column divider.
+    """
     for m in re.finditer(
         r"(?:table_body|column_labels)_vlines_(?:style|width|color)\s*=\s*['\"]([^'\"]+)['\"]",
         source,
     ):
         if m.group(1).strip().lower() not in ("none", "hidden", ""):
             return True
-    return False
+    return _has_active_tab_style_border(source, "left|right")
 
 
 # --------------------------------------------------------------------------- #
@@ -337,21 +491,18 @@ _FMT_KWARGS = (
 
 
 def _fmt_calls(source: str) -> list[tuple[str, str]]:
-    """Every `.fmt_*(...)` call as (name, arg-block), via a balanced-paren scan."""
+    """Every `.fmt_*(...)` call as (name, arg-block), via `_scan_balanced_paren`
+    (quote-aware — an unmatched paren character inside a formatted column's
+    string argument, e.g. `.fmt_number(columns="Sales (USD")`, must not
+    break extraction, same as every other call-block scan in this module).
+    """
     out: list[tuple[str, str]] = []
     for m in re.finditer(r"\.(fmt_[a-z_]+)\s*\(", source):
         name = m.group(1)
         open_idx = m.end() - 1
-        depth = 0
-        for j in range(open_idx, len(source)):
-            c = source[j]
-            if c == "(":
-                depth += 1
-            elif c == ")":
-                depth -= 1
-                if depth == 0:
-                    out.append((name, source[open_idx + 1 : j]))
-                    break
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            out.append((name, source[open_idx + 1 : close_idx]))
     return out
 
 
@@ -503,19 +654,29 @@ def _columns_token(value_text: str | None) -> str:
     return stripped or "(cols?)"
 
 
-def _heatmap_columns(block: str) -> str:
-    """Colored-column token for a `heatmap(gt, columns, ...)` call.
-
-    `columns` may be the 2nd positional arg or a `columns=` kwarg.
+def _heatmap_columns_raw(block: str) -> str | None:
+    """Raw (untokenized) `columns` value text for a `heatmap(gt, columns, ...)`
+    call — the 2nd positional arg or a `columns=` kwarg. Shared by
+    `_heatmap_columns` (tokenized, for `_color_signature`) and
+    `_color_mechanics` (var-map-resolved, so `heatmap(gt, change_cols, ...)`
+    resolves to real column names instead of the literal identifier).
     """
     val = _kwarg_value(block, "columns")
     if val is None:
+        # Quote-aware: a column name can itself contain a comma (e.g.
+        # "Sales, USD"), which the plain bracket-depth-only splitter would
+        # misread as an argument separator.
         positionals = [
-            p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
         ]
         if len(positionals) >= 2:  # positionals[0] is the gt object
             val = positionals[1]
-    return _columns_token(val)
+    return val
+
+
+def _heatmap_columns(block: str) -> str:
+    """Colored-column token for a `heatmap(gt, columns, ...)` call."""
+    return _columns_token(_heatmap_columns_raw(block))
 
 
 def _color_signature(source: str) -> str:
@@ -737,6 +898,885 @@ def _compute_data_hash(
     return None
 
 
+# --------------------------------------------------------------------------- #
+# Comparator Tier-1 additions (09-ground-truth-comparator.md §6) — new
+# source-parsed fields the convergence report never needed but the ground-
+# truth comparator's check functions do: spanner presence, data_color
+# mechanics beyond the palette name, render params, the actual text of
+# title/subtitle/caption/source (not just presence booleans), bold/hero
+# detection, summary-row presence, body hairlines, and a per-column fmt map.
+# --------------------------------------------------------------------------- #
+_DQ_STRING = re.compile(r'"((?:[^"\\]|\\.)*)"', re.S)
+_SQ_STRING = re.compile(r"'((?:[^'\\]|\\.)*)'", re.S)
+# Triple-quoted literals, checked BEFORE the single-quote patterns above so
+# a triple-double-quoted string containing an ordinary embedded double
+# quote (`"""The "Best" Sales"""`) isn't misread as three single strings
+# ending at the first embedded `"`. Non-greedy so it stops at the first
+# genuine `"""`/`'''`, not the last one in the source.
+_TQ_DQ_STRING = re.compile(r'"""((?:\\.|(?!""").)*?)"""', re.S)
+_TQ_SQ_STRING = re.compile(r"'''((?:\\.|(?!''').)*?)'''", re.S)
+
+
+def _find_quoted_strings(text: str) -> list[str]:
+    """Every quoted string literal's content in `text`, matched by ITS OWN
+    quote character — NOT `['"]` interchangeably. A quote-agnostic
+    `re.findall(r"['\"]([^'\"]+)['\"]", ...)` misreads an apostrophe inside
+    a double-quoted string (`columns="Owner's share"`) as the string's
+    closing quote and returns the truncated `"Owner"`; matching each
+    literal by its own opening delimiter (like `_extract_text_literal`
+    already does for header/caption text) reads the whole `"Owner's
+    share"` correctly.
+
+    Each match is decoded via `ast.literal_eval` (real Python string-
+    literal semantics — `\\'`/`\\u0020`/etc. resolve to the actual
+    characters, not the literal escape sequence), falling back to the raw
+    matched text only if `literal_eval` itself fails.
+
+    An f-string with an unresolved `{...}` interpolation
+    (`f"{metric}_rate"`) contributes NOTHING for that match — the runtime
+    column name is whatever `metric` evaluates to, not the literal
+    template text — matching `_extract_text_literal`'s identical guard for
+    header/caption text.
+    """
+    out: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in "'\"":
+            # Try the TRIPLE-quote pattern first (see
+            # _extract_text_literal's identical ordering rationale): the
+            # single-quote pattern would otherwise match just the opening
+            # `"` of `"""..."""` and misread an embedded ordinary quote as
+            # the string's end.
+            triple = c * 3
+            pat = (_TQ_DQ_STRING if c == '"' else _TQ_SQ_STRING) if text[i : i + 3] == triple else (
+                _DQ_STRING if c == '"' else _SQ_STRING
+            )
+            m = pat.match(text, i)
+            if m:
+                j = i - 1
+                while j >= 0 and text[j].isalpha():
+                    j -= 1
+                prefix = text[j + 1 : i].lower()
+                if "f" in prefix and "{" in m.group(1):
+                    i = m.end()
+                    continue
+                try:
+                    out.append(ast.literal_eval(text[j + 1 : m.end()]))
+                except Exception:
+                    out.append(m.group(1))
+                i = m.end()
+                continue
+        i += 1
+    return out
+
+
+def _extract_text_literal(value_text: str) -> str | None:
+    """Best-effort literal text of a kwarg value: unwrap one `html(...)`/`md(...)`
+    call, then concatenate every quoted string segment found inside (Python's
+    implicit adjacent-string-literal concatenation, e.g. a subtitle split
+    across two lines). None when no quoted string is present (e.g. a bare
+    variable reference) — text is never fabricated from something that isn't
+    a string literal in the source.
+
+    Each segment is matched by ITS OWN quote character (`"..."` or `'...'`),
+    not `['"]` interchangeably — free-text titles routinely contain an
+    apostrophe (`"Ontario's Fastest-Growing Towns"`), and a quote-agnostic
+    match would misread that apostrophe as the string's closing quote.
+
+    An f-string segment with an unresolved `{...}` interpolation (e.g.
+    `f"Sales for {year}"`) makes the WHOLE value return None rather than the
+    literal template text — `{year}` is never what actually renders, and
+    fabricating "Sales for {year}" as though it were the real title would be
+    worse than admitting the text isn't known statically.
+
+    Likewise, anything OTHER than plain adjacent-literal concatenation
+    (Python only allows whitespace/comments between two adjacent string
+    literals) also returns None — a `+ str(year)` operator, a method chain,
+    an f-string prefix, etc. left over once every matched literal span is
+    removed means the value is a dynamic expression, not static text.
+
+    Each segment is decoded via `ast.literal_eval` (real Python string-
+    literal semantics: `\\n`/`\\t`/`\\uXXXX`/etc. all resolve to the actual
+    characters that render, not the literal two-character escape sequence)
+    rather than hand-rolled unescaping, falling back to the raw matched text
+    only if `literal_eval` itself fails for some unforeseen reason.
+    """
+    v = value_text.strip()
+    m = re.match(r"^(?:html|md)\s*\(\s*(.*)\)\s*$", v, re.S)
+    if m:
+        v = m.group(1).strip()
+    # Peel a balanced OUTER `(...)` grouping -- e.g. `title=("Sales " "FY
+    # 2025")`, a common style for wrapping a long adjacent-literal
+    # concatenation across lines. Meaningless to Python (pure grouping, not
+    # a tuple -- no top-level comma), so it must not count as "leftover"
+    # dynamic content. Only strips a pair that spans the ENTIRE remaining
+    # text and is genuinely balanced (its own depth never returns to 0
+    # before the final char), so `("a") + ("b")` is correctly left alone.
+    while v.startswith("(") and v.endswith(")") and len(v) >= 2:
+        # Quote-aware (_scan_balanced_paren): a '(' inside a string literal
+        # (`title=("Sales (preliminary")`) must not affect depth, or a
+        # perfectly valid grouped literal gets misread as unbalanced.
+        close_idx = _scan_balanced_paren(v, 0)
+        if close_idx != len(v) - 1:
+            break
+        v = v[1:-1].strip()
+    parts: list[str] = []
+    spans: list[tuple[int, int]] = []
+    i, n = 0, len(v)
+    while i < n:
+        c = v[i]
+        if c in "'\"":
+            # Try the TRIPLE-quote pattern first — checking the single-quote
+            # one first would match just the opening `"` of `"""..."""` as
+            # an empty string and misread an embedded ordinary quote
+            # (`"""The "Best" Sales"""`) as the literal's end.
+            triple = c * 3
+            if v[i : i + 3] == triple:
+                tpat = _TQ_DQ_STRING if c == '"' else _TQ_SQ_STRING
+                tm = tpat.match(v, i)
+                if tm:
+                    j = i - 1
+                    while j >= 0 and v[j].isalpha():
+                        j -= 1
+                    prefix = v[j + 1 : i].lower()
+                    if "f" in prefix and "{" in tm.group(1):
+                        return None
+                    try:
+                        decoded = ast.literal_eval(v[j + 1 : tm.end()])
+                    except Exception:
+                        decoded = tm.group(1)
+                    parts.append(decoded)
+                    spans.append((j + 1, tm.end()))
+                    i = tm.end()
+                    continue
+            pat = _DQ_STRING if c == '"' else _SQ_STRING
+            mm = pat.match(v, i)
+            if mm:
+                j = i - 1
+                while j >= 0 and v[j].isalpha():
+                    j -= 1
+                prefix = v[j + 1 : i].lower()
+                if "f" in prefix and "{" in mm.group(1):
+                    return None
+                try:
+                    decoded = ast.literal_eval(v[j + 1 : mm.end()])
+                except Exception:
+                    decoded = mm.group(1)
+                parts.append(decoded)
+                spans.append((j + 1, mm.end()))
+                i = mm.end()
+                continue
+        i += 1
+    if not parts:
+        return None
+    covered = bytearray(n)
+    for s, e in spans:
+        for k in range(s, e):
+            covered[k] = 1
+    leftover = "".join(ch for idx, ch in enumerate(v) if not covered[idx])
+    # A `#` in `leftover` is never inside a matched string (those spans are
+    # already excluded above), so it's always the start of a genuine Python
+    # comment — strip `#`-to-end-of-line before deciding whether anything
+    # dynamic is left. A comment alongside otherwise-static text
+    # (`("Sales FY 2025"  # concise heading\n)`) must not make static text
+    # look unresolvable.
+    leftover = re.sub(r"#[^\n]*", "", leftover)
+    if leftover.strip():
+        return None
+    return "".join(parts)
+
+
+def _split_top_level_quoted(text: str) -> list[str]:
+    """Like `_split_top_level`, but a comma inside a string literal is NOT a
+    split point. Free-text call args (title/subtitle/source_note) routinely
+    contain commas in prose; the plain bracket-depth-only splitter would
+    truncate the value at the first in-string comma. Triple-quoted
+    delimiters (three matching quote characters) are tracked as a single
+    unit too, the same as `_scan_balanced_paren` — otherwise a
+    triple-quoted string containing an embedded ordinary quote followed by
+    a comma would close early and treat the comma as a real split point.
+    """
+    parts: list[str] = []
+    depth = 0
+    quote: str | None = None
+    cur: list[str] = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if quote:
+            if c == "\\" and i + 1 < n:
+                cur.append(text[i : i + 2])
+                i += 2
+                continue
+            if text[i : i + len(quote)] == quote:
+                cur.append(quote)
+                i += len(quote)
+                quote = None
+                continue
+            cur.append(c)
+            i += 1
+            continue
+        if c in "'\"":
+            quote = c * 3 if text[i : i + 3] == c * 3 else c
+            cur.append(quote)
+            i += len(quote)
+            continue
+        elif c in "([{":
+            depth += 1
+            cur.append(c)
+        elif c in ")]}":
+            depth -= 1
+            cur.append(c)
+        elif c == "," and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(c)
+        i += 1
+    parts.append("".join(cur))
+    return [p for p in (p.strip() for p in parts) if p != ""]
+
+
+# `_kwarg_value` is now quote-aware itself (it used to differ from this
+# alias); kept as a name so existing call sites don't need to change.
+_kwarg_value_quoted_aware = _kwarg_value
+
+
+_TAB_HEADER_POSITIONAL_INDEX = {"title": 0, "subtitle": 1}
+
+
+def _tab_header_text(source: str, kwarg: str) -> str | None:
+    """Literal text of `tab_header(<kwarg>=...)` (title/subtitle), if set.
+
+    Falls back to the positional form (`tab_header("Sales", "FY 2025")` —
+    `title` is positional arg 0, `subtitle` is arg 1) when the keyword isn't
+    present, so a validly-documented positional call isn't read as absent.
+
+    Uses ONLY the LAST `tab_header(...)` call in the source — a script that
+    calls it more than once (`.tab_header("Old").tab_header("New")`)
+    renders the LATER one, in full: if that later call omits a field
+    (`.tab_header(title="Old", subtitle="Stale").tab_header(title="New")`),
+    the rendered header has NO subtitle at all, not the earlier call's
+    stale one — great_tables replaces the whole header per call, it
+    doesn't merge fields across calls. So only the last call's block is
+    ever consulted; an earlier call's value never leaks through.
+    """
+    blocks = _call_arg_blocks(source, "tab_header")
+    if not blocks:
+        return None
+    block = blocks[-1]
+    val = _kwarg_value_quoted_aware(block, kwarg)
+    if val is None:
+        idx = _TAB_HEADER_POSITIONAL_INDEX.get(kwarg)
+        if idx is not None:
+            positionals = [
+                p for p in _split_top_level_quoted(block)
+                if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            if idx < len(positionals):
+                val = positionals[idx]
+    return _extract_text_literal(val) if val is not None else None
+
+
+def _source_note_texts(source: str) -> list[str | None]:
+    """Literal text of every `.tab_source_note(...)` call, in source order.
+
+    Step 6's convention (CONSISTENCY_DEV.md) is caption first, source second —
+    each `tab_source_note` renders on its own stacked footer line in call
+    order — so index 0 is the caption candidate and index 1 the source
+    candidate when both are present. This function only extracts the raw
+    ordered text; interpreting which slot is which is the comparator's job,
+    not the parser's.
+
+    ONE entry per call, always — a call whose text can't be resolved
+    statically (a dynamic expression, an f-string with an interpolation)
+    contributes `None` rather than being dropped. Dropping it would shift
+    every later call's text one slot earlier, so a table with an unresolved
+    caption followed by a resolvable source note would misreport the source
+    text as though it were the caption.
+    """
+    texts: list[str | None] = []
+    for block in _call_arg_blocks(source, "tab_source_note"):
+        val = _kwarg_value_quoted_aware(block, "source_note")
+        if val is None:
+            positionals = [
+                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            val = positionals[0] if positionals else None
+        texts.append(_extract_text_literal(val) if val is not None else None)
+    return texts
+
+
+def _strip_line_comments(text: str) -> str:
+    """Remove `#`-to-end-of-line comments from `text`, quote-aware (a
+    literal `#` inside a string, e.g. a column named "Item #1", is not a
+    comment and is left alone).
+    """
+    out: list[str] = []
+    quote: str | None = None
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if quote:
+            if c == "\\" and i + 1 < n:
+                out.append(text[i : i + 2])
+                i += 2
+                continue
+            if text[i : i + len(quote)] == quote:
+                out.append(quote)
+                i += len(quote)
+                quote = None
+                continue
+            out.append(c)
+            i += 1
+            continue
+        if c in "'\"":
+            quote = c * 3 if text[i : i + 3] == c * 3 else c
+            out.append(quote)
+            i += len(quote)
+            continue
+        if c == "#":
+            j = text.find("\n", i)
+            i = j if j != -1 else n
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def _list_var_map(source: str) -> dict[str, list[str]]:
+    """Best-effort ``{variable name -> [quoted strings]}`` for simple
+    list-literal assignments (e.g. ``density_cols = ["density_1996", ...]``).
+
+    Lets the per-column Tier-1 fields below (``fmt_column_map``,
+    ``color_mechanics``) resolve a ``columns=density_cols``-style reference
+    back to real column names — the idiomatic style this repo's own
+    ground-truth scripts use for facet columns — without touching
+    `_columns_token`/`_color_signature` (the convergence report's existing,
+    unrelated repeat-vs-repeat contract, left unchanged on purpose).
+
+    Matches the assignment regardless of leading indentation (a script
+    that wraps its table-building code in a function, e.g.
+    ``def build():\n    hero_cols = [...]``) and an optional type
+    annotation (``hero_cols: list[str] = [...]``) — both are just as valid
+    a column-list assignment as an unindented, unannotated one.
+    """
+    out: dict[str, list[str]] = {}
+    for m in re.finditer(r"^[ \t]*([A-Za-z_]\w*)\s*(?::[^=\n]+)?=\s*\[", source, re.M):
+        name = m.group(1)
+        open_idx = m.end() - 1
+        close_idx = _scan_balanced_bracket(source, open_idx)
+        body = source[open_idx + 1 : close_idx] if close_idx is not None else None
+        if body is None:
+            continue
+        # The bracketed literal must be the COMPLETE assignment value — a
+        # compound expression (`hero_cols = ["sales"] + ["profit"]`) means
+        # the real runtime value has more columns than just this one
+        # literal, so treating it as the whole answer would silently drop
+        # the rest. Only whitespace/a comment/end-of-statement may follow
+        # the closing bracket.
+        after = source[close_idx + 1 :]
+        after_line = after.split("\n", 1)[0]
+        if after_line.strip() and not after_line.strip().startswith("#"):
+            continue
+        # Every top-level element must be a bare quoted string literal — a
+        # comprehension (`[c for c in df.columns if c.startswith("pct_")]`)
+        # or any other non-literal expression must NOT resolve, or a single
+        # quoted substring inside it (e.g. "pct_") would be misread as the
+        # variable's one-and-only column name. Validated by ITS OWN quote
+        # character (single- or triple- quote fullmatch), not a "no quotes
+        # at all inside" check — the latter would reject (and so silently
+        # drop the whole assignment for) a perfectly valid element
+        # containing an apostrophe, e.g. `hero_cols = ["Owner's share"]`,
+        # or a valid triple-quoted element like
+        # `hero_cols = ["""The "Best" Sales"""]`. An explanatory comment
+        # between elements (`["sales", # primary\n "profit"]`) is stripped
+        # first — `_split_top_level_quoted` isn't comment-aware, so it
+        # would otherwise glue the comment onto the following element's
+        # text and fail the fullmatch, discarding the whole (fully static)
+        # binding over what's really just a comment.
+        elems = [
+            e for e in (_strip_line_comments(p).strip() for p in _split_top_level_quoted(body))
+            if e
+        ]
+        if elems and all(
+            _DQ_STRING.fullmatch(e) or _SQ_STRING.fullmatch(e)
+            or _TQ_DQ_STRING.fullmatch(e) or _TQ_SQ_STRING.fullmatch(e)
+            for e in elems
+        ):
+            out[name] = [_find_quoted_strings(e)[0] for e in elems]
+    return out
+
+
+# Sentinel `_resolve_columns_token`/`_fmt_column_map` use for an explicit
+# `columns=None` — the documented great_tables meaning is "every column",
+# not a column literally named "None"; callers that attribute per-column
+# data (e.g. `_fmt_column_map`) must treat this as unresolvable-per-column
+# rather than fabricating a fake `"None"` column entry.
+_ALL_COLUMNS = "(all)"
+
+
+def _resolve_columns_token(value_text: str | None, var_map: dict[str, list[str]]) -> str:
+    """Like `_columns_token`, but a bare identifier resolves through
+    `var_map` first (e.g. `density_cols` -> its list's real column names)
+    before falling back to the identifier text itself. A literal `None`
+    (great_tables' "apply to every column" default) resolves to the
+    `_ALL_COLUMNS` sentinel rather than the fake column name `"None"`.
+    """
+    if value_text is not None:
+        ident = value_text.strip()
+        if ident == "None":
+            return _ALL_COLUMNS
+        if ident in var_map and re.fullmatch(r"[A-Za-z_]\w*", ident):
+            return ",".join(sorted(var_map[ident]))
+    return _columns_token(value_text)
+
+
+def _resolve_columns_list(value_text: str | None, var_map: dict[str, list[str]]) -> list[str]:
+    """Like `_resolve_columns_token`, but returns the actual list of column
+    names instead of a comma-joined string.
+
+    Exists because `token.split(",")` on `_resolve_columns_token`'s joined
+    string is ambiguous when a column name itself contains a comma
+    (`"Sales, USD"` joined with a second column becomes indistinguishable
+    from two columns "Sales" and "USD"). Callers that need to iterate
+    individual column names (`_fmt_column_map`, `_color_mechanics`,
+    `_bold_columns`) use this instead; callers that only ever treat the
+    result as an opaque signature string (`_color_signature`,
+    `_columns_signature`) keep using `_resolve_columns_token`/
+    `_columns_token`, where the ambiguity doesn't matter (the string is
+    never re-split, only compared for equality across runs).
+    """
+    if value_text is None:
+        return []
+    ident = value_text.strip()
+    if ident == "None":
+        return []
+    if ident in var_map and re.fullmatch(r"[A-Za-z_]\w*", ident):
+        return sorted(var_map[ident])
+    # A column-selector expression (great_tables/polars `cs.starts_with(...)`
+    # and friends) is not a literal column reference — its quoted operand
+    # ("rate_") is a PATTERN, not itself a column name, and the columns it
+    # actually selects (rate_q1, rate_q2, ...) can't be known without the
+    # real schema. Extracting that operand as though it were one concrete
+    # column is worse than admitting it's unresolvable.
+    if re.match(r"^cs\s*\.\s*\w+\s*\(", ident):
+        return []
+    return _find_quoted_strings(value_text)
+
+
+def _call_arg_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
+    """Like `_call_arg_blocks`, paired with each match's source offset.
+
+    Needed to interleave-sort calls of two different function names
+    (`data_color` / `heatmap`) by true source order — see `_color_mechanics`.
+    """
+    out: list[tuple[int, str]] = []
+    for m in re.finditer(rf"\.{re.escape(func)}\s*\(", source):
+        open_idx = m.end() - 1
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            out.append((m.start(), source[open_idx + 1 : close_idx]))
+    return out
+
+
+def _bare_call_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
+    """Position-paired variant of `_bare_call_blocks` (see `_call_arg_blocks_pos`)."""
+    out: list[tuple[int, str]] = []
+    for m in re.finditer(rf"(?<!def )(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
+        open_idx = m.end() - 1
+        close_idx = _scan_balanced_paren(source, open_idx)
+        if close_idx is not None:
+            out.append((m.start(), source[open_idx + 1 : close_idx]))
+    return out
+
+
+# `great_tables.GT.data_color`'s OWN defaults when a kwarg is omitted
+# (verified against the installed `great_tables==0.22.0`: the constructor
+# kwarg defaults to `None`, but `_data_color/base.py` substitutes this
+# literal hex whenever `na_color is None`) — a LITERAL `.data_color(...)`
+# call that omits these renders IDENTICALLY to one that states them, and to
+# an equivalent `heatmap(...)` helper call, so all three must report the
+# same mechanics rather than two `None`s and one explicit value.
+_DATA_COLOR_DEFAULTS = {"na_color": "#808080", "truncate": "False", "autocolor_text": "True"}
+
+
+def _kwarg_or_default(block: str, name: str) -> str | None:
+    """`_unquote(_kwarg_value(block, name))`, defaulting when omitted OR
+    explicitly `None` (`na_color=None` is documented as "use the default,"
+    identical to not passing it at all — a bare unquoted `"None"` must not
+    be treated as a real, different value from the default it explicitly
+    requests).
+
+    Returns `None` (unresolved, NOT the default) when `block` contains a
+    `**overrides`/`**{...}` expansion — it could set this exact kwarg to
+    something this parser can't see, so asserting the safe default could
+    mask a genuinely different rendered value (same reasoning as
+    `_render_params`'s `**`-expansion guard).
+    """
+    if any(p.strip().startswith("**") for p in _split_top_level_quoted(block)):
+        return None
+    v = _unquote(_kwarg_value(block, name))
+    if v is None or v == "None":
+        return _DATA_COLOR_DEFAULTS[name]
+    return v
+
+
+def _color_mechanics(source: str) -> list[dict]:
+    """One dict per colored-measure call (`data_color`/`heatmap`), in TRUE
+    source order (both call kinds interleave-sorted by match offset, so a
+    script mixing `heatmap(...)` and `.data_color(...)` calls doesn't get
+    all of one kind before the other): `columns`, `na_color`, `truncate`,
+    `autocolor_text` — the Big-Color mechanics beyond the palette name
+    already covered by `_extract_palettes`/`_color_signature`.
+
+    `heatmap(gt, columns, *, kind, hue, domain=None)` (the scripted skill's
+    helper, `gt_consistency.py`) does not accept `na_color`/`truncate`/
+    `autocolor_text` as call-site kwargs at all — it always applies its own
+    pinned values (`PALETTE["neutral"]["na_cell"]` = `#808080`,
+    `truncate=False`, `autocolor_text=True`) internally, so a `heatmap(...)`
+    call reports those FIXED values rather than looking for (and never
+    finding) kwargs that can't be there. A literal `.data_color(...)` call
+    that omits any of the three gets the SAME materialized defaults
+    (`_DATA_COLOR_DEFAULTS`), since that's what actually renders.
+
+    A `.data_color(..., rows=[...])` call restricted to a subset of rows is
+    EXCLUDED entirely (like the analogous `_fmt_column_map` row-scope
+    exclusion) — it colors only part of the column, so it must not be
+    reported identically to a call that colors the whole measure.
+    `heatmap(...)` has no `rows=` parameter at all, so this only applies to
+    the literal branch.
+
+    `columns` is an actual `list[str]` (via `_resolve_columns_list`), not a
+    comma-joined string — a column name can itself contain a comma, which a
+    joined-then-split representation can't distinguish from two columns.
+    """
+    var_map = _list_var_map(source)
+    entries: list[tuple[int, dict]] = []
+    for pos, block in _call_arg_blocks_pos(source, "data_color"):
+        rows_val = _kwarg_value(block, "rows")
+        if rows_val is not None and rows_val.strip() != "None":
+            continue
+        cols_val = _kwarg_value(block, "columns")
+        if cols_val is None:
+            # Quote-aware (see _heatmap_columns_raw): a column name can
+            # itself contain a comma.
+            positionals = [
+                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            cols_val = positionals[0] if positionals else None
+        entries.append((pos, {
+            "columns": _resolve_columns_list(cols_val, var_map),
+            "na_color": _kwarg_or_default(block, "na_color"),
+            "truncate": _kwarg_or_default(block, "truncate"),
+            "autocolor_text": _kwarg_or_default(block, "autocolor_text"),
+        }))
+    for pos, block in _bare_call_blocks_pos(source, "heatmap"):
+        entries.append((pos, {
+            "columns": _resolve_columns_list(_heatmap_columns_raw(block), var_map),
+            "na_color": "#808080",
+            "truncate": "False",
+            "autocolor_text": "True",
+        }))
+    entries.sort(key=lambda e: e[0])
+    return [d for _, d in entries]
+
+
+def _targets_table_png(value_text: str) -> bool:
+    """True if a `gtsave`/`finalize` path argument's value is EXACTLY
+    `table.png` (optionally `./table.png`) — the harness's mandated output
+    location, not merely a path whose BASENAME happens to be `table.png`.
+    A plain `"table.png" in value_text` substring check would also match
+    `"backup/table.png"`, a genuinely different file in a subdirectory
+    that the harness never reads — matching by basename alone would make
+    the exact same mistake (its basename is ALSO `table.png`).
+    """
+    unquoted = (_unquote(value_text) or value_text).strip()
+    if unquoted.startswith("./"):
+        unquoted = unquoted[2:]
+    return unquoted == "table.png"
+
+
+def _render_params(source: str) -> dict:
+    """`zoom`/`expand`/`vwidth`/`vheight` off the render call.
+
+    Prefers a literal `.gtsave(...)` call. Falls back to a bare
+    `finalize(gt, path=..., **overrides)` call (the scripted skill's
+    helper, `gt_consistency.py`) when no literal `gtsave` is present:
+    `finalize` always calls `gtsave` with `{"expand": 15, "zoom": 2.0}` as
+    defaults, letting any of its own kwargs override them — so those two
+    defaults are reported unless an explicit override is parseable in the
+    `finalize(...)` call, mirroring what actually renders.
+
+    Raw source text per kwarg (not coerced to float) — the comparator's fit-
+    order check compares against the documented default and can parse these
+    itself; keeping them as text avoids silently swallowing a non-literal
+    value (e.g. `zoom=ZOOM_DEFAULT`). A literal `.gtsave(...)` call that
+    omits `zoom`/`expand` renders with `great_tables.GT.gtsave`'s own
+    defaults (`zoom=2.0`, `expand=5` — verified against the installed
+    `great_tables==0.22.0` signature), so those are materialized too, the
+    same way the `finalize(...)` branch already materializes its defaults.
+
+    When there are MULTIPLE `.gtsave(...)` calls (e.g. an earlier debug/
+    preview render before the final one), prefers whichever call's target
+    path contains `table.png` — the harness's mandated output filename —
+    over just taking the first. When SEVERAL calls target `table.png`
+    (writing it more than once), the LAST one is the one whose parameters
+    actually produced the final artifact (it overwrote every earlier
+    write), so the loop keeps scanning rather than stopping at the first
+    match. Falls back to the LAST call overall (last-wins, consistent with
+    the other multi-call fields above) when none of them mentions
+    `table.png` explicitly (e.g. a variable path).
+    """
+    blocks = _call_arg_blocks(source, "gtsave")
+    if blocks:
+        block = blocks[-1]  # last-wins default when no call targets table.png
+        for b in blocks:
+            file_val = _kwarg_value(b, "file")
+            if file_val is None:
+                positionals = [
+                    p for p in _split_top_level_quoted(b) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                file_val = positionals[0] if positionals else None
+            if file_val and _targets_table_png(file_val):
+                block = b  # keep scanning -- a LATER table.png write wins
+        # Same **overrides/**{...} guard as the finalize(...) branch below:
+        # an expansion can override the materialized defaults with values
+        # this parser can't see.
+        if any(p.strip().startswith("**") for p in _split_top_level(block)):
+            return {}
+        out: dict[str, str] = {"zoom": "2.0", "expand": "5"}
+        for kw in ("zoom", "expand", "vwidth", "vheight"):
+            v = _kwarg_value(block, kw)
+            if v is not None:
+                out[kw] = v.strip()
+        return out
+
+    finalize_blocks = _bare_call_blocks(source, "finalize")
+    if finalize_blocks:
+        # Same target-aware, last-write-wins selection as the .gtsave(...)
+        # branch above: finalize(gt, path=..., **overrides)'s `path` is the
+        # 2nd positional/kwarg.
+        block = finalize_blocks[-1]
+        for b in finalize_blocks:
+            path_val = _kwarg_value(b, "path")
+            if path_val is None:
+                positionals = [
+                    p for p in _split_top_level_quoted(b) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                path_val = positionals[1] if len(positionals) >= 2 else None  # positionals[0] is `gt`
+            if path_val and _targets_table_png(path_val):
+                block = b
+        # A `**overrides`/`**{...}` expansion can override the defaults with
+        # values this parser can't see (it isn't a literal `kwarg=value`) --
+        # reporting the defaults anyway could mask a below-minimum override
+        # (e.g. `finalize(gt, **{"zoom": 1.0})`), so leave this unresolved
+        # rather than assert a default that might not be what actually
+        # rendered.
+        if any(p.strip().startswith("**") for p in _split_top_level(block)):
+            return {}
+        out = {"expand": "15", "zoom": "2.0"}
+        for kw in ("zoom", "expand", "vwidth", "vheight"):
+            v = _kwarg_value(block, kw)
+            if v is not None:
+                out[kw] = v.strip()
+        return out
+
+    return {}
+
+
+def _bold_columns(source: str) -> list[str]:
+    """Columns targeted by a bold `tab_style(style=style.text(weight="bold"),
+    locations=loc.body(columns=...))` call — the hero-emphasis mechanism used
+    when the hero column isn't a colored measure. Best-effort: only counts
+    `tab_style` blocks whose `style=` value literally sets a bold weight AND
+    whose `locations=` is a `loc.body(...)` call — a bold COLUMN LABEL
+    (`loc.column_labels(...)`) is a different thing (header emphasis, not a
+    hero-value emphasis) and must not be counted here. Both `style=`/
+    `locations=` keywords and the equivalent positional form
+    (`tab_style(style.text(...), loc.body(...))`) are recognized.
+    """
+    var_map = _list_var_map(source)
+    out: list[str] = []
+    for block in _call_arg_blocks(source, "tab_style"):
+        style_val = _kwarg_value(block, "style")
+        loc_val = _kwarg_value(block, "locations")
+        if style_val is None or loc_val is None:
+            positionals = [
+                p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            if style_val is None and len(positionals) >= 1:
+                style_val = positionals[0]
+            if loc_val is None and len(positionals) >= 2:
+                loc_val = positionals[1]
+        style_val = style_val or ""
+        loc_val = loc_val or ""
+        if not re.search(r"weight\s*=\s*['\"]bold['\"]", style_val):
+            continue
+        # `locations=` accepts a single Loc OR a list of them
+        # (`[loc.body(columns="sales"), loc.body(columns="profit")]` —
+        # `tab_style`'s documented `Loc | list[Loc]` signature) — iterate
+        # every `loc.body(...)` occurrence, not just the first.
+        for body_m in re.finditer(r"loc\s*\.\s*body\s*\(", loc_val):
+            open_idx = body_m.end() - 1
+            close_idx = _scan_balanced_paren(loc_val, open_idx)
+            if close_idx is None:
+                continue
+            body_args = loc_val[open_idx + 1 : close_idx]
+            # A `rows=[...]`-restricted location bolds only a subset of
+            # cells, not the whole column — must not count as the required
+            # whole-column hero emphasis (same row-scope exclusion already
+            # applied to fmt_column_map/color_mechanics). A `**{...}`
+            # expansion could supply `rows=` invisibly to the keyword
+            # lookup, so it's treated the same as an explicit row
+            # restriction — it MIGHT be row-scoped and this parser can't
+            # tell, so it's not credited as whole-column emphasis either.
+            rows_val = _kwarg_value(body_args, "rows")
+            has_expansion = any(
+                p.strip().startswith("**") for p in _split_top_level_quoted(body_args)
+            )
+            if has_expansion or (rows_val is not None and rows_val.strip() != "None"):
+                continue
+            cols_val = _kwarg_value(body_args, "columns")
+            if cols_val is None:
+                # Quote-aware (see _heatmap_columns_raw): a column name can
+                # itself contain a comma.
+                positionals = [
+                    p for p in _split_top_level_quoted(body_args)
+                    if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                cols_val = positionals[0] if positionals else None
+            if cols_val:
+                # Resolve a list-variable reference (e.g. `loc.body(columns=
+                # hero_cols)`) through var_map, the same as the other
+                # per-column fields, before falling back to plain quoted
+                # names. _resolve_columns_list (not _resolve_columns_token)
+                # avoids the join-then-split ambiguity for a column name
+                # containing a comma.
+                out.extend(_resolve_columns_list(cols_val, var_map))
+    return out
+
+
+def _hlines_active(source: str) -> bool:
+    """True if body-row hairlines (`table_body_hlines_*`) are set to non-none.
+
+    Uses the LAST occurrence of each of `style`/`width`/`color` independently
+    — a script commonly chains multiple `.tab_options(...)` calls, and a
+    later call's kwarg overrides an earlier one for that same attribute
+    (`.tab_options(table_body_hlines_style="none").tab_options(
+    table_body_hlines_style="solid")` renders WITH hairlines; reading only
+    the first match would get this backwards). An explicit LAST
+    `table_body_hlines_style="none"` is authoritative and disables the line
+    regardless of any `_width`/`_color` also being set (those are
+    meaningless once style disables rendering). Likewise a zero-length
+    `_width` (`"0px"`, `"0"`, ...) renders no visible line no matter what
+    `style`/`color` say, so it is equally authoritative.
+
+    A per-boundary `tab_style(style=style.borders(sides="top"/"bottom",
+    ...), locations=loc.body())` call is an EQUALLY valid alternate
+    mechanism for rendering row hairlines (the outcome-only scoring rule
+    applies here the same way it does for `_vlines_active`'s
+    `left`/`right` equivalent) — checked whenever the table-wide
+    `table_body_hlines_*` options don't themselves establish an active
+    line, INCLUDING when they explicitly disable it
+    (`.tab_options(table_body_hlines_style="none")` followed by a
+    separate `tab_style(...)` border is a real, if unusual, way to turn
+    off the default line and draw a custom one instead — the disabled
+    table-wide option must not short-circuit past checking for that).
+    """
+    def _last(attr: str) -> str | None:
+        matches = re.findall(rf"table_body_hlines_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
+        return matches[-1] if matches else None
+
+    style = _last("style")
+    width = _last("width")
+    disabled = (style is not None and style.strip().lower() in ("none", "hidden", "")) or (
+        width is not None and _is_zero_length(width)
+    )
+    if not disabled:
+        for v in (style, width, _last("color")):
+            if v is not None and v.strip().lower() not in ("none", "hidden", ""):
+                return True
+    return _has_active_tab_style_border(source, "top|bottom")
+
+
+def _fmt_column_map(source: str) -> dict[str, str]:
+    """Best-effort `{source column -> the EFFECTIVE fmt_* name}`.
+
+    Feeds the per-column semantic `fmt_*` check (against `SEMANTIC_TYPES`).
+    Reads the `columns=` kwarg (or first positional) of each `.fmt_*(...)`
+    call via the same `_columns_token` used by the color-signature helpers;
+    a call with no parseable column target, or an explicit `columns=None`
+    (`_ALL_COLUMNS` — "every column", not a column literally named "None"),
+    contributes nothing rather than being guessed or fabricated. A call
+    restricted to a subset of rows (`rows=...`, and not the literal `None`
+    "every row" default) is EXCLUDED entirely — it doesn't format the whole
+    column, so it must not satisfy a whole-column semantic-type check the
+    same way a full-column call does.
+
+    When the SAME column is formatted more than once
+    (`.fmt_percent(columns="rate").fmt_number(columns="rate")`), only the
+    LAST call actually renders — `fmt_*` calls don't stack, each later one
+    replaces the formatting of every column it targets. `_fmt_calls`
+    yields calls in source order, so simply overwriting on each occurrence
+    naturally keeps only the effective (last) one per column, rather than
+    accumulating every formatter ever applied.
+
+    A LATER call that targets EVERY column (`columns=None`, or `columns`
+    omitted entirely — both mean "every column" per the documented
+    default) invalidates every column tracked so far, even though its own
+    full target set can't be enumerated without the real schema: every
+    prior per-column entry is now stale (overwritten by this call), so it
+    must not survive as though it were still the effective formatter.
+
+    A row-scoped LATER call for a column that ALREADY has a whole-column
+    entry also invalidates that entry (rather than merely being skipped)
+    UNLESS it's the SAME formatter name — it overwrites the formatting for
+    the rows it targets, so a column that's "mostly fmt_percent, one row
+    overridden to fmt_number" must not read as "fully fmt_percent"; but a
+    row-scoped re-application of the identical formatter
+    (`.fmt_percent(columns="rate").fmt_percent(columns="rate",
+    rows=[0])`) leaves the column uniformly the same format it already
+    was, so that entry survives.
+
+    A `**overrides`/`**{...}` expansion supplying `rows=` isn't visible to
+    the plain keyword lookup, so a row-scoped call written that way would
+    otherwise be read as unrestricted (no `rows=` found) and wrongly
+    establish/keep a whole-column entry — treated the same as an explicit
+    `rows=[...]` (invalidate, don't establish) since it MIGHT be
+    row-restricted and this parser can't tell.
+    """
+    var_map = _list_var_map(source)
+    out: dict[str, str] = {}
+    for name, block in _fmt_calls(source):
+        val = _kwarg_value(block, "columns")
+        if val is None:
+            # Quote-aware (see _heatmap_columns_raw): a column name can
+            # itself contain a comma.
+            positionals = [
+                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            val = positionals[0] if positionals else None
+        rows_val = _kwarg_value(block, "rows")
+        has_expansion = any(p.strip().startswith("**") for p in _split_top_level_quoted(block))
+        row_restricted = has_expansion or (rows_val is not None and rows_val.strip() != "None")
+        if row_restricted:
+            if val is None or val.strip() == "None":
+                out.clear()
+            else:
+                for col in _resolve_columns_list(val, var_map):
+                    if out.get(col) != name:
+                        out.pop(col, None)
+            continue
+        if val is None or val.strip() == "None":
+            out.clear()
+            continue
+        for col in _resolve_columns_list(val, var_map):
+            out[col] = name
+    return out
+
+
 def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
     """Parse a `table.py` source string into the design choices the rules pin down.
 
@@ -821,6 +1861,26 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         "domain_signature": _domain_signature(source),
         "color_signature": _color_signature(source),
         "data_hash": data_hash,
+        # Comparator Tier-1 additions (09-ground-truth-comparator.md §6):
+        # tab_spanner_delim(...) also renders column-group spanners (from a
+        # delimiter in column names), not just an explicit tab_spanner(...)
+        # call -- both count as "a spanner is present."
+        "spanner_present": bool(
+            _call_arg_blocks(source, "tab_spanner")
+            or _call_arg_blocks(source, "tab_spanner_delim")
+        ),
+        "color_mechanics": _color_mechanics(source),
+        "render_params": _render_params(source),
+        "title_text": _tab_header_text(source, "title"),
+        "subtitle_text": _tab_header_text(source, "subtitle"),
+        "source_note_texts": _source_note_texts(source),
+        "bold_columns": _bold_columns(source),
+        "summary_row_present": bool(
+            _call_arg_blocks(source, "grand_summary_rows")
+            or _call_arg_blocks(source, "summary_rows")
+        ),
+        "hairlines_present": _hlines_active(source),
+        "fmt_column_map": _fmt_column_map(source),
     }
 
 
