@@ -91,7 +91,18 @@ def main():
         return {"ok": False, "error": "no top-level `gt` GT instance in table.py"}
 
     tbl = gt._tbl_data
-    columns = {col: [_json_safe(v) for v in tbl[col].tolist()] for col in tbl.columns}
+
+    def _series_to_list(series):
+        # pandas Series has .tolist(); a Polars Series has .to_list() instead
+        # (great_tables supports both backends per SPEC.md/api.md) -- fall
+        # back to plain iteration for anything else.
+        if hasattr(series, "tolist"):
+            return series.tolist()
+        if hasattr(series, "to_list"):
+            return series.to_list()
+        return list(series)
+
+    columns = {col: [_json_safe(v) for v in _series_to_list(tbl[col])] for col in tbl.columns}
 
     stub_column = None
     group_column = None
@@ -157,10 +168,15 @@ def exec_table(py_path: Path, timeout: float = 30.0) -> dict:
     """
     if not py_path.is_file():
         return {"ok": False, "error": f"no such file: {py_path}"}
+    # Resolve to an absolute path BEFORE spawning: the subprocess runs with
+    # cwd=py_path.parent, so a relative path like "runs/x/table.py" would
+    # resolve inside the child as "runs/x/runs/x/table.py" once cwd has
+    # already moved into "runs/x".
+    abs_path = py_path.resolve()
     try:
         proc = subprocess.run(
-            [sys.executable, "-c", _EXEC_RUNNER, str(py_path)],
-            cwd=str(py_path.parent),
+            [sys.executable, "-c", _EXEC_RUNNER, str(abs_path)],
+            cwd=str(abs_path.parent),
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -220,11 +236,14 @@ def row_set_identity(candidate_row_ids: list | None, truth_row_ids: list | None)
     """Set-based (order/count-blind) comparison of two row-identifier lists.
 
     Returns ``{"matched", "candidate_only", "truth_only", "precision",
-    "recall", "exact"}``. `precision`/`recall` are `None` when either side
-    has no identifiers to compare (e.g. no stub) rather than a misleading
-    0.0 — the caller decides how to score that case.
+    "recall", "exact"}``. `precision`/`recall` are `None` only when a side is
+    `None` (no stub at all — genuinely "not comparable"). An empty list
+    (`[]`) is NOT the same as `None`: a stub that exists but whose filter
+    selected zero rows is a real, and often severe, selection failure — it
+    must score `recall=0.0` against a nonempty ground truth, not be treated
+    as "not comparable" and skipped.
     """
-    if not candidate_row_ids or not truth_row_ids:
+    if candidate_row_ids is None or truth_row_ids is None:
         return {
             "matched": 0, "candidate_only": [], "truth_only": [],
             "precision": None, "recall": None, "exact": False,
@@ -232,20 +251,35 @@ def row_set_identity(candidate_row_ids: list | None, truth_row_ids: list | None)
     cand = {normalize_id(x) for x in candidate_row_ids}
     truth = {normalize_id(x) for x in truth_row_ids}
     matched = cand & truth
+    precision = (len(matched) / len(cand)) if cand else (1.0 if not truth else 0.0)
+    recall = (len(matched) / len(truth)) if truth else (1.0 if not cand else 0.0)
     return {
         "matched": len(matched),
         "candidate_only": sorted(cand - truth),
         "truth_only": sorted(truth - cand),
-        "precision": len(matched) / len(cand) if cand else None,
-        "recall": len(matched) / len(truth) if truth else None,
+        "precision": precision,
+        "recall": recall,
         "exact": cand == truth,
     }
+
+
+def _row_key(row_id: Any, group_id: Any | None) -> tuple:
+    """Alignment key for one row: `(group_id, row_id)`, both normalized.
+
+    Including `group_id` matters whenever stub labels repeat across groups
+    (e.g. a "Small"/"Medium" stub reused in every `groupname_col` group) —
+    keying by `row_id` alone would collapse every group's "Small" row onto
+    a single dict slot, silently keeping only the last group's value and
+    aligning it against every other group's "Small" row too.
+    """
+    return (normalize_id(group_id) if group_id is not None else None, normalize_id(row_id))
 
 
 def _shared_pairs(
     candidate_fp: dict, truth_fp: dict, candidate_col: str, truth_col: str,
 ) -> list[tuple[Any, Any]]:
-    """Value pairs for `candidate_col`/`truth_col`, aligned by stub row id.
+    """Value pairs for `candidate_col`/`truth_col`, aligned by stub row id
+    (and row-group id, when present — see `_row_key`).
 
     Falls back to positional alignment (by `row_order` index) when either
     side has no stub — the best available alignment without a named key.
@@ -257,10 +291,14 @@ def _shared_pairs(
     cand_ids = candidate_fp.get("row_ids")
     truth_ids = truth_fp.get("row_ids")
     if cand_ids and truth_ids:
-        truth_by_id = {normalize_id(rid): i for i, rid in enumerate(truth_ids)}
+        cand_groups = candidate_fp.get("row_group_ids") or [None] * len(cand_ids)
+        truth_groups = truth_fp.get("row_group_ids") or [None] * len(truth_ids)
+        truth_by_key = {
+            _row_key(rid, gid): i for i, (rid, gid) in enumerate(zip(truth_ids, truth_groups))
+        }
         pairs = []
-        for i, rid in enumerate(cand_ids):
-            j = truth_by_id.get(normalize_id(rid))
+        for i, (rid, gid) in enumerate(zip(cand_ids, cand_groups)):
+            j = truth_by_key.get(_row_key(rid, gid))
             if j is not None and i < len(cand_cols[candidate_col]) and j < len(truth_cols[truth_col]):
                 pairs.append((cand_cols[candidate_col][i], truth_cols[truth_col][j]))
         return pairs
