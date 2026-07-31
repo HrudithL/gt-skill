@@ -30,11 +30,18 @@ formatting rule that block encodes. There is no router file and no
 per-archetype directory — this script IS the one example, annotated in
 place.
 
-The palette, hexes, and color rules below are copied **verbatim** from
+The ``solid`` / ``washed`` / ``neutral`` / ``sequential`` / ``diverging``
+tiers of ``PALETTE`` below are copied from
 ``great-tables-ci/scripts/gt_consistency.py`` (mirroring
-``references/palettes.md``). Reusing the already-validated visual system is
-deliberate — only the *decision process* around it is thinner here, not the
-colors themselves.
+``references/palettes.md``) — reusing the already-validated hue system is
+deliberate. The ``accent`` / ``accent_tint`` tiers are new to THIS skill: a
+brighter, more saturated pairing used only for the column-label band, the
+stub, and group headers, modeled on `great_tables`' own built-in
+``opt_stylize()`` presets (styles 3 and 6 in particular) — a solid, clearly
+"branded" header band with a matching, clearly-visible (not barely-there)
+stub/group tint, so the table reads as one unified color theme rather than
+"mostly grey, plus a colored heatmap." See ``band()``/``stub_tint()``/
+``group_emphasis()`` below for how the two tiers divide the work.
 """
 
 from __future__ import annotations
@@ -73,6 +80,36 @@ PALETTE = {
         "espresso": "#F1EADD",
         "ochre": "#F5EFDC",
         "tan": "#EFE7D6",       # cream
+    },
+    # Brighter, more saturated pairing used ONLY for the column-label band,
+    # the stub, and group headers (band()/stub_tint()/group_emphasis()) — the
+    # "unified color theme" surfaces, modeled on great_tables' own
+    # opt_stylize() styles 3/6 (a solid, clearly-branded header band + a
+    # matching, visibly-tinted stub/group surface — not a barely-there wash).
+    # Deliberately a SEPARATE tier from "solid"/"washed" above: those stay
+    # muted because status_chip()'s good/bad/neutral meaning and the NA-cell
+    # fill need to read as restrained/semantic, not as decoration, while the
+    # band/stub are pure branding and can afford to be louder.
+    "accent": {
+        "navy": "#1B5A85",
+        "forest": "#2E7350",
+        "oxblood": "#A23A3A",
+        "espresso": "#8A6238",
+        "ochre": "#B8912E",
+        "tan": "#9C8258",
+    },
+    # The visibly-tinted (not barely-there) light pairing for "accent" above —
+    # used for the stub and group-header fill. Noticeably more saturated than
+    # "washed" below on purpose: "washed" is reserved for the whisper-quiet
+    # row stripe, so stripe and stub read as two distinct strengths of the
+    # same hue rather than blurring into one another.
+    "accent_tint": {
+        "navy": "#C9E0F0",
+        "forest": "#CFEAD9",
+        "oxblood": "#F4D6D6",
+        "espresso": "#EEDFC7",
+        "ochre": "#F6E8BE",
+        "tan": "#EFE3CE",
     },
     # Neutral structural surfaces (light greys) — the default for every quiet
     # surface when there's no Big-Color hue to harmonize to.
@@ -192,21 +229,24 @@ def finalize(gt, path="table.png", **overrides):
     return gt.gtsave(path, **opts)
 
 
-def band(gt, *, shade, hue):
+def band(gt, *, shade="light", hue):
     """Apply the heading band (light tint or dark solid) + the mandatory rule.
 
-    WHAT: ``shade="light"`` paints the column-label background with the
-    washed tint of ``hue`` (or the neutral grey band when ``hue="grey"``).
-    ``shade="dark"`` paints it with the DA solid for ``hue`` and whitens the
-    column-label (and spanner-label, if any) text so it stays legible.
-    Either way, the 2px ``#CCCCCC`` column-label bottom rule is ALWAYS
-    applied — it is the one Step-4 constant that holds regardless of shade.
+    WHAT: ``shade="light"`` (the house DEFAULT) paints the column-label
+    background with the ``washed`` tint of ``hue`` (or the neutral grey
+    band when ``hue="grey"``) — a subtle, quiet surface; no white-text
+    override needed. ``shade="dark"`` instead paints it with the ``accent``
+    solid for ``hue`` and whitens the column-label (and spanner-label, if
+    any) text — a much louder, "branded" look. Either way, the 2px
+    ``#CCCCCC`` column-label bottom rule is ALWAYS applied.
 
-    WHY light vs dark: when the table already has Big Color (a heatmap, a
-    status chip, any saturated fill), a second dark saturated band on top
-    of it competes for attention — use the quiet light tint instead. With
-    no Big Color anywhere in the table, the band IS the color story, so it
-    goes dark+saturated.
+    WHY light is the default: the column-label band and the stub/group
+    surfaces are quiet furniture, not data — the heatmap is the thing that
+    should read as "the star." A solid, deeply-saturated band competes with
+    that even though it sits above the body. Reach for ``shade="dark"``
+    only when the table needs the header ITSELF to carry the color story
+    (e.g. a pure categorical/text table with no heatmap at all — see
+    ``references/RULES.md``'s ceiling rule).
     """
     rule = PALETTE["neutral"]["column_label_rule"]
     options = {
@@ -221,7 +261,7 @@ def band(gt, *, shade, hue):
             options["column_labels_background_color"] = PALETTE["washed"][hue]
         return gt.tab_options(**options)
     if shade == "dark":
-        options["column_labels_background_color"] = PALETTE["solid"][hue]
+        options["column_labels_background_color"] = PALETTE["accent"][hue]
         gt = gt.tab_options(**options)
         locations = [loc.column_labels()]
         spanners = getattr(gt, "_spanners", None)
@@ -233,8 +273,16 @@ def band(gt, *, shade, hue):
     raise ValueError("band(): shade must be 'light' or 'dark', got %r" % (shade,))
 
 
-def stripe(gt):
-    """Apply zebra row striping in the pinned neutral stripe hex.
+def stripe(gt, *, hue="grey"):
+    """Apply zebra row striping, tinted to ``hue`` when the table has one.
+
+    ``hue="grey"`` (the default, for a table with no unified color story)
+    uses the flat neutral stripe hex. Any other hue key uses that hue's
+    ``washed`` tint instead — deliberately the barely-there tier, NOT
+    ``accent_tint`` (the stub's tier): the stripe should read as the
+    quietest possible whisper of the theme color, so it never competes with
+    the stub or the band for attention. Pass the SAME ``hue`` given to
+    ``band()``/``stub_tint()`` so the whole table reads as one theme.
 
     THE GATE (this function does not check it — the caller must): use
     striping only when the table has **>= 10 body rows AND the body isn't
@@ -242,9 +290,8 @@ def stripe(gt):
     stripes fight each other visually). Below 10 rows, or with most cells
     already colored, skip this call entirely.
     """
-    return gt.opt_row_striping().tab_options(
-        row_striping_background_color=PALETTE["neutral"]["row_stripe"],
-    )
+    color = PALETTE["neutral"]["row_stripe"] if hue == "grey" else PALETTE["washed"][hue]
+    return gt.opt_row_striping().tab_options(row_striping_background_color=color)
 
 
 def stub_tint(gt, *, hue):
@@ -252,16 +299,18 @@ def stub_tint(gt, *, hue):
 
     ``hue="grey"`` uses the neutral label-band grey (the default with no
     Big Color). Any other hue key (``navy``/``forest``/``oxblood``/
-    ``espresso``/``ochre``/``tan``) uses that hue's washed tint — pick the
-    hue that matches the table's dominant heatmap family (see the DA
-    hue-selection rule: a Blues heatmap harmonizes to the washed-navy tint,
-    Greens to washed-forest, etc.) so the quiet stub surface doesn't clash
-    with the loud color elsewhere.
+    ``espresso``/``ochre``/``tan``) uses that hue's ``accent_tint`` — a
+    clearly-visible light wash (not the barely-there ``washed`` tier used
+    for the row stripe) so the stub reads as a deliberately branded surface,
+    matching ``band()``'s solid header — pick the hue that matches the
+    table's dominant heatmap family (see the DA hue-selection rule: a Blues
+    heatmap harmonizes to navy, Greens to forest, etc.) so the stub doesn't
+    clash with the loud color elsewhere.
     """
     if hue == "grey":
         color = PALETTE["neutral"]["label_band"]
     else:
-        color = PALETTE["washed"][hue]
+        color = PALETTE["accent_tint"][hue]
     return gt.tab_style(style=style.fill(color=color), locations=loc.stub())
 
 
@@ -391,11 +440,16 @@ def status_chip(gt, column, meaning):
     """Fill a DISCRETE categorical column's cells by a value -> meaning map.
 
     ``meaning`` maps each cell VALUE (e.g. ``"On Track"``) to one of
-    ``"good"`` / ``"bad"`` / ``"neutral"``. ``good``/``bad`` fill with the
-    forest/oxblood DA solids + white text (the same solids the sequential
-    "positive"/"warning" semantics lean on elsewhere); ``neutral`` fills
-    with the tan DA solid + white text — a deliberately mid, non-alarming
-    color, not a second "bad".
+    ``"good"`` / ``"bad"`` / ``"neutral"``. Fills from the ``accent`` tier
+    (the same brighter, more saturated pairing ``band()``/``stub_tint()``
+    use) rather than the muted ``solid`` DA tier: ``good`` -> accent forest
+    (a clean green), ``bad`` -> accent oxblood (a clean red, not the muted
+    ``solid`` oxblood's muddy brown-red), ``neutral`` -> accent ochre (a
+    warm, legible amber — not accent/solid ``tan``, which reads as a flat,
+    muddy khaki next to the other two rather than a distinct third color).
+    All three get white text. The category is what matters here — status
+    is a discrete red/green/amber signal, not a magnitude, so it wants
+    clean, clearly-differentiated colors more than restraint.
 
     THE POINT of this function: a red/green column is not always a
     continuous heatmap. When the column's values are a small fixed set of
@@ -435,9 +489,9 @@ def status_chip(gt, column, meaning):
     since it never relies on row identity being unique at all.
     """
     fills = {
-        "good": PALETTE["solid"]["forest"],
-        "bad": PALETTE["solid"]["oxblood"],
-        "neutral": PALETTE["solid"]["tan"],
+        "good": PALETTE["accent"]["forest"],
+        "bad": PALETTE["accent"]["oxblood"],
+        "neutral": PALETTE["accent"]["ochre"],
     }
     values = gt._tbl_data[column]
     display_order = [int(orig_idx) for orig_idx, _group in gt._stub.group_indices_map()]
@@ -491,20 +545,20 @@ def summary_row(gt, row_index, *, bold=True):
     return gt.tab_style(style=styles, locations=loc.stub(rows=[row_index]))
 
 
-def group_emphasis(gt, *, hue="grey"):
+def group_emphasis(gt):
     """Emphasize every ``groupname_col`` header row so section breaks read clearly.
 
-    Applies a light background fill (grey by default, or the washed tint of
-    ``hue`` when the table has Big Color — harmonizing to the same hue as
-    the stub/band) AND bold weight to each group label row — the pair is
-    non-negotiable: fill alone reads as noise, bold alone as a stray body
-    row. Also pins the ``#BDBDBD`` structural rule above and below each
-    group label, for use whenever the table is built with ``groupname_col=``.
+    Bold weight + the ``#BDBDBD`` structural rule above and below the group
+    label — deliberately NO background fill. A summary/total row is the one
+    row that earns its own distinct, subtly-highlighted treatment (see
+    ``summary_row()`` / the ``grand_summary_rows()`` styling below); a group
+    label is a section break, not a result worth calling out the same way,
+    and a fill there reads as one more saturated surface competing with the
+    heatmap. Bold + rule alone is enough for the section break to read
+    clearly.
     """
-    color = PALETTE["neutral"]["label_band"] if hue == "grey" else PALETTE["washed"][hue]
     rule = PALETTE["neutral"]["structural_rule"]
     return gt.tab_options(
-        row_group_background_color=color,
         row_group_font_weight="bold",
         row_group_border_top_color=rule,
         row_group_border_bottom_color=rule,
@@ -603,19 +657,22 @@ def build_house_table():
     gt = heatmap(gt, "yoy_change", kind="diverging", hue="default")
     gt = status_chip(gt, "status", {"On Track": "good", "At Risk": "bad", "Watch": "neutral"})
 
-    # Heading band: Big Color is present (both heatmaps + the status chips)
-    # -> LIGHT band, harmonized to the Blues heatmap's navy family (the DA
-    # hue-selection rule: match an existing heatmap hue first).
-    gt = band(gt, shade="light", hue="navy")
+    # Heading band: the house DEFAULT is the subtle "washed" band (light
+    # tint, not a solid fill) — here, navy (the Blues heatmap's family, per
+    # the DA hue-selection rule: match an existing heatmap hue first). Quiet
+    # on purpose: the heatmap is the star, not the header.
+    gt = band(gt, hue="navy")
 
     # Small-Color polish: 12 body rows clears the >=10-row striping gate,
     # and only 2 of 6 columns carry continuous color (revenue, yoy_change)
     # — the body is far from "essentially fully covered," so striping and
-    # fills don't fight. Stub tint and group emphasis harmonize to the same
-    # navy family as the band.
-    gt = stripe(gt)
+    # fills don't fight. Stub tint and the stripe harmonize to the same
+    # navy family as the band. Group headers get bold + a rule ONLY (no
+    # fill) — the one row that earns its own distinct highlight is the
+    # summary/total row below, not a section break.
+    gt = stripe(gt, hue="navy")
     gt = stub_tint(gt, hue="navy")
-    gt = group_emphasis(gt, hue="navy")
+    gt = group_emphasis(gt)
 
     # Grand summary "Total" row — the NATIVE mechanism for a whole-table
     # total (great_tables' own `grand_summary_rows`), not a manually
