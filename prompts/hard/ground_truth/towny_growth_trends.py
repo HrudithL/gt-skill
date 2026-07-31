@@ -22,6 +22,80 @@ from great_tables import GT, html, loc, style
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent.parent.parent
 
+# ---- Ground-truth comparator metadata --------------------------------------
+# Read directly by scripts/gt_compare.py via module import. Keep these as
+# literal dict/list assignments (no computation) so they're both a plain-text
+# answer key a human can review and something a script can load without exec
+# risk beyond what already happens to render the table.
+
+# Acceptable label synonyms per underlying data column. Wording is free; the
+# label just has to name the right concept. Keys are the SOURCE CSV/derived
+# column name(s) the label is standing in for.
+LABEL_SYNONYMS = {
+    "rank": ["rank", "#", "position"],
+    "total_growth_pct": [
+        "total growth", "growth 1996", "growth 1996-2021", "1996-2021",
+        "total growth 1996-2021", "population growth",
+    ],
+    "density_1996": ["1996", "density 1996"],
+    "density_2001": ["2001", "density 2001"],
+    "density_2006": ["2006", "density 2006"],
+    "density_2011": ["2011", "density 2011"],
+    "density_2016": ["2016", "density 2016"],
+    "density_2021": ["2021", "density 2021"],
+    "pop_change_1996_2001_pct": ["1996-2001", "1996–2001"],
+    "pop_change_2001_2006_pct": ["2001-2006", "2001–2006"],
+    "pop_change_2006_2011_pct": ["2006-2011", "2006–2011"],
+    "pop_change_2011_2016_pct": ["2011-2016", "2011–2016"],
+    "pop_change_2016_2021_pct": ["2016-2021", "2016–2021"],
+}
+
+# Only present when the PROMPT TEXT explicitly demands something structural.
+# Absence of a key means "not required" -- never inferred from prose at eval
+# time, always decided here by whoever wrote this ground truth. The prompt
+# says "top 15 fastest-growing" -- an explicit row count -- but does not
+# explicitly demand grouping or a specific rendered sort order, so only
+# row_count is set.
+REQUIRED_INSTRUCTIONS = {
+    "row_count": 15,
+}
+
+# Keyword-presence check for the caption/subtitle overlap rule (see
+# CONSISTENCY_DEV.md Step 6). caption_should_mention are terms the footer's
+# takeaway sentence must include; subtitle_should_not_duplicate are terms the
+# subtitle must NOT lean on (they belong to the caption's insight, not the
+# subtitle's organization-description).
+CAPTION_KEYWORDS = {
+    "caption_should_mention": ["fastest-growing", "total growth", "1996"],
+    "subtitle_should_not_duplicate": ["percent change", "consecutive"],
+}
+
+# Underlying SOURCE CSV column(s) that are the canonical colored measure(s),
+# used for value-based matching -- NOT the rendered column name/label.
+CANONICAL_MEASURES = {
+    "colored": [
+        "density_1996", "density_2001", "density_2006",
+        "density_2011", "density_2016", "density_2021",
+        "pop_change_1996_2001_pct", "pop_change_2001_2006_pct",
+        "pop_change_2006_2011_pct", "pop_change_2011_2016_pct",
+        "pop_change_2016_2021_pct",
+    ],
+    "hero_uncolored": ["rank", "total_growth_pct"],
+}
+
+# Semantic type per rendered column, for the fmt_* correctness check.
+SEMANTIC_TYPES = {
+    "rank": "number",
+    "total_growth_pct": "percent",
+    "density_1996": "number", "density_2001": "number", "density_2006": "number",
+    "density_2011": "number", "density_2016": "number", "density_2021": "number",
+    "pop_change_1996_2001_pct": "percent",
+    "pop_change_2001_2006_pct": "percent",
+    "pop_change_2006_2011_pct": "percent",
+    "pop_change_2011_2016_pct": "percent",
+    "pop_change_2016_2021_pct": "percent",
+}
+
 # ---- Data prep -----------------------------------------------------------
 df = pd.read_csv(_ROOT / "data" / "towny.csv")
 
