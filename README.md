@@ -40,7 +40,7 @@ python run.py --skill creator --difficulty easy
 python run.py --skill prose --prompt-text "Top 10 cars by MSRP" --data data/gtcars.csv
 ```
 
-Flags: `--skill {prose,scripts,creator}`; `--prompt NAME` (repeatable) /
+Flags: `--skill {prose,scripts,creator,house}`; `--prompt NAME` (repeatable) /
 `--difficulty {easy,medium,hard,all}` / `--prompt-text TEXT --data PATH`;
 `--repeat N`; `--model {haiku,sonnet,opus}`; `--baseline` / `--no-baseline`
 (default auto — the no-skill control runs iff `--repeat > 1`).

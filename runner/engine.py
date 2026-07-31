@@ -69,11 +69,18 @@ SKILL_CI_DIR = ROOT / ".claude" / "skills" / SKILL_CI_NAME
 # skill choice, which runner.orchestrate drives like any other.
 CREATOR_SKILL_SRC = ROOT / ".claude-skill-creator"
 
+# A thinner, non-flowchart skill: one heavily-commented reference script
+# (house_table.py) demonstrating every generic table-formatting feature,
+# plus a short per-data-type rules file. No checker loop, no archetype
+# example directory — see its own SKILL.md for the design.
+SKILL_HOUSE_NAME = "great-tables-house"
+SKILL_HOUSE_DIR = ROOT / ".claude" / "skills" / SKILL_HOUSE_NAME
+
 # The *with-skill* variants the harness can run a prompt under. See
 # _prepare_skill_root() for how each is physically realized. The baseline
 # (below) is deliberately NOT in this tuple: it is realized by the *absence*
 # of a skill root, not by a skill variant.
-SKILL_VARIANTS = ("prose", "scripted", "creator")
+SKILL_VARIANTS = ("prose", "scripted", "creator", "house")
 
 # Baseline config (R1): the agent sees NO `.claude` directory at all — no
 # skill, no settings.local.json — and is launched with `skills=[]`. Kept under
@@ -91,6 +98,7 @@ _VARIANT_SOURCES: dict[str, tuple[Path, str]] = {
     "prose": (SKILL_DIR, SKILL_NAME),
     "scripted": (SKILL_CI_DIR, SKILL_CI_NAME),
     "creator": (CREATOR_SKILL_SRC, SKILL_NAME),
+    "house": (SKILL_HOUSE_DIR, SKILL_HOUSE_NAME),
 }
 
 
@@ -112,6 +120,8 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
       loop + ``scripts/``). Its symlinked references/assets are materialized by
       ``copytree(symlinks=False)``.
     - ``creator`` → the candidate skill mounted verbatim as ``great-tables``.
+    - ``house`` → the ``great-tables-house`` skill (thin SKILL.md + a rules
+      reference + a single reference script under ``scripts/``).
     """
     if skill_variant not in SKILL_VARIANTS:
         raise ValueError(
