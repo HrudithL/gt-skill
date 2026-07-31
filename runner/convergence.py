@@ -1279,20 +1279,26 @@ def _list_var_map(source: str) -> dict[str, list[str]]:
         # or any other non-literal expression must NOT resolve, or a single
         # quoted substring inside it (e.g. "pct_") would be misread as the
         # variable's one-and-only column name. Validated by ITS OWN quote
-        # character (_DQ_STRING/_SQ_STRING fullmatch), not a "no quotes at
-        # all inside" check — the latter would reject (and so silently drop
-        # the whole assignment for) a perfectly valid element containing an
-        # apostrophe, e.g. `hero_cols = ["Owner's share"]`. An explanatory
-        # comment between elements (`["sales", # primary\n "profit"]`) is
-        # stripped first — `_split_top_level_quoted` isn't comment-aware,
-        # so it would otherwise glue the comment onto the following
-        # element's text and fail the fullmatch, discarding the whole
-        # (fully static) binding over what's really just a comment.
+        # character (single- or triple- quote fullmatch), not a "no quotes
+        # at all inside" check — the latter would reject (and so silently
+        # drop the whole assignment for) a perfectly valid element
+        # containing an apostrophe, e.g. `hero_cols = ["Owner's share"]`,
+        # or a valid triple-quoted element like
+        # `hero_cols = ["""The "Best" Sales"""]`. An explanatory comment
+        # between elements (`["sales", # primary\n "profit"]`) is stripped
+        # first — `_split_top_level_quoted` isn't comment-aware, so it
+        # would otherwise glue the comment onto the following element's
+        # text and fail the fullmatch, discarding the whole (fully static)
+        # binding over what's really just a comment.
         elems = [
             e for e in (_strip_line_comments(p).strip() for p in _split_top_level_quoted(body))
             if e
         ]
-        if elems and all(_DQ_STRING.fullmatch(e) or _SQ_STRING.fullmatch(e) for e in elems):
+        if elems and all(
+            _DQ_STRING.fullmatch(e) or _SQ_STRING.fullmatch(e)
+            or _TQ_DQ_STRING.fullmatch(e) or _TQ_SQ_STRING.fullmatch(e)
+            for e in elems
+        ):
             out[name] = [_find_quoted_strings(e)[0] for e in elems]
     return out
 
@@ -1665,22 +1671,27 @@ def _hlines_active(source: str) -> bool:
     ...), locations=loc.body())` call is an EQUALLY valid alternate
     mechanism for rendering row hairlines (the outcome-only scoring rule
     applies here the same way it does for `_vlines_active`'s
-    `left`/`right` equivalent) — checked when the table-wide
-    `table_body_hlines_*` options don't already establish one.
+    `left`/`right` equivalent) — checked whenever the table-wide
+    `table_body_hlines_*` options don't themselves establish an active
+    line, INCLUDING when they explicitly disable it
+    (`.tab_options(table_body_hlines_style="none")` followed by a
+    separate `tab_style(...)` border is a real, if unusual, way to turn
+    off the default line and draw a custom one instead — the disabled
+    table-wide option must not short-circuit past checking for that).
     """
     def _last(attr: str) -> str | None:
         matches = re.findall(rf"table_body_hlines_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
         return matches[-1] if matches else None
 
     style = _last("style")
-    if style is not None and style.strip().lower() in ("none", "hidden", ""):
-        return False
     width = _last("width")
-    if width is not None and _is_zero_length(width):
-        return False
-    for v in (style, width, _last("color")):
-        if v is not None and v.strip().lower() not in ("none", "hidden", ""):
-            return True
+    disabled = (style is not None and style.strip().lower() in ("none", "hidden", "")) or (
+        width is not None and _is_zero_length(width)
+    )
+    if not disabled:
+        for v in (style, width, _last("color")):
+            if v is not None and v.strip().lower() not in ("none", "hidden", ""):
+                return True
     return _has_active_tab_style_border(source, "top|bottom")
 
 
