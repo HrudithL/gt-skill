@@ -254,6 +254,15 @@ def exec_table(py_path: Path, timeout: float = 30.0) -> dict:
 _REL_TOL = 1e-6
 _ABS_TOL = 1e-9
 _MATCH_THRESHOLD = 0.95
+# A shared-row set below this fraction of the truth's own row count is too
+# thin to trust: a candidate that happens to overlap on one coincidental row
+# (out of e.g. 15 truth rows) would otherwise score a perfect 1/1 match
+# fraction and be credited as "this measure is computed correctly" despite
+# having verified essentially nothing. This is independent of `check_row_
+# selection_identity`'s own (separately-scored) row-set penalty -- that
+# check and this floor guard two different questions ("are these the right
+# rows" vs. "is there enough overlap to trust a value comparison at all").
+_MIN_COVERAGE = 0.5
 
 
 def values_close(a: Any, b: Any, *, rel_tol: float = _REL_TOL, abs_tol: float = _ABS_TOL) -> bool:
@@ -522,15 +531,25 @@ def _shared_pairs(
     return pairs
 
 
-def column_match_fraction(candidate_fp: dict, truth_fp: dict, candidate_col: str, truth_col: str) -> float | None:
+def column_match_fraction(
+    candidate_fp: dict, truth_fp: dict, candidate_col: str, truth_col: str, *, min_coverage: float = _MIN_COVERAGE,
+) -> float | None:
     """Fraction of shared (by row id) values that match within tolerance.
 
     None when there is nothing to compare (column missing on either side,
     or zero shared rows) — never fabricated as 0.0, so a "no data" case is
-    distinguishable from "compared and disagreed."
+    distinguishable from "compared and disagreed." Also None when the
+    shared-row set covers less than `min_coverage` of the truth's own row
+    count: a candidate matching on one coincidental row out of many truth
+    rows has not actually demonstrated the measure is computed correctly,
+    even if that one row agrees exactly (see `_MIN_COVERAGE`).
     """
+    truth_cols = truth_fp.get("columns", {})
+    truth_values = truth_cols.get(truth_col)
     pairs = _shared_pairs(candidate_fp, truth_fp, candidate_col, truth_col)
     if not pairs:
+        return None
+    if truth_values and len(pairs) / len(truth_values) < min_coverage:
         return None
     matches = sum(1 for a, b in pairs if values_close(a, b))
     return matches / len(pairs)

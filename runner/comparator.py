@@ -277,21 +277,27 @@ def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckRes
     notes = []
     for key, expected in required.items():
         if key == "grouping":
-            ok = bool(cand["tier1"].get("grouping_present"))
+            ok = bool(cand["tier1"].get("grouping_present")) == bool(expected)
         elif key == "row_count":
             n = _n_rows(cand)
             ok = n == expected
         elif key == "sort":
             col, direction = expected
             vals = cand["tier2"].get("columns", {}).get(col) if cand["tier2"].get("ok") else None
-            if vals is None:
+            if not vals or any(v is None for v in vals):
                 ok = False
             else:
-                nums = [v for v in vals if isinstance(v, (int, float))]
-                ok = len(nums) == len(vals) and (
-                    all(a >= b for a, b in zip(nums, nums[1:])) if direction == "desc"
-                    else all(a <= b for a, b in zip(nums, nums[1:]))
-                )
+                # Generic ordering check (works for numbers, strings, and
+                # ISO-date strings alike) rather than requiring numeric
+                # values -- a text or date sort column must not be treated
+                # as unsatisfiable just because its values aren't int/float.
+                try:
+                    ok = (
+                        all(a >= b for a, b in zip(vals, vals[1:])) if direction == "desc"
+                        else all(a <= b for a, b in zip(vals, vals[1:]))
+                    )
+                except TypeError:
+                    ok = False
         else:
             ok = False
         satisfied += 1 if ok else 0
