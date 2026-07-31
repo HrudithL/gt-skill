@@ -14,11 +14,17 @@ procedure.**
    `stub_tint`/`heatmap`/`status_chip`/`summary_row`/`group_emphasis`/
    `humanize_labels`) you import into your own script the same way
    `great-tables-ci` imports `gt_consistency.py`.
-2. Find the block in `house_table.py` that matches your data's shape — a
+2. **Before organizing columns**: if the request's measure or selection
+   criterion has more than one reasonable reading (e.g. "top N
+   fastest-growing" — by what metric?), pick ONE definition and state it
+   in the subtitle/source note — see `references/RULES.md`'s "Ambiguous
+   measures" section. This decides which columns exist at all; do it
+   before step 3.
+3. Find the block in `house_table.py` that matches your data's shape — a
    plain magnitude, a currency hero measure, a signed percent, a
    categorical status column, a stub, a group, a summary row, a missing
    value — and copy/adapt it.
-3. Open `references/RULES.md` for the one rule that applies to the
+4. Open `references/RULES.md` for the one rule that applies to the
    column kind you just matched (it points back at the function/section
    in `house_table.py` by name — it does not duplicate the code).
 

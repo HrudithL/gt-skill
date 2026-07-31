@@ -39,6 +39,24 @@ calling it, that's a sign you copied more of `house_table.py` than your
 table needs — remove the unused import, but never let "I didn't get to
 it" cost you an item on this list.
 
+## Ambiguous measures / selection criteria — pick ONE definition, STATE it
+
+A request like "top 15 fastest-growing towns... density changes... with
+percentage changes between each period" has more than one reasonable
+reading: fastest-growing by total population growth, or by density
+growth, over the full period or the latest one? Does "density changes"
+mean showing the density value at each year, the period-over-period
+delta, or both? None of these readings is wrong, but picking one **without
+saying so** is why the same prompt can render a genuinely different table
+each time — a real inconsistency, not a stylistic one. Resolve this the
+same way as `great-tables-ci`: **pick ONE canonical definition, compute it
+consistently, and STATE the chosen definition in the subtitle or a source
+note** (e.g. "ranked by overall population growth, 1996–2021" or "density
+shown per census year, with period-over-period % change") so the number is
+reproducible and a reader can see exactly what's being measured. Do this
+BEFORE organizing columns — it decides which columns exist at all, not
+just how they're formatted.
+
 ## Data-cleaning gotchas (fix these before any `fmt_*`/`data_color` call)
 
 - A currency string like `"$1,200"` or a percent string like `"12%"` is
@@ -69,6 +87,21 @@ above/below target) is the diverging **RdYlGn** measure —
 `yoy_change` in `house_table.py`. `positive=good` is the default
 orientation; pass `reverse=True` only when positive genuinely means worse
 (cost overrun, error rate, latency, churn).
+
+**Want an explicit `+`/`−` sign on a signed value?** Pass `force_sign=True`
+to the `fmt_*` call — do NOT hand-rewrite it with `pattern="{x:+.1f}%"`.
+`pattern=`'s `{x}` is a **literal substitution token** that must appear
+EXACTLY as `{x}` — it is not a Python format-spec slot, so
+`great_tables` does a plain string-replace of the substring `{x}`, not an
+f-string evaluation. Write `:+.1f` (or any format spec) inside the braces
+and the substring no longer matches `{x}` at all, so **nothing gets
+replaced and every cell renders the literal text `{x:+.1f}%`** — silently,
+with no exception raised. Confirmed by direct test: `fmt_number(columns=
+"x", pattern="{x:+.1f}%")` renders literal `{x:+.1f}%` in every cell,
+while `fmt_number(columns="x", pattern="{x}%", force_sign=True)` renders
+`+86.5%` / `−12.3%` correctly. `decimals=` already controls precision;
+`pattern=` is only for wrapping the already-formatted number in literal
+text (a unit suffix, parentheses, etc.) — never for a format spec.
 
 ## Ranking / rank / position
 
