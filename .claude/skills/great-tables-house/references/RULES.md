@@ -48,14 +48,42 @@ growth, over the full period or the latest one? Does "density changes"
 mean showing the density value at each year, the period-over-period
 delta, or both? None of these readings is wrong, but picking one **without
 saying so** is why the same prompt can render a genuinely different table
-each time — a real inconsistency, not a stylistic one. Resolve this the
-same way as `great-tables-ci`: **pick ONE canonical definition, compute it
-consistently, and STATE the chosen definition in the subtitle or a source
-note** (e.g. "ranked by overall population growth, 1996–2021" or "density
-shown per census year, with period-over-period % change") so the number is
-reproducible and a reader can see exactly what's being measured. Do this
-BEFORE organizing columns — it decides which columns exist at all, not
-just how they're formatted.
+each time — a real inconsistency, not a stylistic one.
+
+**"Pick one and state it" is not enough by itself** — two independent runs
+can each honestly state a different pick and still diverge. Resolve the
+pick with a deterministic precedence, in this order, then STATE the
+result in the subtitle or a source note (e.g. "ranked by overall
+population growth, 1996–2021"):
+
+1. **An explicitly named metric wins outright** — "top 15 by revenue"
+   names its metric; use exactly that column, no further judgment needed.
+2. **No metric named ⇒ use the measure-shaped noun closest to the ranking
+   phrase in the sentence**, not just any plausible metric elsewhere in
+   the request. In "fastest-growing towns... density changes...", "density
+   changes" is the very next clause after "fastest-growing" — rank by
+   overall density growth, not population growth, even though population
+   columns exist in the data too.
+3. **A stated date range always means the FULL span, not a sub-period** —
+   "from 1996 to 2021" computes growth as `value_2021 vs. value_1996`,
+   never a single interior period, unless the request names that period
+   specifically.
+4. **"Show X across all periods, with changes between each period" means
+   BOTH, not one or the other** — when a request separately names the
+   per-checkpoint values ("density changes across all census years") AND
+   the between-period deltas ("percentage changes between each period"),
+   include both as separate columns rather than picking one representation
+   to stand in for the other.
+
+This narrows the ambiguity considerably but — being a precedence over
+natural-language phrasing, not a closed-form algorithm — does not
+guarantee two runs land on byte-identical column choices for every
+conceivable prompt; genuinely irreducible ambiguity still gets resolved by
+judgment. STATING the resolved definition (not just making the same
+mechanical pick) is still what makes an individual table's numbers
+reproducible and defensible on its own. Do all of this BEFORE organizing
+columns — it decides which columns exist at all, not just how they're
+formatted.
 
 ## Data-cleaning gotchas (fix these before any `fmt_*`/`data_color` call)
 
@@ -89,7 +117,12 @@ orientation; pass `reverse=True` only when positive genuinely means worse
 (cost overrun, error rate, latency, churn).
 
 **Want an explicit `+`/`−` sign on a signed value?** Pass `force_sign=True`
-to the `fmt_*` call — do NOT hand-rewrite it with `pattern="{x:+.1f}%"`.
+— do NOT hand-rewrite it with `pattern="{x:+.1f}%"`. `force_sign=True` is a
+plain keyword on `fmt_number`/`fmt_percent`/`fmt_currency`/`fmt_integer`
+(the formatters this skill actually uses); `fmt_scientific` is the one
+exception, with separate `force_sign_m=`/`force_sign_n=` keywords instead
+of a single `force_sign=`.
+
 `pattern=`'s `{x}` is a **literal substitution token** that must appear
 EXACTLY as `{x}` — it is not a Python format-spec slot, so
 `great_tables` does a plain string-replace of the substring `{x}`, not an
@@ -98,10 +131,12 @@ and the substring no longer matches `{x}` at all, so **nothing gets
 replaced and every cell renders the literal text `{x:+.1f}%`** — silently,
 with no exception raised. Confirmed by direct test: `fmt_number(columns=
 "x", pattern="{x:+.1f}%")` renders literal `{x:+.1f}%` in every cell,
-while `fmt_number(columns="x", pattern="{x}%", force_sign=True)` renders
-`+86.5%` / `−12.3%` correctly. `decimals=` already controls precision;
-`pattern=` is only for wrapping the already-formatted number in literal
-text (a unit suffix, parentheses, etc.) — never for a format spec.
+while `fmt_number(columns="x", pattern="{x}%", force_sign=True,
+decimals=1)` renders `+86.5%` / `−12.3%` correctly — `decimals=` still
+needs to be passed explicitly (it defaults to `2`, so omitting it here
+would render `+86.50%`, not `+86.5%`); `pattern=` is only for wrapping the
+already-formatted number in literal text (a unit suffix, parentheses,
+etc.), never for a format spec.
 
 ## Ranking / rank / position
 
