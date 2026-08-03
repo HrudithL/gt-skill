@@ -357,8 +357,15 @@ def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
 
 def check_summary_row_existence(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Summary-row existence + correct aggregation values"
-    truth_summary = truth["tier2"].get("summary_rows") or []
+    truth_tier2 = truth["tier2"]
+    truth_summary = truth_tier2.get("summary_rows") or []
     if not truth_summary:
+        if truth_tier2.get("summary_rows_error"):
+            return CheckResult(
+                name, 1, 0, False,
+                f"ground-truth summary-row extraction failed ({truth_tier2.get('summary_rows_error')}) "
+                "-- fingerprint invalid, not a genuine 'no summary row' case",
+            )
         return _na(name, "ground truth has no grand-summary row")
     if not cand["tier2"].get("ok"):
         return CheckResult(name, 1, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
@@ -445,16 +452,33 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
             # full-range-for-sequential from the real data itself).
             correct += 1
             continue
-        m = re.match(r"^\[(.+?),(.+)\]$", dom, re.S) if dom.startswith("[") else None
+        # Split on the TOP-LEVEL comma only (via the shared paren-depth-aware
+        # splitter) -- a flat `[(.+?),(.+)]` regex misreads a nested comma
+        # inside e.g. `[-max(abs(lo), abs(hi)), max(abs(lo), abs(hi))]` and
+        # mis-splits a perfectly valid symmetric domain.
+        elems = None
+        if dom.startswith("[") and dom.endswith("]"):
+            parts = convergence._split_top_level(dom[1:-1])
+            if len(parts) == 2:
+                elems = parts
+        if elems is None:
+            # Not a literal 2-element bracketed domain -- e.g. a bare
+            # variable reference (`domain=domain`). Not statically
+            # verifiable either way from source text alone; benefit of the
+            # doubt, same as the auto-derived (None) case above, rather
+            # than penalizing a domain expression this check simply can't
+            # see through.
+            correct += 1
+            continue
         if shape == "diverging":
-            ok = bool(m) and _domain_element_symmetric(m.group(1), m.group(2))
+            ok = _domain_element_symmetric(elems[0], elems[1])
         else:
-            # Sequential: accept any literal bracketed domain as a
-            # deliberate choice (verifying it covers the ACTUAL full data
+            # Sequential: accept any literal 2-element bracketed domain as
+            # a deliberate choice (verifying it covers the ACTUAL full data
             # range would need re-deriving the exact min/max the author
             # intended, which isn't recoverable from a variable-named
             # domain like `[dens_lo, dens_hi]`).
-            ok = bool(m)
+            ok = True
         correct += 1 if ok else 0
         if not ok:
             notes.append(f"measure {i} ({entry.get('columns')}): domain '{dom}' doesn't match a {shape} shape")
@@ -494,7 +518,13 @@ def check_striping_gate(cand: dict, truth: dict, meta: dict) -> CheckResult:
         return _na(name, "candidate failed to execute; row count unknown")
     t1 = cand["tier1"]
     mechanics = t1.get("color_mechanics", [])
-    visible = _visible_columns(cand)
+    # Structural columns (the stub, the group column) can never be colored
+    # or bolded as a "measure" -- counting them in the denominator dilutes
+    # a genuinely fully-covered body (e.g. 3 colored/bold columns + 1 stub
+    # would read as 3/4 = 0.75, under the 0.8 gate, even though every real
+    # data column IS accounted for).
+    tier2 = cand["tier2"]
+    visible = _visible_columns(cand) - {tier2.get("stub_column"), tier2.get("group_column")}
     # "Essentially fully filled" counts a bold, uncolored HERO column as
     # accounted-for too, not just an actually-colored one — Step 3's rule
     # is that the hero gets bold text specifically AS THE ALTERNATIVE to a
@@ -564,9 +594,23 @@ def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
 
 def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Summary-row formatting matches body"
+    # Applicability is gated on the GROUND TRUTH having a summary row, not
+    # the candidate — otherwise a candidate that omits a required summary
+    # entirely scores N/A (0/0, no penalty) while one that includes a
+    # badly-formatted summary scores worse (0/4), making omission the
+    # better-scoring strategy.
+    truth_tier2 = truth["tier2"]
+    truth_summary = truth_tier2.get("summary_rows") or []
+    if not truth_summary:
+        if truth_tier2.get("summary_rows_error"):
+            return CheckResult(
+                name, 4, 0, False,
+                f"ground-truth summary-row extraction failed ({truth_tier2.get('summary_rows_error')})",
+            )
+        return _na(name, "ground truth has no grand-summary row to check")
     cand_summary = cand["tier2"].get("summary_rows") or [] if cand["tier2"].get("ok") else []
     if not cand_summary:
-        return _na(name, "candidate has no grand-summary row to check")
+        return CheckResult(name, 4, 0, False, "ground truth has a grand-summary row but candidate has none")
     fmt_map = cand["tier1"].get("fmt_column_map", {})
     numeric_cols = [
         k for k, v in cand_summary[0].get("values", {}).items()
@@ -659,9 +703,21 @@ def check_render_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
 
 def check_summary_row_visual_distinction(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Summary-row visual distinction from body"
+    # Same truth-gated applicability as check_summary_row_formatting (and
+    # for the same reason): omitting a required summary must not score
+    # better than including a poorly-distinguished one.
+    truth_tier2 = truth["tier2"]
+    truth_summary = truth_tier2.get("summary_rows") or []
+    if not truth_summary:
+        if truth_tier2.get("summary_rows_error"):
+            return CheckResult(
+                name, 1, 0, False,
+                f"ground-truth summary-row extraction failed ({truth_tier2.get('summary_rows_error')})",
+            )
+        return _na(name, "ground truth has no grand-summary row to check")
     cand_summary = cand["tier2"].get("summary_rows") or [] if cand["tier2"].get("ok") else []
     if not cand_summary:
-        return _na(name, "candidate has no grand-summary row")
+        return CheckResult(name, 1, 0, False, "ground truth has a grand-summary row but candidate has none")
     distinct = bool(re.search(r"#BDBDBD", cand["source"], re.I)) or bool(
         re.search(r"loc\s*\.\s*(?:grand_)?summary_rows\s*\(", cand["source"])
     )

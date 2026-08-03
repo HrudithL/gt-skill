@@ -1852,8 +1852,14 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
 
     frame_present = bool(
         re.search(r"opt_table_outline\s*\(", source)
-        or re.search(r"table_border_(?:left|right)_(?:style|width|color)\s*=", source)
         or re.search(r"\b(?:frame|finalize)\s*\(", source)
+        # A genuine box needs all FOUR sides set, not just left/right (a
+        # candidate that only sets e.g. table_border_left_style="solid"
+        # has one ruled edge, not an enclosing frame).
+        or all(
+            re.search(rf"table_border_{side}_(?:style|width|color)\s*=", source)
+            for side in ("top", "bottom", "left", "right")
+        )
     )
     striping_present = bool(
         re.search(r"opt_row_striping\s*\(", source)
