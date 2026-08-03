@@ -26,6 +26,7 @@ import json
 import math
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -325,7 +326,8 @@ def row_set_identity(
     candidate_group_ids: list | None = None,
     truth_group_ids: list | None = None,
 ) -> dict:
-    """Set-based (order/count-blind) comparison of two row-identifier lists.
+    """Multiset-based (order-blind, but NOT count-blind) comparison of two
+    row-identifier lists.
 
     Returns ``{"matched", "candidate_only", "truth_only", "precision",
     "recall", "exact"}``. `precision`/`recall` are `None` only when a side is
@@ -338,12 +340,23 @@ def row_set_identity(
     `*_group_ids`, when BOTH are supplied, compare `(group_id, row_id)`
     identities rather than bare row ids — a stub label that repeats across
     groups (e.g. "Small"/"Medium" reused in every `groupname_col` group)
-    would otherwise dedupe into a single set entry, letting a candidate
-    covering just one group falsely report `exact=True` against a
-    multi-group ground truth. Group ids are ignored (bare row-id identity)
-    when only one side supplies them, per the same both-sides-or-neither
-    rule `_row_keys` uses — a grouping difference between candidate and
-    truth must not, by itself, make otherwise-identical rows look distinct.
+    keeps its per-group distinctness this way. Group ids are ignored (bare
+    row-id identity) when only one side supplies them, per the same
+    both-sides-or-neither rule `_row_keys` uses — a grouping difference
+    between candidate and truth must not, by itself, make otherwise-identical
+    rows look distinct.
+
+    Uses `collections.Counter` (a MULTISET), not `set`, specifically so a
+    repeated bare-row-id key isn't silently deduplicated when group ids
+    aren't usable on both sides: if the ground truth reuses stub labels
+    across 3 groups (6 total rows, e.g. "Small"/"Large" x3) but the
+    candidate provides no grouping at all, `use_groups` is False and both
+    sides fall back to bare-label keys — with a plain `set`, a candidate
+    containing just ONE "Small" row and ONE "Large" row would collapse to
+    the SAME two-element set as the truth's (deduplicated) labels and
+    falsely report `exact=True`, despite covering a fraction of the real
+    entities. Counter equality requires matching COUNTS per key, not just
+    matching keys, so that degenerate case no longer scores as exact.
     """
     if candidate_row_ids is None or truth_row_ids is None:
         return {
@@ -351,11 +364,13 @@ def row_set_identity(
             "precision": None, "recall": None, "exact": False,
         }
     use_groups = bool(candidate_group_ids) and bool(truth_group_ids)
-    cand = set(_row_keys(candidate_row_ids, candidate_group_ids if use_groups else None))
-    truth = set(_row_keys(truth_row_ids, truth_group_ids if use_groups else None))
-    matched = cand & truth
-    precision = (len(matched) / len(cand)) if cand else (1.0 if not truth else 0.0)
-    recall = (len(matched) / len(truth)) if truth else (1.0 if not cand else 0.0)
+    cand_counts = Counter(_row_keys(candidate_row_ids, candidate_group_ids if use_groups else None))
+    truth_counts = Counter(_row_keys(truth_row_ids, truth_group_ids if use_groups else None))
+    matched = sum((cand_counts & truth_counts).values())
+    total_cand = sum(cand_counts.values())
+    total_truth = sum(truth_counts.values())
+    precision = (matched / total_cand) if total_cand else (1.0 if not total_truth else 0.0)
+    recall = (matched / total_truth) if total_truth else (1.0 if not total_cand else 0.0)
     # A group-aware key's first element can be None (a row with no group
     # label) alongside a real string group id elsewhere in the same set --
     # sorting tuples directly then compares None to a str and raises
@@ -365,12 +380,12 @@ def row_set_identity(
         return (t[0] is None, t[0] or "", t[1])
 
     return {
-        "matched": len(matched),
-        "candidate_only": sorted(cand - truth, key=_key_sort),
-        "truth_only": sorted(truth - cand, key=_key_sort),
+        "matched": matched,
+        "candidate_only": sorted((cand_counts - truth_counts).keys(), key=_key_sort),
+        "truth_only": sorted((truth_counts - cand_counts).keys(), key=_key_sort),
         "precision": precision,
         "recall": recall,
-        "exact": cand == truth,
+        "exact": cand_counts == truth_counts,
     }
 
 

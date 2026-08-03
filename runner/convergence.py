@@ -366,7 +366,7 @@ def _extract_palettes(source: str) -> list[str]:
     return sorted(palettes)
 
 
-def _has_active_tab_style_border(source: str, side_pattern: str) -> bool:
+def _has_active_tab_style_border(source: str, side_pattern: str, *, require_loc_pattern: str | None = None) -> bool:
     """True if a `tab_style(style=style.borders(sides=...), ...)` call
     names a side matching `side_pattern` (a regex alternation like
     `left|right` or `top|bottom`) with a visible (non-`none`/non-zero)
@@ -376,8 +376,25 @@ def _has_active_tab_style_border(source: str, side_pattern: str) -> bool:
     `_hlines_active` (row hairlines, `top`/`bottom`) — `tab_style` +
     `style.borders(...)` is one mechanism that can render either, keyed
     only by which `sides` value is named.
+
+    `require_loc_pattern`, when given, additionally requires the SAME
+    `tab_style(...)` call's `locations=` argument to match it (e.g.
+    `loc\\.body\\(` for a body-row-scoped hairline) — a border drawn at
+    `loc.column_labels()` (the heading rule) must not count as a body-row
+    separator between ordinary rows. Left `None` (the default, used by
+    `_vlines_active`) for callers where a column-group divider
+    legitimately spans BOTH the body and the column-labels row.
     """
     for block in _call_arg_blocks(source, "tab_style"):
+        if require_loc_pattern is not None:
+            loc_val = _kwarg_value(block, "locations")
+            if loc_val is None:
+                positionals = [
+                    p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                loc_val = positionals[1] if len(positionals) >= 2 else None
+            if loc_val is None or not re.search(require_loc_pattern, loc_val):
+                continue
         style_val = _kwarg_value(block, "style")
         if style_val is None:
             positionals = [
@@ -1751,7 +1768,7 @@ def _hlines_active(source: str) -> bool:
         for v in (style, width, _last("color")):
             if v is not None and v.strip().lower() not in ("none", "hidden", ""):
                 return True
-    return _has_active_tab_style_border(source, "top|bottom")
+    return _has_active_tab_style_border(source, "top|bottom", require_loc_pattern=r"loc\s*\.\s*body\s*\(")
 
 
 def _fmt_column_map(source: str) -> dict[str, str]:

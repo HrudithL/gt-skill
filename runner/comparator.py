@@ -16,7 +16,7 @@ and why (§7).
 
 from __future__ import annotations
 
-import importlib.util
+import ast
 import math
 import re
 from dataclasses import dataclass, field
@@ -53,16 +53,39 @@ def build_fingerprint(py_path: Path) -> dict:
 
 
 def load_ground_truth_metadata(gt_path: Path) -> dict:
-    """Import a ground-truth module and read its §5 metadata literals.
+    """Read a ground truth's §5 metadata literals via AST parsing -- no
+    execution of the module at all.
+
+    The §5 design constraint is that this metadata is ALWAYS a plain
+    dict/list literal assignment (no computation) specifically so it's both
+    a human-reviewable answer key and mechanically loadable without exec
+    risk -- `ast.literal_eval` on each matching top-level assignment's value
+    node honors that constraint directly, rather than actually importing
+    and running the ground-truth script (which previously executed the
+    WHOLE module, including its trailing `gt.gtsave(...)`/`finalize(...)`
+    call -- silently re-rendering and overwriting the checked-in PNG on
+    every single comparison, and requiring a full rendering toolchain just
+    to read 5 dicts, which could crash comparison entirely in a headless
+    evaluator without one).
 
     Missing names default per `_METADATA_DEFAULTS` — a ground truth that
     doesn't need `REQUIRED_INSTRUCTIONS` (say) simply omits it, and that
-    must read as "no instructions to check," not as a loader error.
+    must read as "no instructions to check," not as a loader error. A
+    matching name whose value ISN'T a plain literal (violates the §5
+    constraint) is likewise treated as absent rather than raising.
     """
-    spec = importlib.util.spec_from_file_location(f"_gt_{gt_path.stem}", gt_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)  # the module IS the ground truth script
-    return {name: getattr(module, name, default) for name, default in _METADATA_DEFAULTS.items()}
+    tree = ast.parse(gt_path.read_text(), filename=str(gt_path))
+    found: dict[str, object] = {}
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id in _METADATA_DEFAULTS:
+                try:
+                    found[target.id] = ast.literal_eval(node.value)
+                except (ValueError, SyntaxError):
+                    pass
+    return {name: found.get(name, default) for name, default in _METADATA_DEFAULTS.items()}
 
 
 # ----------------------------------------------------------------------- #
@@ -219,7 +242,13 @@ def check_computed_value_correctness(cand: dict, truth: dict, meta: dict) -> Che
 def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Colored-measure selection (≤2 ceiling + right measure(s))"
     cand_mechanics = cand["tier1"].get("color_mechanics", [])
-    ceiling_ok = len(cand_mechanics) <= 2
+    # Count DISTINCT (palette, domain) pairs as "measures", not raw
+    # .data_color()/heatmap() CALLS -- the same conceptual measure applied
+    # via multiple calls that share a palette+domain (e.g. one call per
+    # facet of the same shared scale) is one measure, not N, and must not
+    # be rejected as exceeding the ≤2 ceiling.
+    n_measures = len({(m.get("palette"), m.get("domain")) for m in cand_mechanics})
+    ceiling_ok = n_measures <= 2
     ceiling_pts = 2 if ceiling_ok else 0
     canonical_colored = meta["CANONICAL_MEASURES"].get("colored", [])
     if not canonical_colored:
@@ -236,7 +265,7 @@ def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> Chec
         identity_pts = _round_points(covered / len(canonical_colored), 4)
         identity_detail = f"{covered}/{len(canonical_colored)} canonical colored measures covered by a candidate color call"
     pts = ceiling_pts + identity_pts
-    detail = f"{'≤2 measures OK' if ceiling_ok else f'{len(cand_mechanics)} colored measures exceeds the ceiling of 2'}; {identity_detail}"
+    detail = f"{'≤2 measures OK' if ceiling_ok else f'{n_measures} colored measures exceeds the ceiling of 2'}; {identity_detail}"
     return CheckResult(name, 6, pts, ceiling_ok and identity_pts == 4, detail)
 
 
@@ -655,8 +684,15 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
 def check_title_subtitle_caption_source(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Title/subtitle/caption/source presence per gating rules"
     t1 = cand["tier1"]
-    title_pts = 1 if t1.get("title_text") else 0
-    subtitle_pts = 1 if t1.get("subtitle_text") else 0
+    # Presence-only signals (title_present / caption_present -- the latter
+    # is convergence.py's field name for "tab_header's subtitle= kwarg is
+    # present", not the source-note caption computed a few lines below;
+    # unrelated pre-existing name collision), NOT title_text/subtitle_text
+    # -- those are literal-extraction fields that return None for a
+    # dynamic value (a variable or f-string title/subtitle), which would
+    # otherwise wrongly read as "missing" for an output-identical candidate.
+    title_pts = 1 if t1.get("title_present") else 0
+    subtitle_pts = 1 if t1.get("caption_present") else 0
     n = _n_rows(cand)
     caption_expected = n is not None and n >= 5
     notes = cand["tier1"].get("source_note_texts") or []
