@@ -523,7 +523,12 @@ def group_partition_match(
     # groups into one).
     one_to_one = len(set(designated.values())) == len(designated)
     agree = sum(1 for tg, cg in pairs if cg == designated[tg])
-    match = one_to_one and agree == len(pairs)
+    # Same tolerance as column_match_fraction's _MATCH_THRESHOLD -- a handful
+    # of edge-case mismatches (per the docstring above) shouldn't fail an
+    # otherwise-correct grouping, but requiring one-to-one exactly (no
+    # tolerance) still catches a genuinely different grouping dimension,
+    # which disagrees on most rows, not a handful.
+    match = one_to_one and agree / len(pairs) >= _MATCH_THRESHOLD
     return {"comparable": True, "match": match, "shared_rows": len(pairs)}
 
 

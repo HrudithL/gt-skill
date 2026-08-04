@@ -639,7 +639,7 @@ DATA_CHECKS: list[CheckFn] = [
 # Formatting-compliance checks (§9, 50 pts)
 # ----------------------------------------------------------------------- #
 
-def _domain_element_symmetric(lo: str, hi: str) -> bool:
+def _domain_element_symmetric(lo: str, hi: str, value_range: tuple[float, float] | None = None) -> bool:
     try:
         flo, fhi = float(lo), float(hi)
     except ValueError:
@@ -657,7 +657,16 @@ def _domain_element_symmetric(lo: str, hi: str) -> bool:
     # (zero-width; every value maps to the same color) and a REVERSED
     # `[1, -1]` domain (lo > hi) both pass a bare `isclose(lo, -hi)`
     # magnitude check despite one being degenerate and the other backwards.
-    return flo < 0 < fhi and math.isclose(flo, -fhi, rel_tol=1e-6, abs_tol=1e-9)
+    if not (flo < 0 < fhi and math.isclose(flo, -fhi, rel_tol=1e-6, abs_tol=1e-9)):
+        return False
+    if value_range is None:
+        return True
+    # Symmetric alone isn't sufficient: `[-1, 1]` is symmetric but clips
+    # nearly every value to a palette extreme over data spanning -100..100.
+    # Require the endpoints to also cover the real data's min/max, same
+    # coverage requirement the sequential branch already applies.
+    actual_lo, actual_hi = value_range
+    return flo <= actual_lo and fhi >= actual_hi
 
 
 def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -711,7 +720,7 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
             correct += 1
             continue
         if shape == "diverging":
-            ok = _domain_element_symmetric(elems[0], elems[1])
+            ok = _domain_element_symmetric(elems[0], elems[1], _actual_value_range(cand, _mechanics_columns(entry, cand)))
         else:
             # Sequential: for a literal NUMERIC 2-element domain, verify it
             # actually COVERS the real data range (lo < hi, lo <= actual

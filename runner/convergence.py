@@ -1285,17 +1285,36 @@ _kwarg_value_quoted_aware = _kwarg_value
 
 _TAB_HEADER_POSITIONAL_INDEX = {"title": 0, "subtitle": 1}
 
+_STRING_LITERAL_RE = re.compile(r'^[bBrRuUfF]{0,2}(\'\'\'|"""|\'|")(.*)\1$', re.S)
+
+
+def _is_absent_header_value(val: str) -> bool:
+    """True when `val`'s raw source text is unmistakably empty: the literal
+    `None` keyword, or a string literal containing only whitespace.
+
+    A dynamic expression (a variable, an f-string built from other parts)
+    gets the benefit of the doubt and is NOT treated as absent, since its
+    actual rendered content can't be known from source text alone.
+    """
+    val = val.strip()
+    if val == "None":
+        return True
+    m = _STRING_LITERAL_RE.match(val)
+    return bool(m and m.group(2).strip() == "")
+
 
 def _tab_header_arg_present(source: str, kwarg: str) -> bool:
-    """True if `tab_header(...)`'s LAST call supplies `kwarg` at all — by
-    keyword OR by position (`tab_header("Sales", "FY 2026")`) — regardless
-    of whether its value is a literal.
+    """True if `tab_header(...)`'s LAST call supplies `kwarg` with a value
+    that isn't unmistakably empty — by keyword OR by position
+    (`tab_header("Sales", "FY 2026")`).
 
     Mirrors `_tab_header_text`'s own keyword-then-positional resolution,
     but stops once a value is confirmed supplied rather than extracting its
-    literal text — a presence-only signal that (unlike `_tab_header_text`)
-    correctly reads a dynamic/variable value (`title=TITLE`, an f-string
-    subtitle) as present rather than as absent.
+    literal text. Explicit `None`/empty-string literals (`title=None`,
+    `subtitle=""`) don't earn presence credit — see
+    `_is_absent_header_value` — while a dynamic/variable value
+    (`title=TITLE`, an f-string subtitle) still reads as present, since it
+    can't be proven empty from source text.
     """
     blocks = _call_arg_blocks(source, "tab_header")
     if not blocks:
@@ -1311,7 +1330,7 @@ def _tab_header_arg_present(source: str, kwarg: str) -> bool:
             ]
             if idx < len(positionals):
                 val = positionals[idx]
-    return val is not None
+    return val is not None and not _is_absent_header_value(val)
 
 
 def _tab_header_text(source: str, kwarg: str) -> str | None:
@@ -1720,6 +1739,45 @@ def _targets_table_png(value_text: str) -> bool:
     return unquoted == "table.png"
 
 
+def _blocks_target_table_png(blocks: list[str], path_kwarg: str, path_index: int) -> bool:
+    """True if any call block's path argument plausibly targets `table.png`.
+
+    A literal path (`"preview.png"`) only counts when `_targets_table_png`
+    confirms it; a non-literal path (a variable, an f-string) can't be
+    proven wrong from source text alone and gets the benefit of the
+    doubt, same as `_render_params`'s own `**overrides` handling.
+    """
+    for b in blocks:
+        path_val = _kwarg_value(b, path_kwarg)
+        if path_val is None:
+            positionals = [
+                p for p in _split_top_level_quoted(b) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            path_val = positionals[path_index] if len(positionals) > path_index else None
+        if path_val is None:
+            continue
+        if not _STRING_LITERAL_RE.match(path_val.strip()):
+            return True  # non-literal -- can't prove it's the wrong target
+        if _targets_table_png(path_val):
+            return True
+    return False
+
+
+def _render_call_targets_table_png(source: str) -> bool:
+    """True if some `gtsave`/`finalize` call plausibly produced the
+    harness's mandated `table.png` artifact.
+
+    Any `gtsave()`/`finalize()` call exists != that call wrote the file
+    the harness actually reads: a candidate that only ever writes
+    `preview.png` (or some other literal path) never produced `table.png`,
+    no matter how many render calls it made. Non-literal paths keep the
+    prior benefit-of-the-doubt behavior (see `_blocks_target_table_png`).
+    """
+    if _blocks_target_table_png(_call_arg_blocks(source, "gtsave"), "file", 0):
+        return True
+    return _blocks_target_table_png(_bare_call_blocks(source, "finalize"), "path", 1)
+
+
 def _render_params(source: str) -> dict:
     """`zoom`/`expand`/`vwidth`/`vheight` off the render call.
 
@@ -2104,12 +2162,13 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         ),
         "color_mechanics": _color_mechanics(source),
         "render_params": _render_params(source),
-        # Distinguishes "no render call at all" (a hard failure -- the
-        # mandatory table image was never produced) from "a render call
-        # exists but its params are unresolved" (e.g. a **kwargs expansion
-        # -- genuinely unverifiable, benefit of the doubt). `_render_params`
-        # returns `{}` for BOTH cases, so this is checked independently.
-        "render_call_present": bool(_call_arg_blocks(source, "gtsave") or _bare_call_blocks(source, "finalize")),
+        # Distinguishes "no render call that plausibly wrote table.png" (a
+        # hard failure -- see `_render_call_targets_table_png`) from "a
+        # render call exists but its params are unresolved" (e.g. a
+        # **kwargs expansion -- genuinely unverifiable, benefit of the
+        # doubt). `_render_params` returns `{}` for both that case AND the
+        # hard-failure case, so this is checked independently.
+        "render_call_present": _render_call_targets_table_png(source),
         "title_text": _tab_header_text(source, "title"),
         "subtitle_text": _tab_header_text(source, "subtitle"),
         "source_note_texts": _source_note_texts(source),
