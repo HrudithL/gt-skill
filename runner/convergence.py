@@ -75,6 +75,12 @@ _FAMILY_HEXES: dict[str, list[str]] = {
     ],
 }
 
+# Flattened, for an EXACT-match membership check (not nearest-distance
+# classification) -- used to reject a literal quiet-surface fill (stub
+# tint, etc.) that isn't one of the recognized neutral/washed reference
+# hexes at all, per palettes.md §2's "never a saturated color" rule.
+_ALLOWED_TINT_HEXES = {h.upper() for hexes in _FAMILY_HEXES.values() for h in hexes}
+
 
 # --------------------------------------------------------------------------- #
 # small pure helpers
@@ -104,6 +110,33 @@ def _relative_luminance(rgb: tuple[int, int, int]) -> float:
     """Perceptual luminance on 0..1 (Rec. 709 coefficients)."""
     r, g, b = rgb
     return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0
+
+
+def _is_effectively_transparent(color: str) -> bool:
+    """True if a CSS color literal renders with effectively zero opacity.
+
+    Beyond the literal keywords `transparent`/`none`/empty, also catches
+    an `rgba(...)`/`rgb(...)` with a zero alpha channel and an 8-digit
+    `#RRGGBBAA` / 4-digit `#RGBA` hex whose alpha byte/nibble is zero --
+    all of these render NO visible fill, same as the literal keywords, so
+    a candidate spelling transparency one of these other ways must not
+    read as "a genuinely visible fill" just because it isn't the word
+    "transparent".
+    """
+    c = color.strip()
+    if c.lower() in ("transparent", "none", ""):
+        return True
+    m = re.fullmatch(r"rgba?\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*([\d.]+)\s*\)", c, re.I)
+    if m:
+        try:
+            return float(m.group(1)) == 0.0
+        except ValueError:
+            return False
+    if re.fullmatch(r"#[0-9A-Fa-f]{8}", c):
+        return c[-2:].lower() == "00"
+    if re.fullmatch(r"#[0-9A-Fa-f]{4}", c):
+        return c[-1].lower() == "0"
+    return False
 
 
 def _is_zero_length(v: str) -> bool:
@@ -858,8 +891,21 @@ def _stub_tint_present(source: str) -> bool:
             ]
             color_val = fill_positionals[0] if fill_positionals else None
         unquoted_color = _unquote(color_val) if color_val else None
-        if unquoted_color is not None and unquoted_color.strip().lower() in ("transparent", "none", ""):
-            continue
+        if unquoted_color is not None:
+            stripped = unquoted_color.strip()
+            if _is_effectively_transparent(stripped):
+                continue
+            # Per palettes.md §2, a quiet surface (stub tint included) is
+            # ALWAYS a neutral grey or a washed tint of the table's
+            # Big-Color hue -- NEVER an arbitrary saturated color. A
+            # literal hex that isn't one of the recognized neutral/washed
+            # reference values (e.g. `style.fill(color="#ff0000")`) is a
+            # real grey-budget violation, not a merely-invisible fill --
+            # reject it the same way. A non-hex value (a named CSS color,
+            # a variable) can't be checked this precisely and keeps the
+            # prior benefit-of-the-doubt.
+            if stripped.startswith("#") and stripped.upper() not in _ALLOWED_TINT_HEXES:
+                continue
         return True
     return False
 
@@ -1728,6 +1774,14 @@ def _color_mechanics(source: str) -> list[dict]:
             "columns": _resolve_columns_list(_heatmap_columns_raw(block), var_map),
             "palette": _unquote(_kwarg_value(block, "hue")) or "default",
             "domain": _kwarg_value(block, "domain"),
+            # `heatmap(gt, columns, *, kind, hue, domain=None)`'s own
+            # `kind=` IS the declared encoding decision -- more
+            # authoritative than reverse-engineering it from `palette`
+            # above, which for a helper call is the raw semantic `hue=`
+            # key (e.g. "neutral"), not a real palette name
+            # `_palette_kind` can classify. `None` when `kind` is itself a
+            # dynamic expression -- unresolvable, not a wrong answer.
+            "kind": _unquote(_kwarg_value(block, "kind")),
             "na_color": "#808080",
             "truncate": "False",
             "autocolor_text": "True",
@@ -2115,7 +2169,12 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
 
     frame_present = bool(
         re.search(r"opt_table_outline\s*\(", source)
-        or re.search(r"\b(?:frame|finalize)\s*\(", source)
+        # NOT `finalize(...)` -- the scripted skill's own `finalize()`
+        # helper only calls `gtsave(...)` with render params; it adds no
+        # border of any kind, so a candidate using it alone (without a
+        # separate `frame(gt)` call or explicit border options) renders
+        # genuinely frameless.
+        or re.search(r"\bframe\s*\(", source)
         # A genuine box needs all FOUR sides ACTIVELY set (not just
         # mentioned, and not just left/right) -- a candidate that only
         # sets e.g. table_border_left_style="solid" has one ruled edge,
@@ -2126,7 +2185,11 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
     )
     striping_present = bool(
         _opt_row_striping_enabled(source)
-        or re.search(r"row_striping_background_color\s*=", source)
+        # NOT `row_striping_background_color=` alone -- per GT's own docs,
+        # `opt_row_striping()`/this flag is what actually turns body
+        # striping on; the background color kwarg only configures WHICH
+        # color a stripe would use if enabled, with no visual effect by
+        # itself (striping defaults to off).
         or re.search(r"row_striping_include_table_body\s*=\s*True", source)
         or _bare_call_blocks(source, "stripe")  # runtime stripe(gt) helper
     )

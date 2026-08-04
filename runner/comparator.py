@@ -415,7 +415,17 @@ def check_sequential_vs_diverging(cand: dict, truth: dict, meta: dict) -> CheckR
         if shape is None:
             continue
         total += 1
-        kind = _palette_kind(entry.get("palette"))
+        if entry.get("via_helper") and entry.get("kind") in ("sequential", "diverging"):
+            # heatmap()'s own `kind=` is the declared encoding decision --
+            # more authoritative than reverse-engineering it from
+            # `palette`, which for a helper entry is the raw semantic
+            # `hue=` key (e.g. "neutral"), not a real palette name
+            # `_palette_kind` can classify (it would otherwise always read
+            # as "unknown" and get benefit-of-the-doubt, even for a
+            # `kind="sequential"` call made on genuinely diverging data).
+            kind = entry["kind"]
+        else:
+            kind = _palette_kind(entry.get("palette"))
         if kind == "unknown" or kind == shape:
             correct += 1
         else:
@@ -738,10 +748,19 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
             dom = dom.strip()
         if dom in (None, "None"):
             if entry.get("via_helper"):
-                # heatmap()'s auto-derived domain is always shape-correct
-                # by construction (it computes symmetric-for-diverging /
-                # full-range-for-sequential from the real data itself).
-                correct += 1
+                # heatmap()'s auto-derived domain is shape-correct by
+                # construction ONLY when the declared `kind=` (what its
+                # domain math is actually keyed off) matches the real
+                # data -- a `kind="sequential"` call on genuinely
+                # diverging data computes a full-range, non-symmetric
+                # domain, which is not "shape-correct" despite going
+                # through the helper. `kind` unresolved (a dynamic
+                # expression) keeps the prior benefit-of-the-doubt.
+                helper_kind = entry.get("kind")
+                if helper_kind in (None, "") or helper_kind == shape:
+                    correct += 1
+                else:
+                    notes.append(f"measure {i} ({entry.get('columns')}): heatmap() kind='{helper_kind}' doesn't match {shape} data")
                 continue
             # A literal .data_color(...) that omits domain= instead falls
             # back to great_tables' OWN auto-inferred range, which is NOT
@@ -944,13 +963,24 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     if not cand_summary:
         return CheckResult(name, 4, 0, False, "ground truth has a grand-summary row but candidate has none")
     fmt_map = cand["tier1"].get("fmt_column_map", {})
+    # Required numeric columns come from the GROUND TRUTH's summary row, not
+    # the candidate's -- otherwise a candidate that replaces a required
+    # numeric aggregate with text/empty (or omits it) makes `numeric_cols`
+    # come back empty from ITS OWN data, scoring this 4-point check N/A
+    # (no penalty) for the very removal it's meant to catch, while the
+    # separate existence/correctness check only costs 1 point for the same
+    # thing.
     numeric_cols = [
-        k for k, v in cand_summary[0].get("values", {}).items()
+        k for k, v in truth_summary[0].get("values", {}).items()
         if isinstance(v, (int, float))
     ]
     if not numeric_cols:
         return _na(name, "grand-summary row has no numeric values to check")
-    covered = [c for c in numeric_cols if fmt_map.get(c, fmt_map.get(convergence._ALL_COLUMNS))]
+    cand_values = cand_summary[0].get("values", {})
+    covered = [
+        c for c in numeric_cols
+        if isinstance(cand_values.get(c), (int, float)) and fmt_map.get(c, fmt_map.get(convergence._ALL_COLUMNS))
+    ]
     pts = _round_points(len(covered) / len(numeric_cols), 4)
     detail = (
         f"{len(covered)}/{len(numeric_cols)} numeric summary columns are covered by a fmt_* call "
@@ -1168,7 +1198,7 @@ def _summary_row_style_is_distinctive(source: str) -> bool:
                 ]
                 color_val = fill_positionals[0] if fill_positionals else None
             unquoted_color = convergence._unquote(color_val) if color_val else None
-            if unquoted_color and unquoted_color.strip().lower() in ("transparent", "none", ""):
+            if unquoted_color and convergence._is_effectively_transparent(unquoted_color.strip()):
                 continue
             return True
     return False
@@ -1210,6 +1240,14 @@ def check_caption_not_restating_subtitle(cand: dict, truth: dict, meta: dict) ->
         # nothing here to check the required keywords against.
         return _na(name, "candidate's caption text is a dynamic expression; keyword match not statically verifiable")
     caption = (notes[0] or "").lower() if notes else ""
+    # `caption_present` (Tier 1's field name for "tab_header's subtitle=
+    # kwarg is present") true but `subtitle_text` None means the subtitle
+    # IS there, just a dynamic expression -- collapsing that to "" (same
+    # as genuinely no subtitle) would make the forbidden-keyword search
+    # always pass, crediting "no duplicate" for content we can't actually
+    # read. Only a genuinely ABSENT subtitle correctly reads as "".
+    if cand["tier1"].get("caption_present") and cand["tier1"].get("subtitle_text") is None:
+        return _na(name, "candidate's subtitle text is a dynamic expression; overlap not statically verifiable")
     subtitle = (cand["tier1"].get("subtitle_text") or "").lower()
     should_mention = keywords.get("caption_should_mention", [])
     should_not_duplicate = keywords.get("subtitle_should_not_duplicate", [])
