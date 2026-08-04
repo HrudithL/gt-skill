@@ -389,6 +389,65 @@ def row_set_identity(
     }
 
 
+def group_partition_match(
+    candidate_row_ids: list | None,
+    candidate_group_ids: list | None,
+    truth_row_ids: list | None,
+    truth_group_ids: list | None,
+) -> dict:
+    """Whether the candidate groups rows into the SAME partition as the
+    ground truth, by VALUE (row co-membership) -- not by group label text.
+
+    Returns ``{"comparable": bool, "match": bool, "shared_rows": int}``.
+    ``comparable=False`` when either side has no grouping at all, or there
+    are zero rows shared by identity between the two sides (nothing to
+    compare).
+
+    This is how an explicit "grouped by <concept>" prompt instruction
+    (e.g. "grouped by country of origin") is verified: not by checking that
+    the candidate's group column is LABELED "country" (a candidate could
+    call it anything, or the concept could be phrased differently), and not
+    by requiring an exact source-column name match, but by checking that
+    whichever rows the ground truth places together in one group, the
+    candidate ALSO places together in one group (and vice versa) -- the
+    same "match by computed value, not name" principle used everywhere
+    else in this module. A candidate that groups by an unrelated column
+    (e.g. drivetrain instead of country) will, in general, split the
+    ground truth's own country-based groups apart or merge them
+    differently, and this reports `match=False`.
+
+    Uses each TRUTH group's most-common candidate group as its designated
+    counterpart (majority vote per truth group) rather than requiring
+    every single shared row to agree perfectly -- a handful of edge-case
+    mismatches (e.g. a car reasonably attributable to two countries)
+    shouldn't fail an otherwise-correct grouping, but a genuinely different
+    grouping dimension will fail on most rows, not a handful.
+    """
+    if not candidate_group_ids or not truth_group_ids:
+        return {"comparable": False, "match": False, "shared_rows": 0}
+    cand_map = {normalize_id(rid): gid for rid, gid in zip(candidate_row_ids or [], candidate_group_ids)}
+    truth_map = {normalize_id(rid): gid for rid, gid in zip(truth_row_ids or [], truth_group_ids)}
+    shared = set(cand_map) & set(truth_map)
+    if not shared:
+        return {"comparable": False, "match": False, "shared_rows": 0}
+    # For each TRUTH group, the multiset of candidate groups its shared rows
+    # actually landed in -- majority vote decides that truth group's
+    # designated candidate-group counterpart.
+    truth_to_cand_votes: dict[Any, Counter] = {}
+    for rid in shared:
+        tg, cg = truth_map[rid], cand_map[rid]
+        truth_to_cand_votes.setdefault(tg, Counter())[cg] += 1
+    designated = {tg: votes.most_common(1)[0][0] for tg, votes in truth_to_cand_votes.items()}
+    # A valid partition match additionally requires the mapping to be
+    # one-to-one -- two DIFFERENT truth groups must not designate the SAME
+    # candidate group (that would mean the candidate merged two real
+    # groups into one).
+    one_to_one = len(set(designated.values())) == len(designated)
+    agree = sum(1 for rid in shared if cand_map[rid] == designated[truth_map[rid]])
+    match = one_to_one and agree == len(shared)
+    return {"comparable": True, "match": match, "shared_rows": len(shared)}
+
+
 def _row_key(row_id: Any, group_id: Any | None) -> tuple:
     """Alignment key for one row: `(group_id, row_id)`, both normalized.
 

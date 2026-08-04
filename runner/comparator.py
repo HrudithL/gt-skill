@@ -313,7 +313,26 @@ def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckRes
     notes = []
     for key, expected in required.items():
         if key == "grouping":
-            ok = bool(cand["tier1"].get("grouping_present")) == bool(expected)
+            if not expected:
+                # An explicit "must NOT group" instruction -- presence
+                # alone is the whole question.
+                ok = not bool(cand["tier1"].get("grouping_present"))
+            elif not bool(cand["tier1"].get("grouping_present")):
+                ok = False
+            elif not cand["tier2"].get("ok") or not truth["tier2"].get("ok"):
+                ok = False
+            else:
+                # A required grouping is verified by VALUE -- does the
+                # candidate's grouping induce the SAME partition of rows as
+                # the ground truth's own (e.g. actually grouped by country,
+                # not merely grouped by something) -- not by comparing
+                # group-label text, which a candidate could phrase however
+                # it likes or apply to an unrelated column.
+                result = execution_tier.group_partition_match(
+                    cand["tier2"].get("row_ids"), cand["tier2"].get("row_group_ids"),
+                    truth["tier2"].get("row_ids"), truth["tier2"].get("row_group_ids"),
+                )
+                ok = result["comparable"] and result["match"]
         elif key == "row_count":
             n = _n_rows(cand)
             ok = n == expected
