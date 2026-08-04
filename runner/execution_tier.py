@@ -346,6 +346,15 @@ def row_set_identity(
     between candidate and truth must not, by itself, make otherwise-identical
     rows look distinct.
 
+    Before building group-aware keys, the candidate's group ids are
+    RELABELED to their best-matching truth group id (`_relabel_candidate_
+    groups`, majority vote over shared rows) — group-aware identity must
+    depend on which rows actually land together, not on matching group
+    LABEL SPELLING (candidate "United States" vs. truth "US" for the same
+    real group would otherwise build different keys purely from the
+    wording difference and lose row-selection credit despite a perfectly
+    correct selection).
+
     Uses `collections.Counter` (a MULTISET), not `set`, specifically so a
     repeated bare-row-id key isn't silently deduplicated when group ids
     aren't usable on both sides: if the ground truth reuses stub labels
@@ -364,7 +373,12 @@ def row_set_identity(
             "precision": None, "recall": None, "exact": False,
         }
     use_groups = bool(candidate_group_ids) and bool(truth_group_ids)
-    cand_counts = Counter(_row_keys(candidate_row_ids, candidate_group_ids if use_groups else None))
+    cand_group_ids_for_keys = candidate_group_ids
+    if use_groups:
+        relabeled = _relabel_candidate_groups(candidate_row_ids, candidate_group_ids, truth_row_ids, truth_group_ids)
+        if relabeled is not None:
+            cand_group_ids_for_keys = relabeled
+    cand_counts = Counter(_row_keys(candidate_row_ids, cand_group_ids_for_keys if use_groups else None))
     truth_counts = Counter(_row_keys(truth_row_ids, truth_group_ids if use_groups else None))
     matched = sum((cand_counts & truth_counts).values())
     total_cand = sum(cand_counts.values())
@@ -387,6 +401,65 @@ def row_set_identity(
         "recall": recall,
         "exact": cand_counts == truth_counts,
     }
+
+
+def _group_id_occurrence_pairs(
+    candidate_row_ids: list, candidate_group_ids: list, truth_row_ids: list, truth_group_ids: list,
+) -> list[tuple[Any, Any]]:
+    """``(truth_group, candidate_group)`` for every candidate/truth row pair
+    sharing the same normalized row id, ONE PAIR PER OCCURRENCE.
+
+    A repeated row id (e.g. "Small" appearing once per `groupname_col`
+    group) must not collapse to a single pair -- a naive `{row_id: group_id}`
+    dict comprehension keeps only the LAST occurrence on each side, so two
+    genuinely different rows sharing a label would silently overwrite each
+    other and any downstream comparison would see just one merged pair
+    instead of two real ones. Occurrences of the same row id are paired
+    POSITIONALLY (both sides list their own occurrences in actual rendered
+    order) -- a reasonable, order-preserving pairing without needing a full
+    value-based realignment for this identity-agnostic (label-only)
+    comparison. Leftover occurrences on the longer side (an occurrence-
+    count mismatch for that row id) have no counterpart to pair against and
+    are simply not included.
+    """
+    cand_by_id: dict[str, list] = {}
+    for rid, gid in zip(candidate_row_ids, candidate_group_ids):
+        cand_by_id.setdefault(normalize_id(rid), []).append(gid)
+    truth_by_id: dict[str, list] = {}
+    for rid, gid in zip(truth_row_ids, truth_group_ids):
+        truth_by_id.setdefault(normalize_id(rid), []).append(gid)
+    pairs: list[tuple[Any, Any]] = []
+    for rid in set(cand_by_id) & set(truth_by_id):
+        for tg, cg in zip(truth_by_id[rid], cand_by_id[rid]):
+            pairs.append((tg, cg))
+    return pairs
+
+
+def _relabel_candidate_groups(
+    candidate_row_ids: list, candidate_group_ids: list, truth_row_ids: list, truth_group_ids: list,
+) -> list | None:
+    """Remap each candidate group id to whichever TRUTH group id its rows
+    mostly co-occur with (majority vote over shared row ids), so a group-
+    aware comparison doesn't depend on matching LABEL SPELLING -- only on
+    which rows actually land together.
+
+    Used by `row_set_identity`: without this, a candidate correctly
+    grouping the SAME rows the same way, but spelling a group differently
+    than the ground truth does (candidate "United States" vs. truth "US"
+    for the identical real group), would build DIFFERENT `(group_id,
+    row_id)` keys purely from the label difference and lose row-selection
+    credit despite a perfectly correct selection. Returns `None` when
+    there's nothing to vote on (no shared rows) -- the caller falls back to
+    the unrelabeled group ids in that case.
+    """
+    pairs = _group_id_occurrence_pairs(candidate_row_ids, candidate_group_ids, truth_row_ids, truth_group_ids)
+    if not pairs:
+        return None
+    votes: dict[Any, Counter] = {}
+    for tg, cg in pairs:
+        votes.setdefault(cg, Counter())[tg] += 1
+    relabel = {cg: counter.most_common(1)[0][0] for cg, counter in votes.items()}
+    return [relabel.get(gid, gid) for gid in candidate_group_ids]
 
 
 def group_partition_match(
@@ -425,17 +498,14 @@ def group_partition_match(
     """
     if not candidate_group_ids or not truth_group_ids:
         return {"comparable": False, "match": False, "shared_rows": 0}
-    cand_map = {normalize_id(rid): gid for rid, gid in zip(candidate_row_ids or [], candidate_group_ids)}
-    truth_map = {normalize_id(rid): gid for rid, gid in zip(truth_row_ids or [], truth_group_ids)}
-    shared = set(cand_map) & set(truth_map)
-    if not shared:
+    pairs = _group_id_occurrence_pairs(candidate_row_ids or [], candidate_group_ids, truth_row_ids or [], truth_group_ids)
+    if not pairs:
         return {"comparable": False, "match": False, "shared_rows": 0}
     # For each TRUTH group, the multiset of candidate groups its shared rows
     # actually landed in -- majority vote decides that truth group's
     # designated candidate-group counterpart.
     truth_to_cand_votes: dict[Any, Counter] = {}
-    for rid in shared:
-        tg, cg = truth_map[rid], cand_map[rid]
+    for tg, cg in pairs:
         truth_to_cand_votes.setdefault(tg, Counter())[cg] += 1
     designated = {tg: votes.most_common(1)[0][0] for tg, votes in truth_to_cand_votes.items()}
     # A valid partition match additionally requires the mapping to be
@@ -443,9 +513,9 @@ def group_partition_match(
     # candidate group (that would mean the candidate merged two real
     # groups into one).
     one_to_one = len(set(designated.values())) == len(designated)
-    agree = sum(1 for rid in shared if cand_map[rid] == designated[truth_map[rid]])
-    match = one_to_one and agree == len(shared)
-    return {"comparable": True, "match": match, "shared_rows": len(shared)}
+    agree = sum(1 for tg, cg in pairs if cg == designated[tg])
+    match = one_to_one and agree == len(pairs)
+    return {"comparable": True, "match": match, "shared_rows": len(pairs)}
 
 
 def _row_key(row_id: Any, group_id: Any | None) -> tuple:

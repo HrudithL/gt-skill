@@ -748,12 +748,17 @@ def _find_stub_tint_hue(source: str) -> str | None:
 
 
 def _stub_tint_present(source: str) -> bool:
-    """True if a stub tint is applied, by EITHER accepted mechanism.
+    """True if a VISIBLE stub tint is applied, by EITHER accepted mechanism.
 
     The `stub_tint(gt, *, hue)` runtime helper is one way; a literal
     `tab_style(style=style.fill(color=...), locations=loc.stub())` call is
     the other (what `towny_growth_trends.py` actually uses) — both are
     equally valid per the outcome-only scoring rule.
+
+    A `style.fill(color=...)` call only counts if its color is genuinely
+    visible -- `color="transparent"`/`"none"`/empty renders no tint at all,
+    so a candidate spelling that out would otherwise satisfy this regex
+    and receive full stub-tint credit for a fill nobody can actually see.
     """
     if _find_stub_tint_hue(source) is not None:
         return True
@@ -772,8 +777,23 @@ def _stub_tint_present(source: str) -> bool:
                 p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
             ]
             style_val = positionals[0] if positionals else None
-        if style_val and re.search(r"style\s*\.\s*fill\s*\(", style_val):
-            return True
+        if not style_val:
+            continue
+        fm = re.search(r"style\s*\.\s*fill\s*\(", style_val)
+        if not fm:
+            continue
+        close_idx = _scan_balanced_paren(style_val, fm.end() - 1)
+        fill_block = style_val[fm.end() : close_idx] if close_idx is not None else ""
+        color_val = _kwarg_value(fill_block, "color")
+        if color_val is None:
+            fill_positionals = [
+                p for p in _split_top_level(fill_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            color_val = fill_positionals[0] if fill_positionals else None
+        unquoted_color = _unquote(color_val) if color_val else None
+        if unquoted_color is not None and unquoted_color.strip().lower() in ("transparent", "none", ""):
+            continue
+        return True
     return False
 
 
@@ -1532,6 +1552,8 @@ def _color_mechanics(source: str) -> list[dict]:
     `columns` is an actual `list[str]` (via `_resolve_columns_list`), not a
     comma-joined string — a column name can itself contain a comma, which a
     joined-then-split representation can't distinguish from two columns.
+    `None` (not `[]`) for a literal `.data_color(...)` call whose `columns`
+    is omitted or explicitly `None` — see the "all columns" note below.
 
     `palette` is the palette/hue name (`_palette_of_block` for a literal
     `data_color`, the `hue=` kwarg for `heatmap`) — needed by the
@@ -1569,8 +1591,19 @@ def _color_mechanics(source: str) -> list[dict]:
                 p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
             ]
             cols_val = positionals[0] if positionals else None
+        if cols_val is None or cols_val.strip() == "None":
+            # `columns` omitted entirely, or explicit `columns=None` --
+            # great_tables applies data_color to EVERY column in that case.
+            # Tier 1 has no access to the real rendered schema to enumerate
+            # that here (this function only sees static source text), so a
+            # bare `[]` would wrongly look identical to "unresolvable" --
+            # `None` is an explicit sentinel the comparator expands against
+            # the candidate's actual Tier-2 visible columns at scoring time.
+            resolved_columns = None
+        else:
+            resolved_columns = _resolve_columns_list(cols_val, var_map)
         entries.append((pos, {
-            "columns": _resolve_columns_list(cols_val, var_map),
+            "columns": resolved_columns,
             "palette": _palette_of_block(block),
             "domain": _kwarg_value(block, "domain"),
             "na_color": _kwarg_or_default(block, "na_color"),

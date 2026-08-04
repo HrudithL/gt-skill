@@ -103,6 +103,27 @@ def _visible_columns(fp: dict) -> set[str]:
     return set(tier2.get("columns", {}).keys()) - set(tier2.get("hidden_columns") or [])
 
 
+def _mechanics_columns(entry: dict, fp: dict) -> list[str]:
+    """The columns a `color_mechanics` entry actually targets.
+
+    `entry["columns"] is None` is Tier 1's explicit sentinel for a literal
+    `.data_color(...)` call whose `columns` was omitted or `None` (great_
+    tables applies it to EVERY column in that case) -- Tier 1 can't
+    enumerate the real schema itself (it only sees static source text), so
+    this expands the sentinel against `fp`'s own Tier-2 VISIBLE columns
+    (excluding the stub/group, which data_color never targets) at scoring
+    time, when both tiers are available together. Without this, an
+    all-columns `data_color(...)` call reported an empty column list,
+    making the candidate look like it colored nothing at all.
+    """
+    cols = entry.get("columns")
+    if cols is not None:
+        return cols
+    tier2 = fp["tier2"]
+    visible = _visible_columns(fp) - {tier2.get("stub_column"), tier2.get("group_column")}
+    return sorted(visible)
+
+
 def _n_rows(fp: dict) -> int | None:
     tier2 = fp["tier2"]
     return tier2.get("n_rows") if tier2.get("ok") else None
@@ -118,8 +139,15 @@ def _measure_signedness(fp: dict, columns: list[str]) -> str | None:
     vals: list[float] = []
     for col in columns:
         for v in tier2.get("columns", {}).get(col, []):
-            if v is None or isinstance(v, str):
+            if v is None:
                 continue
+            # Attempt numeric coercion even for a string value -- the Tier-2
+            # JSON serializer falls back to `str(v)` for a type it doesn't
+            # recognize (e.g. `decimal.Decimal`), so a genuinely numeric
+            # colored column can arrive here as numeric-looking strings. A
+            # real categorical string ("On Track") still raises ValueError
+            # and is skipped exactly as before -- this only WIDENS what
+            # counts as numeric, never narrows it.
             try:
                 vals.append(float(v))
             except (TypeError, ValueError):
@@ -132,13 +160,29 @@ def _measure_signedness(fp: dict, columns: list[str]) -> str | None:
 
 
 _DIVERGING_PALETTES = {"rdylgn", "rdbu", "puor"}
+_SEQUENTIAL_PALETTES = {"blues", "greens", "reds", "oranges"}
 
 
 def _palette_kind(palette: str | None) -> str:
-    """"diverging", "sequential", or "unknown" for a palette/hue name."""
+    """"diverging"/"sequential" for a RECOGNIZED palette name, else
+    "unknown" -- never assumed sequential by default.
+
+    A custom diverging palette expressed as a literal hex-list (e.g. the
+    repo's own `corpus/heatmap/good_table.py` red-white-green gradient) is
+    not a bare palette NAME at all, so it can't match either known set --
+    treating that as "unknown" (which `check_sequential_vs_diverging`
+    already gives the benefit of the doubt) rather than defaulting it to
+    "sequential" avoids penalizing a genuinely diverging custom palette for
+    not being one of the ~7 names this function actually recognizes.
+    """
     if not palette:
         return "unknown"
-    return "diverging" if palette.strip().lower() in _DIVERGING_PALETTES else "sequential"
+    p = palette.strip().lower()
+    if p in _DIVERGING_PALETTES:
+        return "diverging"
+    if p in _SEQUENTIAL_PALETTES:
+        return "sequential"
+    return "unknown"
 
 
 def _parse_columns_signature_labels(columns_signature: str) -> dict[str, str]:
@@ -239,6 +283,28 @@ def check_computed_value_correctness(cand: dict, truth: dict, meta: dict) -> Che
     return CheckResult(name, 10, pts, len(missing) == 0, detail)
 
 
+def _any_colored_column_matches(cand_tier2: dict, truth_tier2: dict, colored_cols: set[str], truth_col: str) -> bool:
+    """True if ANY column in `colored_cols` value-matches `truth_col`
+    against the ground truth, at or above the standard match threshold.
+
+    Deliberately does NOT use `match_measure_by_value` here: that function
+    picks the SINGLE highest-scoring (leftmost-tied) column across ALL
+    visible candidate columns. When two columns tie on a perfect value
+    match and only the LATER one is actually colored, its leftmost tie-
+    break would return the EARLIER, uncolored column -- silently missing
+    the colored, equally-matching target and reporting the measure as
+    uncolored despite a real colored match existing. Checking every
+    colored column independently answers "is this measure covered by SOME
+    colored column", not "does the single tie-broken winner happen to be
+    colored".
+    """
+    for col in colored_cols:
+        frac = execution_tier.column_match_fraction(cand_tier2, truth_tier2, col, truth_col)
+        if frac is not None and frac >= execution_tier._MATCH_THRESHOLD:
+            return True
+    return False
+
+
 def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Colored-measure selection (≤2 ceiling + right measure(s))"
     cand_mechanics = cand["tier1"].get("color_mechanics", [])
@@ -263,11 +329,10 @@ def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> Chec
         # that merely displays the canonical values uncolored (no
         # data_color/heatmap at all) would be credited with "covering" the
         # colored measure just for showing the right numbers.
-        colored_cols = {c for m in cand_mechanics for c in m.get("columns", [])}
+        colored_cols = {c for m in cand_mechanics for c in _mechanics_columns(m, cand)}
         covered = 0
         for m in canonical_colored:
-            matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
-            if matched_col and matched_col in colored_cols:
+            if _any_colored_column_matches(cand["tier2"], truth["tier2"], colored_cols, m):
                 covered += 1
         identity_pts = _round_points(covered / len(canonical_colored), 4)
         identity_detail = f"{covered}/{len(canonical_colored)} canonical colored measures covered by a candidate color call"
@@ -285,7 +350,7 @@ def check_sequential_vs_diverging(cand: dict, truth: dict, meta: dict) -> CheckR
         return CheckResult(name, 5, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
     correct, total, notes = 0, 0, []
     for entry in mechanics:
-        shape = _measure_signedness(cand, entry.get("columns", []))
+        shape = _measure_signedness(cand, _mechanics_columns(entry, cand))
         if shape is None:
             continue
         total += 1
@@ -338,21 +403,36 @@ def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckRes
             ok = n == expected
         elif key == "sort":
             col, direction = expected
-            vals = cand["tier2"].get("columns", {}).get(col) if cand["tier2"].get("ok") else None
-            if not vals or any(v is None for v in vals):
+            if not cand["tier2"].get("ok") or not truth["tier2"].get("ok"):
                 ok = False
             else:
-                # Generic ordering check (works for numbers, strings, and
-                # ISO-date strings alike) rather than requiring numeric
-                # values -- a text or date sort column must not be treated
-                # as unsatisfiable just because its values aren't int/float.
-                try:
-                    ok = (
-                        all(a >= b for a, b in zip(vals, vals[1:])) if direction == "desc"
-                        else all(a <= b for a, b in zip(vals, vals[1:]))
-                    )
-                except TypeError:
+                vals = cand["tier2"].get("columns", {}).get(col)
+                if not vals or any(v is None for v in vals):
                     ok = False
+                else:
+                    # Verify the column's VALUES actually match the ground
+                    # truth's (same-named column, default threshold) before
+                    # trusting monotonicity -- otherwise a candidate could
+                    # satisfy "sorted" by replacing the column with a
+                    # constant (every adjacent pair trivially >=/<=) or any
+                    # other unrelated monotonic sequence, without showing
+                    # the requested measure at all.
+                    value_check = execution_tier.computed_value_correctness(cand["tier2"], truth["tier2"], col)
+                    if not value_check["passed"]:
+                        ok = False
+                    else:
+                        # Generic ordering check (works for numbers, strings,
+                        # and ISO-date strings alike) rather than requiring
+                        # numeric values -- a text or date sort column must
+                        # not be treated as unsatisfiable just because its
+                        # values aren't int/float.
+                        try:
+                            ok = (
+                                all(a >= b for a, b in zip(vals, vals[1:])) if direction == "desc"
+                                else all(a <= b for a, b in zip(vals, vals[1:]))
+                            )
+                        except TypeError:
+                            ok = False
         else:
             ok = False
         satisfied += 1 if ok else 0
@@ -476,11 +556,16 @@ DATA_CHECKS: list[CheckFn] = [
 
 def _domain_element_symmetric(lo: str, hi: str) -> bool:
     try:
-        return math.isclose(float(lo), -float(hi), rel_tol=1e-6, abs_tol=1e-9)
+        flo, fhi = float(lo), float(hi)
     except ValueError:
-        pass
-    a, b = lo.strip().lstrip("-").strip(), hi.strip().lstrip("-").strip()
-    return a == b and lo.strip() != hi.strip()
+        a, b = lo.strip().lstrip("-").strip(), hi.strip().lstrip("-").strip()
+        return a == b and lo.strip() != hi.strip()
+    # Require an actually-negative lower bound and an actually-positive
+    # upper bound, not just equal magnitudes -- a collapsed `[0, 0]` domain
+    # (zero-width; every value maps to the same color) and a REVERSED
+    # `[1, -1]` domain (lo > hi) both pass a bare `isclose(lo, -hi)`
+    # magnitude check despite one being degenerate and the other backwards.
+    return flo < 0 < fhi and math.isclose(flo, -fhi, rel_tol=1e-6, abs_tol=1e-9)
 
 
 def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -490,7 +575,7 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
         return _na(name, "candidate has no colored measures")
     correct, total, notes = 0, 0, []
     for i, entry in enumerate(mechanics):
-        shape = _measure_signedness(cand, entry.get("columns", []))
+        shape = _measure_signedness(cand, _mechanics_columns(entry, cand))
         if shape is None:
             continue
         total += 1
@@ -595,7 +680,7 @@ def check_striping_gate(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # meaning" role a colored measure would for this gate's purposes.
     accounted_for: set[str] = set(t1.get("bold_columns") or [])
     for e in mechanics:
-        accounted_for |= set(e.get("columns", []))
+        accounted_for |= set(_mechanics_columns(e, cand))
     fully_filled = bool(accounted_for) and bool(visible) and (len(accounted_for & visible) / len(visible) >= 0.8)
     expected = n >= 10 and not fully_filled
     actual = bool(t1.get("striping_present"))
@@ -794,9 +879,93 @@ def check_render_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
         expand = float(params.get("expand", "5"))
     except ValueError:
         expand = 5.0
-    if expand > 5.0:
-        return CheckResult(name, 2, 1, False, f"zoom={zoom} < 2.0, but expand={expand} was raised first (partial credit per the fit-order rule)")
+    # The fit-order rule is "grow room before shrinking zoom" -- vwidth/
+    # vheight are an EQUALLY valid way to grow room as expand is (both are
+    # captured by _render_params, but only expand was ever checked here).
+    # Neither has a fixed numeric default (great_tables sizes them
+    # dynamically when omitted), so simply being EXPLICITLY set at all is
+    # the signal that the candidate deliberately grew the canvas.
+    viewport_raised = "vwidth" in params or "vheight" in params
+    if expand > 5.0 or viewport_raised:
+        via = "expand" if expand > 5.0 and not viewport_raised else (
+            "vwidth/vheight" if viewport_raised and expand <= 5.0 else "expand and vwidth/vheight"
+        )
+        return CheckResult(name, 2, 1, False, f"zoom={zoom} < 2.0, but {via} was raised first (partial credit per the fit-order rule)")
     return CheckResult(name, 2, 0, False, f"zoom={zoom} < default 2.0 without raising expand/vwidth/vheight first")
+
+
+def _summary_row_style_is_distinctive(source: str) -> bool:
+    """True if a `tab_style(...)` call scoped to the grand-summary row
+    (`loc.grand_summary()`/`loc.summary_rows()`) applies an ACTUALLY
+    distinctive style -- bold text, a visible (non-zero, non-"none")
+    border, or a visible (non-transparent) fill.
+
+    Replaces two loose signals that don't verify anything real: a bare
+    `#BDBDBD` substring search anywhere in the WHOLE source (which also
+    matches `group_emphasis()`'s unrelated row-group border, a comment, or
+    a docstring), and a bare "does `loc.grand_summary_rows(...)` appear
+    anywhere" check (which a no-op like `style.text(weight="normal")`
+    scoped to that location would also satisfy, despite rendering
+    identically to the body).
+    """
+    for block in convergence._call_arg_blocks(source, "tab_style"):
+        loc_val = convergence._kwarg_value(block, "locations")
+        if loc_val is None:
+            positionals = [
+                p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            loc_val = positionals[1] if len(positionals) >= 2 else None
+        if loc_val is None or not re.search(r"loc\s*\.\s*(?:grand_)?summary(?:_rows)?\s*\(", loc_val):
+            continue
+        style_val = convergence._kwarg_value(block, "style")
+        if style_val is None:
+            positionals = [
+                p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            style_val = positionals[0] if positionals else None
+        if not style_val:
+            continue
+        for tm in re.finditer(r"style\s*\.\s*text\s*\(", style_val):
+            close_idx = convergence._scan_balanced_paren(style_val, tm.end() - 1)
+            if close_idx is None:
+                continue
+            weight_val = convergence._kwarg_value(style_val[tm.end():close_idx], "weight")
+            if weight_val:
+                unquoted = convergence._unquote(weight_val)
+                if unquoted and unquoted.strip().lower() not in ("normal", "regular", "400", ""):
+                    return True
+        for bm in re.finditer(r"style\s*\.\s*borders\s*\(", style_val):
+            close_idx = convergence._scan_balanced_paren(style_val, bm.end() - 1)
+            if close_idx is None:
+                continue
+            borders_block = style_val[bm.end():close_idx]
+            border_style_val = convergence._kwarg_value(borders_block, "style")
+            if border_style_val:
+                unquoted = convergence._unquote(border_style_val)
+                if unquoted and unquoted.strip().lower() in ("none", "hidden", ""):
+                    continue
+            weight_val = convergence._kwarg_value(borders_block, "weight")
+            if weight_val:
+                unquoted_w = convergence._unquote(weight_val)
+                if unquoted_w and convergence._is_zero_length(unquoted_w):
+                    continue
+            return True
+        for fm in re.finditer(r"style\s*\.\s*fill\s*\(", style_val):
+            close_idx = convergence._scan_balanced_paren(style_val, fm.end() - 1)
+            if close_idx is None:
+                continue
+            fill_block = style_val[fm.end():close_idx]
+            color_val = convergence._kwarg_value(fill_block, "color")
+            if color_val is None:
+                fill_positionals = [
+                    p for p in convergence._split_top_level(fill_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                color_val = fill_positionals[0] if fill_positionals else None
+            unquoted_color = convergence._unquote(color_val) if color_val else None
+            if unquoted_color and unquoted_color.strip().lower() in ("transparent", "none", ""):
+                continue
+            return True
+    return False
 
 
 def check_summary_row_visual_distinction(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -816,10 +985,8 @@ def check_summary_row_visual_distinction(cand: dict, truth: dict, meta: dict) ->
     cand_summary = cand["tier2"].get("summary_rows") or [] if cand["tier2"].get("ok") else []
     if not cand_summary:
         return CheckResult(name, 1, 0, False, "ground truth has a grand-summary row but candidate has none")
-    distinct = bool(re.search(r"#BDBDBD", cand["source"], re.I)) or bool(
-        re.search(r"loc\s*\.\s*(?:grand_)?summary_rows\s*\(", cand["source"])
-    )
-    return CheckResult(name, 1, 1 if distinct else 0, distinct, "checked for the summary/group structural rule color (#BDBDBD) or a summary-row-scoped tab_style")
+    distinct = _summary_row_style_is_distinctive(cand["source"])
+    return CheckResult(name, 1, 1 if distinct else 0, distinct, "checked for an active bold/border/fill style scoped to the summary row (not a bare token search)")
 
 
 def check_caption_not_restating_subtitle(cand: dict, truth: dict, meta: dict) -> CheckResult:
