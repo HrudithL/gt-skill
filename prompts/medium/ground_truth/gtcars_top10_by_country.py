@@ -53,30 +53,31 @@ REQUIRED_INSTRUCTIONS = {
                            # text) via execution_tier.group_partition_match. This
                            # ground truth genuinely groups by ctry_origin, so no
                            # special handling is needed beyond that being true.
-    # Deliberately NO "sort" key: with grouping enabled, rows display grouped-
-    # by-country, and a later group's top car can legitimately cost more than
-    # an earlier group's cars (a well-grouped candidate could order its
-    # groups differently than this ground truth does and still be correct).
-    # The comparator's "sort" check validates strict GLOBAL monotonicity,
-    # which grouped display order is not required to satisfy -- adding this
-    # key would risk penalizing a genuinely correct, well-grouped candidate.
+    # "sort" with the "within_group" scope (not the default global scope):
+    # a plain global sort check would false-fail a well-grouped candidate
+    # whose LATER group's top car costs more than an EARLIER group's cars
+    # (grouped display legitimately breaks strict cross-group ordering).
+    # But omitting a sort check entirely would let a candidate shuffle cars
+    # WITHIN a country with no penalty, losing the "most expensive first"
+    # reading the prompt implies. "within_group" verifies each candidate
+    # row-group's own segment is independently descending, without
+    # requiring cross-group monotonicity.
+    "sort": ("msrp", "desc", "within_group"),
 }
 
 # Keyword-presence check for the caption/subtitle overlap rule (see §9).
-# `caption_should_mention` is an ANY-of-these match (see comparator.py's
+# `caption_should_mention` is an ALL-of-these match (see comparator.py's
 # check_caption_not_restating_subtitle) -- unlike towny's genuinely
-# ambiguous "which growth definition" question, "most expensive" here has
-# only one real candidate metric (msrp), so a compliant caption need not
-# restate that methodology at all to be a good, non-duplicative takeaway.
-# Broadened well beyond the original 3 phrases to include this specific
-# top-10 slice's own dominant facts (Italy/Ferrari/Lamborghini account for
-# 6 of the 10 cars) -- any reasonable, data-grounded insight will mention
-# at least one of a country, a specific car, or the ranking concept.
+# ambiguous "which growth definition" question (where all 3 keywords
+# jointly make up one unavoidable disambiguation the caption MUST state),
+# "most expensive" here has only one real candidate metric (msrp): there
+# is no genuine definitional ambiguity to force a caption to restate.
+# Left empty rather than picking phrases a good, distinctive, non-
+# duplicative caption might reasonably NOT use (e.g. one about country
+# mix or a standout car) -- an empty list is vacuously satisfied, leaving
+# only the (still-enforced) "doesn't just restate the subtitle" check.
 CAPTION_KEYWORDS = {
-    "caption_should_mention": [
-        "most expensive", "msrp", "country of origin",
-        "italy", "italian", "ferrari", "lamborghini", "laferrari",
-    ],
+    "caption_should_mention": [],
     "subtitle_should_not_duplicate": ["ordered by their priciest car", "sorted by price"],
 }
 
