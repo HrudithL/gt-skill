@@ -483,9 +483,15 @@ def check_stub_existence(cand: dict, truth: dict, meta: dict) -> CheckResult:
 def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "No same-family hue collision across 2 measures"
     mechanics = cand["tier1"].get("color_mechanics", [])
-    if len(mechanics) < 2:
-        return _na(name, "fewer than 2 colored measures; no collision possible")
-    palettes = [e.get("palette") for e in mechanics[:2]]
+    # Same distinct-(palette, domain) dedup as check_colored_measure_
+    # selection's ceiling count -- the same conceptual measure applied via
+    # multiple calls that share a palette+domain is one measure, not two,
+    # and its (necessarily identical) palette against itself must not read
+    # as "two measures colliding on the same hue".
+    distinct_measures = list({(m.get("palette"), m.get("domain")) for m in mechanics})
+    if len(distinct_measures) < 2:
+        return _na(name, "fewer than 2 distinct colored measures; no collision possible")
+    palettes = [p for p, _ in distinct_measures[:2]]
     collision = palettes[0] is not None and palettes[0] == palettes[1]
     return CheckResult(name, 1, 0 if collision else 1, not collision, f"colored-measure palettes: {palettes}")
 

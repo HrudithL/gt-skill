@@ -609,12 +609,25 @@ def _shared_pairs(
         use_groups = bool(candidate_fp.get("row_group_ids")) and bool(truth_fp.get("row_group_ids"))
         cand_keys = _row_keys(cand_ids, candidate_fp.get("row_group_ids") if use_groups else None)
         truth_keys = _row_keys(truth_ids, truth_fp.get("row_group_ids") if use_groups else None)
+    elif truth_ids:
+        # The ground truth has real entity identity (a stub) but the
+        # candidate supplies none at all -- there is no way to verify
+        # PER-ENTITY correctness without matching identity on both sides,
+        # and falling back to bucket (order-blind) matching here would let
+        # a candidate PERMUTE a canonical column's values across entities
+        # (e.g. swap two rows' prices) and still score a perfect multiset
+        # match. Not comparable -- `check_row_selection_identity` already
+        # zeros the separate row-identity score for this exact case
+        # (no candidate stub); value correctness must not silently still
+        # pass via bucket matching when identity itself is unverifiable.
+        return []
     else:
-        # No stub on one (or both) sides -- there's no named identity to
-        # align by at all, so every row is equally "the same key" and falls
-        # into the one-key-group matching below (NOT a positional zip,
-        # which would make an unstubbed candidate that reproduces the same
-        # values in a different order score as a mismatch).
+        # The ground truth itself has no stub (no identity to align by
+        # even in principle, regardless of what the candidate does) --
+        # every row is equally "the same key", so this falls into the
+        # one-key-group matching below (NOT a positional zip, which would
+        # make an unstubbed candidate that reproduces the same values in a
+        # different order score as a mismatch).
         cand_keys = [_ALL_ONE_KEY] * len(cand_values)
         truth_keys = [_ALL_ONE_KEY] * len(truth_values)
 

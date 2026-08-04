@@ -439,6 +439,30 @@ def _has_active_tab_style_border(source: str, side_pattern: str, *, require_loc_
     return False
 
 
+def _opt_row_striping_enabled(source: str) -> bool:
+    """True if the LAST `.opt_row_striping(...)` call enables striping.
+
+    `opt_row_striping(row_striping: bool = True)` -- a bare regex presence
+    check would misread an explicit `.opt_row_striping(False)` (or
+    `row_striping=False`) as striping being ON just because the call
+    itself appears in the source. Uses the LAST call (chained-call
+    last-wins, consistent with every other multi-call field in this
+    module); omitted argument means the documented default (`True`).
+    """
+    blocks = _call_arg_blocks(source, "opt_row_striping")
+    if not blocks:
+        return False
+    block = blocks[-1]
+    val = _kwarg_value(block, "row_striping")
+    if val is None:
+        positionals = [p for p in _split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)]
+        val = positionals[0] if positionals else None
+    if val is None:
+        return True
+    unquoted = (_unquote(val) or val).strip().lower()
+    return unquoted not in ("false", "0")
+
+
 def _vlines_active(source: str) -> bool:
     """True if a column-group divider is present, by EITHER accepted mechanism.
 
@@ -1951,7 +1975,7 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         )
     )
     striping_present = bool(
-        re.search(r"opt_row_striping\s*\(", source)
+        _opt_row_striping_enabled(source)
         or re.search(r"row_striping_background_color\s*=", source)
         or re.search(r"row_striping_include_table_body\s*=\s*True", source)
         or _bare_call_blocks(source, "stripe")  # runtime stripe(gt) helper
