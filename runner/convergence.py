@@ -1721,7 +1721,19 @@ def _color_mechanics(source: str) -> list[dict]:
     `domain` instead falls back to `great_tables`' own auto-inferred range,
     which is NOT guaranteed symmetric around zero for diverging data, so
     the two cases must not get the same benefit-of-the-doubt treatment.
+
+    `source` is comment-stripped FIRST (quote-aware, so a genuinely live
+    call is untouched) -- otherwise a commented-out `# gt.data_color(...)`
+    line is scanned exactly like a live one, and if it names a canonical
+    measure, the candidate can receive colored-measure, palette-shape,
+    domain, and mechanics credit for a table that renders completely
+    uncolored. Does NOT catch the same dead text inside a triple-quoted
+    docstring (a string literal is legitimate content everywhere else in
+    this module; distinguishing "this triple-quoted string IS a docstring"
+    from "IS an argument value" isn't attempted here) -- a narrower,
+    known-remaining gap.
     """
+    source = _strip_line_comments(source)
     var_map = _list_var_map(source)
     entries: list[tuple[int, dict]] = []
     for pos, block in _call_arg_blocks_pos(source, "data_color"):

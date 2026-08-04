@@ -429,7 +429,16 @@ def _group_id_occurrence_pairs(
     for rid, gid in zip(truth_row_ids, truth_group_ids):
         truth_by_id.setdefault(normalize_id(rid), []).append(gid)
     pairs: list[tuple[Any, Any]] = []
-    for rid in set(cand_by_id) & set(truth_by_id):
+    # `sorted`, not a bare `set` intersection -- `normalize_id` always
+    # returns `str`, so this is well-ordered, and it matters downstream:
+    # `group_partition_match`'s vote-count ties are broken by
+    # `Counter.most_common(1)`, which resolves ties by insertion order.
+    # Iterating a `set` feeds that insertion order from Python's per-
+    # process, randomized string hash seed -- so a genuine vote tie could
+    # pick a DIFFERENT winning group mapping across separate runs of the
+    # exact same candidate/truth pair, contradicting this comparator's
+    # deterministic, no-LLM design contract.
+    for rid in sorted(set(cand_by_id) & set(truth_by_id)):
         for tg, cg in zip(truth_by_id[rid], cand_by_id[rid]):
             pairs.append((tg, cg))
     return pairs
