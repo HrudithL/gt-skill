@@ -233,6 +233,16 @@ gt = (
         table_border_bottom_style="solid", table_border_bottom_color="#CCCCCC", table_border_bottom_width="1px",
         table_border_left_style="solid", table_border_left_color="#CCCCCC", table_border_left_width="1px",
         table_border_right_style="solid", table_border_right_color="#CCCCCC", table_border_right_width="1px",
+        # Group-header emphasis (house group_emphasis()): bold weight + the
+        # structural rule above/below each year's header row, deliberately
+        # NO background fill -- a section break, not a result worth its own
+        # highlight (that's the summary/total row's job, which this table
+        # doesn't have). Missing entirely in an earlier draft of this file;
+        # every year label rendered as an undifferentiated body row.
+        row_group_font_weight="bold",
+        row_group_border_top_color="#BDBDBD",
+        row_group_border_bottom_color="#BDBDBD",
+        row_group_padding="6px",
     )
     # 72 rows, and only 3 of 6 measure columns are colored (open/close/
     # avg_volume stay plain) -- nowhere near "essentially fully filled," so
