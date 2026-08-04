@@ -38,7 +38,7 @@ _ROOT = _HERE.parent.parent.parent
 # entry here -- LABEL_SYNONYMS only covers ordinary body columns.
 LABEL_SYNONYMS = {
     "msrp": ["msrp", "price", "sticker price", "retail price", "cost"],
-    "drivetrain": ["drivetrain", "drive type", "driveline"],
+    "drivetrain": ["drivetrain", "drive", "drive type", "driveline"],
     "trsmn": ["transmission", "gearbox", "trans."],
 }
 
