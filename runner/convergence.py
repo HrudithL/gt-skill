@@ -1199,6 +1199,34 @@ _kwarg_value_quoted_aware = _kwarg_value
 _TAB_HEADER_POSITIONAL_INDEX = {"title": 0, "subtitle": 1}
 
 
+def _tab_header_arg_present(source: str, kwarg: str) -> bool:
+    """True if `tab_header(...)`'s LAST call supplies `kwarg` at all — by
+    keyword OR by position (`tab_header("Sales", "FY 2026")`) — regardless
+    of whether its value is a literal.
+
+    Mirrors `_tab_header_text`'s own keyword-then-positional resolution,
+    but stops once a value is confirmed supplied rather than extracting its
+    literal text — a presence-only signal that (unlike `_tab_header_text`)
+    correctly reads a dynamic/variable value (`title=TITLE`, an f-string
+    subtitle) as present rather than as absent.
+    """
+    blocks = _call_arg_blocks(source, "tab_header")
+    if not blocks:
+        return False
+    block = blocks[-1]
+    val = _kwarg_value_quoted_aware(block, kwarg)
+    if val is None:
+        idx = _TAB_HEADER_POSITIONAL_INDEX.get(kwarg)
+        if idx is not None:
+            positionals = [
+                p for p in _split_top_level_quoted(block)
+                if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            if idx < len(positionals):
+                val = positionals[idx]
+    return val is not None
+
+
 def _tab_header_text(source: str, kwarg: str) -> str | None:
     """Literal text of `tab_header(<kwarg>=...)` (title/subtitle), if set.
 
@@ -1517,6 +1545,15 @@ def _color_mechanics(source: str) -> list[dict]:
     per-entry rather than relying on `_domain_signature`'s OWN list, which
     is SORTED (for stable repeat-vs-repeat comparison) and so cannot be
     zipped positionally against this list, which is TRUE SOURCE ORDER.
+
+    `via_helper` is True for a `heatmap(...)` entry, False for a literal
+    `.data_color(...)` entry — needed by the comparator's domain check: an
+    OMITTED domain is guaranteed shape-correct (symmetric-for-diverging /
+    full-range-for-sequential) only for `heatmap(...)`, which always
+    computes one internally. A literal `.data_color(...)` that omits
+    `domain` instead falls back to `great_tables`' own auto-inferred range,
+    which is NOT guaranteed symmetric around zero for diverging data, so
+    the two cases must not get the same benefit-of-the-doubt treatment.
     """
     var_map = _list_var_map(source)
     entries: list[tuple[int, dict]] = []
@@ -1539,6 +1576,7 @@ def _color_mechanics(source: str) -> list[dict]:
             "na_color": _kwarg_or_default(block, "na_color"),
             "truncate": _kwarg_or_default(block, "truncate"),
             "autocolor_text": _kwarg_or_default(block, "autocolor_text"),
+            "via_helper": False,
         }))
     for pos, block in _bare_call_blocks_pos(source, "heatmap"):
         entries.append((pos, {
@@ -1548,6 +1586,7 @@ def _color_mechanics(source: str) -> list[dict]:
             "na_color": "#808080",
             "truncate": "False",
             "autocolor_text": "True",
+            "via_helper": True,
         }))
     entries.sort(key=lambda e: e[0])
     return [d for _, d in entries]
@@ -1884,12 +1923,11 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         or re.search(r"row_striping_include_table_body\s*=\s*True", source)
         or _bare_call_blocks(source, "stripe")  # runtime stripe(gt) helper
     )
-    caption_present = any(
-        re.search(r"subtitle\s*=", block) for block in _call_arg_blocks(source, "tab_header")
-    )
-    title_present = any(
-        re.search(r"\btitle\s*=", block) for block in _call_arg_blocks(source, "tab_header")
-    )
+    # NOTE: keyword-OR-positional presence (a valid `.tab_header("Sales",
+    # "FY 2026")` supplies both fields positionally, with no `title=`/
+    # `subtitle=` keyword text anywhere in the block).
+    caption_present = _tab_header_arg_present(source, "subtitle")
+    title_present = _tab_header_arg_present(source, "title")
     source_present = bool(re.search(r"\.tab_source_note\s*\(", source))
 
     palettes = _extract_palettes(source)
@@ -1948,6 +1986,12 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         ),
         "color_mechanics": _color_mechanics(source),
         "render_params": _render_params(source),
+        # Distinguishes "no render call at all" (a hard failure -- the
+        # mandatory table image was never produced) from "a render call
+        # exists but its params are unresolved" (e.g. a **kwargs expansion
+        # -- genuinely unverifiable, benefit of the doubt). `_render_params`
+        # returns `{}` for BOTH cases, so this is checked independently.
+        "render_call_present": bool(_call_arg_blocks(source, "gtsave") or _bare_call_blocks(source, "finalize")),
         "title_text": _tab_header_text(source, "title"),
         "subtitle_text": _tab_header_text(source, "subtitle"),
         "source_note_texts": _source_note_texts(source),

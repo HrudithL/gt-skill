@@ -258,9 +258,16 @@ def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> Chec
         identity_pts = 0
         identity_detail = f"candidate failed to execute: {cand['tier2'].get('error')}"
     else:
+        # A value-matching column only counts if it's actually TARGETED by
+        # one of the candidate's own color calls -- otherwise a candidate
+        # that merely displays the canonical values uncolored (no
+        # data_color/heatmap at all) would be credited with "covering" the
+        # colored measure just for showing the right numbers.
+        colored_cols = {c for m in cand_mechanics for c in m.get("columns", [])}
         covered = 0
         for m in canonical_colored:
-            if execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m):
+            matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
+            if matched_col and matched_col in colored_cols:
                 covered += 1
         identity_pts = _round_points(covered / len(canonical_colored), 4)
         identity_detail = f"{covered}/{len(canonical_colored)} canonical colored measures covered by a candidate color call"
@@ -476,10 +483,18 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
         if dom is not None:
             dom = dom.strip()
         if dom in (None, "None"):
-            # heatmap()'s auto-derived domain is always shape-correct by
-            # construction (it computes symmetric-for-diverging /
-            # full-range-for-sequential from the real data itself).
-            correct += 1
+            if entry.get("via_helper"):
+                # heatmap()'s auto-derived domain is always shape-correct
+                # by construction (it computes symmetric-for-diverging /
+                # full-range-for-sequential from the real data itself).
+                correct += 1
+                continue
+            # A literal .data_color(...) that omits domain= instead falls
+            # back to great_tables' OWN auto-inferred range, which is NOT
+            # guaranteed symmetric around zero for diverging data (nor
+            # consistently shared across facets) -- a real domain-
+            # computation gap, not benefit-of-the-doubt territory.
+            notes.append(f"measure {i} ({entry.get('columns')}): literal data_color omits domain= (not guaranteed {shape}-correct)")
             continue
         # Split on the TOP-LEVEL comma only (via the shared paren-depth-aware
         # splitter) -- a flat `[(.+?),(.+)]` regex misreads a nested comma
@@ -615,10 +630,22 @@ def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
     mechanics = cand["tier1"].get("color_mechanics", [])
     if not mechanics:
         return _na(name, "candidate has no colored measures")
+    n = len(mechanics)
     na_ok = sum(1 for e in mechanics if e.get("na_color") == "#808080")
     trunc_ok = sum(1 for e in mechanics if e.get("truncate") == "False")
-    pts = _round_points(na_ok / len(mechanics), 2) + _round_points(trunc_ok / len(mechanics), 2)
-    return CheckResult(name, 4, pts, pts == 4, f"na_color correct {na_ok}/{len(mechanics)}, truncate=False correct {trunc_ok}/{len(mechanics)}")
+    autocolor_ok = sum(1 for e in mechanics if e.get("autocolor_text") == "True")
+    # A single rounding over all 3*n sub-checks (rather than one
+    # _round_points() call per dimension) so a fully-correct candidate
+    # always sums to exactly 4, and "autocolor_text=False" (readable text
+    # isn't guaranteed over a dark fill) actually costs points -- the name
+    # already promised this field was checked; it wasn't.
+    total_checks = 3 * n
+    total_ok = na_ok + trunc_ok + autocolor_ok
+    pts = _round_points(total_ok / total_checks, 4)
+    return CheckResult(
+        name, 4, pts, total_ok == total_checks,
+        f"na_color correct {na_ok}/{n}, truncate=False correct {trunc_ok}/{n}, autocolor_text=True correct {autocolor_ok}/{n}",
+    )
 
 
 def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -669,13 +696,21 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
     semantic_types = meta["SEMANTIC_TYPES"]
     if not semantic_types:
         return _na(name, "ground truth declares no SEMANTIC_TYPES to check")
-    fmt_map = cand["tier1"].get("fmt_column_map", {})
-    applicable = {c: t for c, t in semantic_types.items() if c in fmt_map}
+    if not cand["tier2"].get("ok"):
+        return CheckResult(name, 4, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
+    # Applicability is gated on the candidate's VISIBLE columns, not on
+    # which ones it happened to format -- otherwise a candidate with ZERO
+    # fmt_* calls has an empty fmt_map, `applicable` comes back empty, and
+    # this required semantic-format check scores N/A (no penalty) instead
+    # of failing every visible semantic-typed column that renders raw.
+    visible = _visible_columns(cand)
+    applicable = {c: t for c, t in semantic_types.items() if c in visible}
     if not applicable:
-        return _na(name, "none of the candidate's formatted columns are covered by SEMANTIC_TYPES")
+        return _na(name, "none of the ground truth's semantic-typed columns are visible in the candidate")
+    fmt_map = cand["tier1"].get("fmt_column_map", {})
     ok_count = sum(
         1 for c, t in applicable.items()
-        if fmt_map[c] in _SEMANTIC_TO_FMT.get(t, set())
+        if fmt_map.get(c) in _SEMANTIC_TO_FMT.get(t, set())
     )
     all_ok = ok_count == len(applicable)
     return CheckResult(name, 4, _round_points(ok_count / len(applicable), 4), all_ok, f"{ok_count}/{len(applicable)} columns formatted per their semantic type")
@@ -721,6 +756,14 @@ def check_render_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Render mechanics (zoom/expand fit-order rule)"
     params = cand["tier1"].get("render_params") or {}
     if not params:
+        # `render_params` is `{}` for two DIFFERENT cases that must not be
+        # scored the same way: no gtsave()/finalize() call at all (the
+        # mandatory table image was never produced -- a hard failure, not
+        # unverifiable) vs. a render call that exists but whose params
+        # aren't statically resolvable (e.g. a **kwargs expansion --
+        # genuinely unverifiable, benefit of the doubt).
+        if not cand["tier1"].get("render_call_present"):
+            return CheckResult(name, 2, 0, False, "no gtsave()/finalize() call found -- the required table image was never rendered")
         return _na(name, "render params unresolved (e.g. a **kwargs expansion) -- not verifiable, benefit of the doubt")
     try:
         zoom = float(params.get("zoom", "2.0"))
