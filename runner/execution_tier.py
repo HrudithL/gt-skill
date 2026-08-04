@@ -501,6 +501,15 @@ def group_partition_match(
     pairs = _group_id_occurrence_pairs(candidate_row_ids or [], candidate_group_ids, truth_row_ids or [], truth_group_ids)
     if not pairs:
         return {"comparable": False, "match": False, "shared_rows": 0}
+    # Same coverage floor as column_match_fraction's _MIN_COVERAGE, and for
+    # the same reason: without it, a candidate retaining just ONE row per
+    # truth group (each assigned its own distinct, arbitrary label) makes
+    # every vote unanimous and the mapping trivially one-to-one, reporting
+    # a "match" despite providing no real evidence of correct WITHIN-group
+    # co-membership -- a single sample per group can't demonstrate that.
+    total_truth_rows = len(truth_row_ids or [])
+    if total_truth_rows and len(pairs) / total_truth_rows < _MIN_COVERAGE:
+        return {"comparable": False, "match": False, "shared_rows": len(pairs)}
     # For each TRUTH group, the multiset of candidate groups its shared rows
     # actually landed in -- majority vote decides that truth group's
     # designated candidate-group counterpart.
@@ -605,10 +614,21 @@ def _shared_pairs(
     truth_ids = truth_fp.get("row_ids")
     if cand_ids and truth_ids:
         # Group-aware keys only when BOTH sides report grouping -- otherwise
-        # bare row-id keys on both sides (see _row_keys).
-        use_groups = bool(candidate_fp.get("row_group_ids")) and bool(truth_fp.get("row_group_ids"))
-        cand_keys = _row_keys(cand_ids, candidate_fp.get("row_group_ids") if use_groups else None)
-        truth_keys = _row_keys(truth_ids, truth_fp.get("row_group_ids") if use_groups else None)
+        # bare row-id keys on both sides (see _row_keys). Same group-label-
+        # spelling relabeling row_set_identity uses: without it, a grouped
+        # candidate that preserves the truth's row partitions exactly but
+        # spells a group differently (candidate "United States" vs. truth
+        # "US") would build keys that never intersect, losing computed-
+        # value/colored-measure credit for otherwise-correct values.
+        cand_group_ids = candidate_fp.get("row_group_ids")
+        truth_group_ids = truth_fp.get("row_group_ids")
+        use_groups = bool(cand_group_ids) and bool(truth_group_ids)
+        if use_groups:
+            relabeled = _relabel_candidate_groups(cand_ids, cand_group_ids, truth_ids, truth_group_ids)
+            if relabeled is not None:
+                cand_group_ids = relabeled
+        cand_keys = _row_keys(cand_ids, cand_group_ids if use_groups else None)
+        truth_keys = _row_keys(truth_ids, truth_group_ids if use_groups else None)
     elif truth_ids:
         # The ground truth has real entity identity (a stub) but the
         # candidate supplies none at all -- there is no way to verify

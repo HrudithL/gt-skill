@@ -159,6 +159,29 @@ def _measure_signedness(fp: dict, columns: list[str]) -> str | None:
     return "diverging" if has_pos and has_neg else "sequential"
 
 
+def _actual_value_range(fp: dict, columns: list[str]) -> tuple[float, float] | None:
+    """(min, max) of the given columns' actual numeric Tier-2 values, or
+    `None` if there are no usable values -- used to verify a literal
+    sequential domain actually COVERS the real data instead of just being
+    well-formed.
+    """
+    tier2 = fp["tier2"]
+    if not tier2.get("ok"):
+        return None
+    vals: list[float] = []
+    for col in columns:
+        for v in tier2.get("columns", {}).get(col, []):
+            if v is None:
+                continue
+            try:
+                vals.append(float(v))
+            except (TypeError, ValueError):
+                continue
+    if not vals:
+        return None
+    return min(vals), max(vals)
+
+
 _DIVERGING_PALETTES = {"rdylgn", "rdbu", "puor"}
 _SEQUENTIAL_PALETTES = {"blues", "greens", "reds", "oranges"}
 
@@ -627,12 +650,26 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
         if shape == "diverging":
             ok = _domain_element_symmetric(elems[0], elems[1])
         else:
-            # Sequential: accept any literal 2-element bracketed domain as
-            # a deliberate choice (verifying it covers the ACTUAL full data
-            # range would need re-deriving the exact min/max the author
-            # intended, which isn't recoverable from a variable-named
-            # domain like `[dens_lo, dens_hi]`).
-            ok = True
+            # Sequential: for a literal NUMERIC 2-element domain, verify it
+            # actually COVERS the real data range (lo < hi, lo <= actual
+            # min, hi >= actual max) -- merely being well-formed let a
+            # collapsed [0, 0], a reversed [1, 0], or an under-covering
+            # [0, 1] (over data spanning 0-100) all pass previously. A
+            # non-numeric literal (e.g. a variable-derived expression that
+            # still parses as a bracketed pair, like `[dens_lo, dens_hi]`)
+            # keeps the prior benefit-of-the-doubt -- there's nothing
+            # further to verify from static text alone.
+            try:
+                flo, fhi = float(elems[0]), float(elems[1])
+            except ValueError:
+                ok = True
+            else:
+                value_range = _actual_value_range(cand, _mechanics_columns(entry, cand))
+                if value_range is None:
+                    ok = True
+                else:
+                    actual_lo, actual_hi = value_range
+                    ok = flo < fhi and flo <= actual_lo and fhi >= actual_hi
         correct += 1 if ok else 0
         if not ok:
             notes.append(f"measure {i} ({entry.get('columns')}): domain '{dom}' doesn't match a {shape} shape")
@@ -717,16 +754,22 @@ def check_band_hue_harmonization(cand: dict, truth: dict, meta: dict) -> CheckRe
     shade_ok = actual_shade == expected_shade
     shade_pts = 2 if shade_ok else 0
     # Hue harmonization is only strictly checkable when there's exactly one
-    # clear sequential palette to harmonize with -- a diverging-only table,
-    # multiple measures, or "no color" all resolve to the DA default
-    # (usually navy) per palettes.md's own fallback, which is not a
-    # verifiable violation, so it's given the benefit of the doubt.
-    palettes = [e.get("palette", "").lower() for e in t1.get("color_mechanics", [])]
-    seq_palettes = [p for p in palettes if p in _SEQ_PALETTE_TO_DA_FAMILY]
-    if has_color and len(seq_palettes) == 1:
-        expected_family = _SEQ_PALETTE_TO_DA_FAMILY[seq_palettes[0]]
+    # DISTINCT colored measure overall (same (palette, domain) dedup
+    # check_colored_measure_selection/check_hue_collision use) AND that one
+    # measure uses a recognized sequential palette -- a diverging-only
+    # table, "no color", or MULTIPLE measures (even if only one of them is
+    # a recognized-sequential name -- e.g. one sequential + one diverging)
+    # all mean there's no longer a single, unambiguous color story to
+    # harmonize the band to. Counting only recognized-sequential entries
+    # (the previous approach) wrongly entered strict mode for a valid
+    # 2-measure table where the second measure just happened to be
+    # diverging (and thus excluded from that count).
+    distinct_measures = list({(e.get("palette"), e.get("domain")) for e in t1.get("color_mechanics", [])})
+    sole_palette = (distinct_measures[0][0] or "").lower() if len(distinct_measures) == 1 else None
+    if has_color and sole_palette in _SEQ_PALETTE_TO_DA_FAMILY:
+        expected_family = _SEQ_PALETTE_TO_DA_FAMILY[sole_palette]
         hue_ok = t1.get("heading_band_hue") == expected_family
-        hue_detail = f"expected hue family '{expected_family}' for palette '{seq_palettes[0]}', got '{t1.get('heading_band_hue')}'"
+        hue_detail = f"expected hue family '{expected_family}' for palette '{sole_palette}', got '{t1.get('heading_band_hue')}'"
     else:
         hue_ok = True
         hue_detail = "hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)"

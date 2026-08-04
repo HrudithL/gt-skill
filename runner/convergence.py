@@ -439,6 +439,34 @@ def _has_active_tab_style_border(source: str, side_pattern: str, *, require_loc_
     return False
 
 
+def _tab_options_frame_active(source: str) -> bool:
+    """True if all FOUR border sides (top/bottom/left/right) are ACTIVELY
+    set via manual `tab_options(...)` -- not merely mentioned.
+
+    Uses the LAST occurrence of each attribute (chained-call last-wins,
+    consistent with `_hlines_active`). A side counts only if at least one
+    of its `style`/`width`/`color` is mentioned AT ALL, and if `style`/
+    `width` IS given, it must not be a disabling value (`"none"`/
+    `"hidden"`/zero-length) -- a candidate setting every side's style to
+    `"none"` mentions all four sides without rendering a box at all.
+    """
+    def _last(attr: str) -> str | None:
+        matches = re.findall(rf"table_border_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
+        return matches[-1] if matches else None
+
+    for side in ("top", "bottom", "left", "right"):
+        style_val = _last(f"{side}_style")
+        width_val = _last(f"{side}_width")
+        color_val = _last(f"{side}_color")
+        if style_val is None and width_val is None and color_val is None:
+            return False
+        if style_val is not None and style_val.strip().lower() in ("none", "hidden", ""):
+            return False
+        if width_val is not None and _is_zero_length(width_val):
+            return False
+    return True
+
+
 def _opt_row_striping_enabled(source: str) -> bool:
     """True if the LAST `.opt_row_striping(...)` call enables striping.
 
@@ -1626,10 +1654,23 @@ def _color_mechanics(source: str) -> list[dict]:
             resolved_columns = None
         else:
             resolved_columns = _resolve_columns_list(cols_val, var_map)
+        domain_val = _kwarg_value(block, "domain")
+        if domain_val is None:
+            # `data_color(columns, rows, palette, domain, ...)` -- domain
+            # is positional slot 3. Python's calling convention means a
+            # positional `domain` can ONLY occur if columns/rows/palette
+            # were ALSO all positional (you can't skip earlier positions),
+            # so the same `positionals` list used for `columns` above
+            # already lines up domain at index 3 when it's long enough.
+            positionals = [
+                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            if len(positionals) > 3:
+                domain_val = positionals[3]
         entries.append((pos, {
             "columns": resolved_columns,
             "palette": _palette_of_block(block),
-            "domain": _kwarg_value(block, "domain"),
+            "domain": domain_val,
             "na_color": _kwarg_or_default(block, "na_color"),
             "truncate": _kwarg_or_default(block, "truncate"),
             "autocolor_text": _kwarg_or_default(block, "autocolor_text"),
@@ -1966,13 +2007,13 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
     frame_present = bool(
         re.search(r"opt_table_outline\s*\(", source)
         or re.search(r"\b(?:frame|finalize)\s*\(", source)
-        # A genuine box needs all FOUR sides set, not just left/right (a
-        # candidate that only sets e.g. table_border_left_style="solid"
-        # has one ruled edge, not an enclosing frame).
-        or all(
-            re.search(rf"table_border_{side}_(?:style|width|color)\s*=", source)
-            for side in ("top", "bottom", "left", "right")
-        )
+        # A genuine box needs all FOUR sides ACTIVELY set (not just
+        # mentioned, and not just left/right) -- a candidate that only
+        # sets e.g. table_border_left_style="solid" has one ruled edge,
+        # not an enclosing frame, and one that sets all four to
+        # style="none" (or a zero-width) mentions every side without
+        # rendering any of them.
+        or _tab_options_frame_active(source)
     )
     striping_present = bool(
         _opt_row_striping_enabled(source)
