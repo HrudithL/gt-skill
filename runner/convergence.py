@@ -1632,7 +1632,7 @@ def _bare_call_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
 # call that omits these renders IDENTICALLY to one that states them, and to
 # an equivalent `heatmap(...)` helper call, so all three must report the
 # same mechanics rather than two `None`s and one explicit value.
-_DATA_COLOR_DEFAULTS = {"na_color": "#808080", "truncate": "False", "autocolor_text": "True"}
+_DATA_COLOR_DEFAULTS = {"na_color": "#808080", "truncate": "False", "autocolor_text": "True", "reverse": "False"}
 
 
 def _kwarg_or_default(
@@ -1775,8 +1775,9 @@ def _color_mechanics(source: str) -> list[dict]:
             "palette": _palette_of_block(block),
             "domain": domain_val,
             # data_color(columns, rows, palette, domain, na_color, alpha,
-            # reverse, autocolor_text, truncate) -- positional slots 4/7/8.
+            # reverse, autocolor_text, truncate) -- positional slots 4/6/7/8.
             "na_color": _kwarg_or_default(block, "na_color", positionals, 4),
+            "reverse": _kwarg_or_default(block, "reverse", positionals, 6),
             "truncate": _kwarg_or_default(block, "truncate", positionals, 8),
             "autocolor_text": _kwarg_or_default(block, "autocolor_text", positionals, 7),
             "via_helper": False,
@@ -1797,6 +1798,10 @@ def _color_mechanics(source: str) -> list[dict]:
             "na_color": "#808080",
             "truncate": "False",
             "autocolor_text": "True",
+            # heatmap() doesn't expose a `reverse` param at all -- it
+            # always calls the underlying data_color(...) without one, so
+            # it always renders with GT's own reverse=False default.
+            "reverse": "False",
             "via_helper": True,
         }))
     entries.sort(key=lambda e: e[0])

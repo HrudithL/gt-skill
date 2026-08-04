@@ -403,54 +403,41 @@ def row_set_identity(
     }
 
 
-def _group_id_occurrence_pairs(
-    candidate_row_ids: list, candidate_group_ids: list, truth_row_ids: list, truth_group_ids: list,
-) -> list[tuple[Any, Any]]:
-    """``(truth_group, candidate_group)`` for every candidate/truth row pair
-    sharing the same normalized row id, ONE PAIR PER OCCURRENCE.
-
-    A repeated row id (e.g. "Small" appearing once per `groupname_col`
-    group) must not collapse to a single pair -- a naive `{row_id: group_id}`
-    dict comprehension keeps only the LAST occurrence on each side, so two
-    genuinely different rows sharing a label would silently overwrite each
-    other and any downstream comparison would see just one merged pair
-    instead of two real ones. Occurrences of the same row id are paired
-    POSITIONALLY (both sides list their own occurrences in actual rendered
-    order) -- a reasonable, order-preserving pairing without needing a full
-    value-based realignment for this identity-agnostic (label-only)
-    comparison. Leftover occurrences on the longer side (an occurrence-
-    count mismatch for that row id) have no counterpart to pair against and
-    are simply not included.
+def _group_row_multisets(row_ids: list, group_ids: list) -> dict[Any, Counter]:
+    """``{group_id -> Counter[normalized_row_id]}`` -- each group's row-id
+    CONTENT, as a multiset (a repeated row id, e.g. "January" appearing
+    once per year in a year-grouped table, counts each occurrence rather
+    than collapsing to one).
     """
-    cand_by_id: dict[str, list] = {}
-    for rid, gid in zip(candidate_row_ids, candidate_group_ids):
-        cand_by_id.setdefault(normalize_id(rid), []).append(gid)
-    truth_by_id: dict[str, list] = {}
-    for rid, gid in zip(truth_row_ids, truth_group_ids):
-        truth_by_id.setdefault(normalize_id(rid), []).append(gid)
-    pairs: list[tuple[Any, Any]] = []
-    # `sorted`, not a bare `set` intersection -- `normalize_id` always
-    # returns `str`, so this is well-ordered, and it matters downstream:
-    # `group_partition_match`'s vote-count ties are broken by
-    # `Counter.most_common(1)`, which resolves ties by insertion order.
-    # Iterating a `set` feeds that insertion order from Python's per-
-    # process, randomized string hash seed -- so a genuine vote tie could
-    # pick a DIFFERENT winning group mapping across separate runs of the
-    # exact same candidate/truth pair, contradicting this comparator's
-    # deterministic, no-LLM design contract.
-    for rid in sorted(set(cand_by_id) & set(truth_by_id)):
-        for tg, cg in zip(truth_by_id[rid], cand_by_id[rid]):
-            pairs.append((tg, cg))
-    return pairs
+    out: dict[Any, Counter] = {}
+    for rid, gid in zip(row_ids, group_ids):
+        out.setdefault(gid, Counter())[normalize_id(rid)] += 1
+    return out
+
+
+def _group_overlap(a: Counter, b: Counter) -> int:
+    """Multiset-intersection size between two row-id counters."""
+    return sum(min(n, b.get(rid, 0)) for rid, n in a.items())
 
 
 def _relabel_candidate_groups(
     candidate_row_ids: list, candidate_group_ids: list, truth_row_ids: list, truth_group_ids: list,
 ) -> list | None:
     """Remap each candidate group id to whichever TRUTH group id its rows
-    mostly co-occur with (majority vote over shared row ids), so a group-
-    aware comparison doesn't depend on matching LABEL SPELLING -- only on
-    which rows actually land together.
+    mostly co-occur with, so a group-aware comparison doesn't depend on
+    matching LABEL SPELLING -- only on which rows actually land together.
+
+    Matches by GROUP CONTENT overlap (multiset intersection of normalized
+    row ids), never by pairing same-row-id occurrences POSITIONALLY.
+    Row/group render order is explicitly never graded elsewhere -- a
+    positional pairing of a repeated row id's occurrences (e.g. "January"
+    appearing once per year) silently assumes both sides render their
+    groups in the SAME order, and mispairs every occurrence when they
+    don't (a candidate ordering years 2015->2010 would have its "2015"
+    group's January positionally paired against truth's "2010" group's
+    January, just because both are each side's FIRST occurrence).
+    Comparing each candidate group's full row-id multiset against each
+    truth group's sidesteps that assumption entirely.
 
     Used by `row_set_identity`: without this, a candidate correctly
     grouping the SAME rows the same way, but spelling a group differently
@@ -458,16 +445,40 @@ def _relabel_candidate_groups(
     for the identical real group), would build DIFFERENT `(group_id,
     row_id)` keys purely from the label difference and lose row-selection
     credit despite a perfectly correct selection. Returns `None` when
-    there's nothing to vote on (no shared rows) -- the caller falls back to
-    the unrelabeled group ids in that case.
+    there's nothing to match on (no shared rows) -- the caller falls back
+    to the unrelabeled group ids in that case.
     """
-    pairs = _group_id_occurrence_pairs(candidate_row_ids, candidate_group_ids, truth_row_ids, truth_group_ids)
-    if not pairs:
+    cand_groups = _group_row_multisets(candidate_row_ids, candidate_group_ids)
+    truth_groups = _group_row_multisets(truth_row_ids, truth_group_ids)
+    if not cand_groups or not truth_groups:
         return None
-    votes: dict[Any, Counter] = {}
-    for tg, cg in pairs:
-        votes.setdefault(cg, Counter())[tg] += 1
-    relabel = {cg: counter.most_common(1)[0][0] for cg, counter in votes.items()}
+    # A group whose id TEXT already matches a truth group's (e.g. both
+    # sides literally use the year "2015" as the group label) is treated
+    # as that same group directly, skipping content-overlap voting for it
+    # entirely -- content alone can be genuinely AMBIGUOUS when every
+    # group shares the identical row-id set (e.g. every year has the same
+    # 12 month labels), so this exact-text signal, when available, is
+    # strictly more reliable than any content heuristic. Groups with no
+    # exact-text counterpart (the "US" vs "United States" spelling-
+    # difference case this function primarily exists for) fall through to
+    # content-overlap matching below.
+    truth_by_normalized_id = {normalize_id(tg): tg for tg in truth_groups}
+    relabel: dict[Any, Any] = {}
+    for cg in sorted(cand_groups, key=str):
+        exact_tg = truth_by_normalized_id.get(normalize_id(cg))
+        if exact_tg is not None:
+            relabel[cg] = exact_tg
+            continue
+        cand_rows = cand_groups[cg]
+        best_tg, best_overlap = None, 0
+        for tg in sorted(truth_groups, key=str):
+            overlap = _group_overlap(cand_rows, truth_groups[tg])
+            if overlap > best_overlap:
+                best_tg, best_overlap = tg, overlap
+        if best_tg is not None:
+            relabel[cg] = best_tg
+    if not relabel:
+        return None
     return [relabel.get(gid, gid) for gid in candidate_group_ids]
 
 
@@ -498,47 +509,74 @@ def group_partition_match(
     ground truth's own country-based groups apart or merge them
     differently, and this reports `match=False`.
 
-    Uses each TRUTH group's most-common candidate group as its designated
-    counterpart (majority vote per truth group) rather than requiring
-    every single shared row to agree perfectly -- a handful of edge-case
-    mismatches (e.g. a car reasonably attributable to two countries)
-    shouldn't fail an otherwise-correct grouping, but a genuinely different
-    grouping dimension will fail on most rows, not a handful.
+    Uses each TRUTH group's largest row-CONTENT overlap (multiset
+    intersection of normalized row ids, never a positional pairing of
+    same-row-id occurrences -- see `_relabel_candidate_groups`'s docstring
+    for why that breaks when the two sides render groups in different
+    orders) to pick its designated candidate-group counterpart, and
+    tolerates disagreement on a handful of rows (via `_MATCH_THRESHOLD`)
+    rather than requiring every single shared row to agree perfectly -- a
+    handful of edge-case mismatches (e.g. a car reasonably attributable to
+    two countries) shouldn't fail an otherwise-correct grouping, but a
+    genuinely different grouping dimension will fail on most rows, not a
+    handful.
     """
     if not candidate_group_ids or not truth_group_ids:
         return {"comparable": False, "match": False, "shared_rows": 0}
-    pairs = _group_id_occurrence_pairs(candidate_row_ids or [], candidate_group_ids, truth_row_ids or [], truth_group_ids)
-    if not pairs:
+    cand_groups = _group_row_multisets(candidate_row_ids or [], candidate_group_ids)
+    truth_groups = _group_row_multisets(truth_row_ids or [], truth_group_ids)
+    if not cand_groups or not truth_groups:
+        return {"comparable": False, "match": False, "shared_rows": 0}
+    all_cand: Counter = Counter()
+    for c in cand_groups.values():
+        all_cand.update(c)
+    all_truth: Counter = Counter()
+    for c in truth_groups.values():
+        all_truth.update(c)
+    shared_rows = _group_overlap(all_cand, all_truth)
+    if not shared_rows:
         return {"comparable": False, "match": False, "shared_rows": 0}
     # Same coverage floor as column_match_fraction's _MIN_COVERAGE, and for
     # the same reason: without it, a candidate retaining just ONE row per
     # truth group (each assigned its own distinct, arbitrary label) makes
-    # every vote unanimous and the mapping trivially one-to-one, reporting
-    # a "match" despite providing no real evidence of correct WITHIN-group
-    # co-membership -- a single sample per group can't demonstrate that.
+    # every designation trivially one-to-one, reporting a "match" despite
+    # providing no real evidence of correct WITHIN-group co-membership --
+    # a single sample per group can't demonstrate that.
     total_truth_rows = len(truth_row_ids or [])
-    if total_truth_rows and len(pairs) / total_truth_rows < _MIN_COVERAGE:
-        return {"comparable": False, "match": False, "shared_rows": len(pairs)}
-    # For each TRUTH group, the multiset of candidate groups its shared rows
-    # actually landed in -- majority vote decides that truth group's
-    # designated candidate-group counterpart.
-    truth_to_cand_votes: dict[Any, Counter] = {}
-    for tg, cg in pairs:
-        truth_to_cand_votes.setdefault(tg, Counter())[cg] += 1
-    designated = {tg: votes.most_common(1)[0][0] for tg, votes in truth_to_cand_votes.items()}
+    if total_truth_rows and shared_rows / total_truth_rows < _MIN_COVERAGE:
+        return {"comparable": False, "match": False, "shared_rows": shared_rows}
+    # For each TRUTH group, whichever candidate group its row CONTENT
+    # overlaps with most decides that truth group's designated
+    # counterpart. Sorted iteration on both axes keeps a tied maximum
+    # deterministic (first-encountered wins), consistent with this
+    # comparator's no-randomness contract.
+    # Same exact-text fast path as _relabel_candidate_groups: when a truth
+    # group's id text already matches a candidate group's, use that pair
+    # directly rather than voting by content, which can be genuinely
+    # ambiguous (e.g. every year-group shares the same 12 month labels).
+    cand_by_normalized_id = {normalize_id(cg): cg for cg in cand_groups}
+    designated: dict[Any, tuple[Any, int]] = {}
+    for tg in sorted(truth_groups, key=str):
+        truth_rows = truth_groups[tg]
+        exact_cg = cand_by_normalized_id.get(normalize_id(tg))
+        if exact_cg is not None:
+            designated[tg] = (exact_cg, _group_overlap(truth_rows, cand_groups[exact_cg]))
+            continue
+        best_cg, best_overlap = None, 0
+        for cg in sorted(cand_groups, key=str):
+            overlap = _group_overlap(truth_rows, cand_groups[cg])
+            if overlap > best_overlap:
+                best_cg, best_overlap = cg, overlap
+        if best_cg is not None:
+            designated[tg] = (best_cg, best_overlap)
     # A valid partition match additionally requires the mapping to be
     # one-to-one -- two DIFFERENT truth groups must not designate the SAME
     # candidate group (that would mean the candidate merged two real
     # groups into one).
-    one_to_one = len(set(designated.values())) == len(designated)
-    agree = sum(1 for tg, cg in pairs if cg == designated[tg])
-    # Same tolerance as column_match_fraction's _MATCH_THRESHOLD -- a handful
-    # of edge-case mismatches (per the docstring above) shouldn't fail an
-    # otherwise-correct grouping, but requiring one-to-one exactly (no
-    # tolerance) still catches a genuinely different grouping dimension,
-    # which disagrees on most rows, not a handful.
-    match = one_to_one and agree / len(pairs) >= _MATCH_THRESHOLD
-    return {"comparable": True, "match": match, "shared_rows": len(pairs)}
+    one_to_one = len({cg for cg, _ in designated.values()}) == len(designated)
+    agree = sum(overlap for _cg, overlap in designated.values())
+    match = one_to_one and agree / shared_rows >= _MATCH_THRESHOLD
+    return {"comparable": True, "match": match, "shared_rows": shared_rows}
 
 
 def _row_key(row_id: Any, group_id: Any | None) -> tuple:

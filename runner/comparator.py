@@ -601,7 +601,16 @@ def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     if len(distinct_measures) < 2:
         return _na(name, "fewer than 2 distinct colored measures; no collision possible")
     palettes = [p for p, _ in distinct_measures[:2]]
-    collision = palettes[0] is not None and palettes[0] == palettes[1]
+    # Normalize through the SAME sequential-palette -> DA-family mapping
+    # check_band_hue_harmonization already uses -- `Reds` and `Oranges`
+    # are different palette NAMES but the same oxblood family, so an
+    # exact-string comparison let a two-measure candidate use both and
+    # still pass "no same-family collision" despite rendering the same
+    # visual hue for two different measures. A palette not in the mapping
+    # (a diverging palette, or an unrecognized name) falls back to
+    # comparing its own lowercased name, unchanged from before.
+    families = [_SEQ_PALETTE_TO_DA_FAMILY.get((p or "").lower(), (p or "").lower()) for p in palettes]
+    collision = palettes[0] is not None and families[0] == families[1]
     return CheckResult(name, 1, 0 if collision else 1, not collision, f"colored-measure palettes: {palettes}")
 
 
@@ -918,6 +927,14 @@ def check_band_hue_harmonization(cand: dict, truth: dict, meta: dict) -> CheckRe
     return CheckResult(name, 5, pts, pts == 5, f"shade expected={expected_shade} actual={actual_shade}; {hue_detail}")
 
 
+def _mechanics_entry_for_column(mechanics: list[dict], fp: dict, column: str) -> dict | None:
+    """The `color_mechanics` entry (if any) that targets `column`."""
+    for entry in mechanics:
+        if column in _mechanics_columns(entry, fp):
+            return entry
+    return None
+
+
 def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Color mechanics (na_color, truncate, autocolor_text)"
     mechanics = cand["tier1"].get("color_mechanics", [])
@@ -929,17 +946,45 @@ def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
     na_ok = sum(1 for e in mechanics if e.get("na_color") == "#808080")
     trunc_ok = sum(1 for e in mechanics if e.get("truncate") == "False")
     autocolor_ok = sum(1 for e in mechanics if e.get("autocolor_text") == "True")
-    # A single rounding over all 3*n sub-checks (rather than one
+    # `reverse` has no universal "correct" value the way na_color/truncate/
+    # autocolor_text do -- whether a measure's polarity should be inverted
+    # (e.g. RdYlGn with reverse=True so green=decline, for a "more is
+    # worse" measure) depends on the DATA's own semantics, not derivable
+    # from the candidate alone. The ground truth's own reverse setting for
+    # the SAME matched measure (by value, via CANONICAL_MEASURES) is the
+    # only mechanical signal available without new §5 metadata -- checked
+    # only for measures where a truth mechanics entry and a value-matched
+    # candidate column both resolve, so a ground truth without
+    # CANONICAL_MEASURES declared (or an unmatched candidate) doesn't
+    # shrink this denominator on nothing.
+    reverse_ok, reverse_total = 0, 0
+    if cand["tier2"].get("ok") and truth["tier2"].get("ok"):
+        truth_mechanics = truth["tier1"].get("color_mechanics", [])
+        for m in meta["CANONICAL_MEASURES"].get("colored", []):
+            truth_entry = _mechanics_entry_for_column(truth_mechanics, truth, m)
+            if truth_entry is None:
+                continue
+            matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
+            if matched_col is None:
+                continue
+            cand_entry = _mechanics_entry_for_column(mechanics, cand, matched_col)
+            if cand_entry is None:
+                continue
+            reverse_total += 1
+            if cand_entry.get("reverse") == truth_entry.get("reverse"):
+                reverse_ok += 1
+    # A single rounding over all sub-checks (rather than one
     # _round_points() call per dimension) so a fully-correct candidate
     # always sums to exactly 4, and "autocolor_text=False" (readable text
     # isn't guaranteed over a dark fill) actually costs points -- the name
     # already promised this field was checked; it wasn't.
-    total_checks = 3 * n
-    total_ok = na_ok + trunc_ok + autocolor_ok
+    total_checks = 3 * n + reverse_total
+    total_ok = na_ok + trunc_ok + autocolor_ok + reverse_ok
     pts = _round_points(total_ok / total_checks, 4)
     return CheckResult(
         name, 4, pts, total_ok == total_checks,
-        f"na_color correct {na_ok}/{n}, truncate=False correct {trunc_ok}/{n}, autocolor_text=True correct {autocolor_ok}/{n}",
+        f"na_color correct {na_ok}/{n}, truncate=False correct {trunc_ok}/{n}, autocolor_text=True correct {autocolor_ok}/{n}"
+        + (f", reverse orientation matches truth {reverse_ok}/{reverse_total}" if reverse_total else ""),
     )
 
 
