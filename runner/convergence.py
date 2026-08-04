@@ -1589,12 +1589,22 @@ def _bare_call_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
 _DATA_COLOR_DEFAULTS = {"na_color": "#808080", "truncate": "False", "autocolor_text": "True"}
 
 
-def _kwarg_or_default(block: str, name: str) -> str | None:
+def _kwarg_or_default(
+    block: str, name: str, positionals: list[str] | None = None, index: int | None = None,
+) -> str | None:
     """`_unquote(_kwarg_value(block, name))`, defaulting when omitted OR
     explicitly `None` (`na_color=None` is documented as "use the default,"
     identical to not passing it at all — a bare unquoted `"None"` must not
     be treated as a real, different value from the default it explicitly
     requests).
+
+    Falls back to `positionals[index]` (same shared, quote-aware split the
+    caller already uses for `columns`/`rows`/`domain`) when the keyword
+    isn't found and a position was given — `.data_color("sales", None,
+    "Blues", [0, 10], "red", None, False, False, True)` sets `na_color`,
+    `autocolor_text`, and `truncate` purely positionally; a keyword-only
+    lookup would silently substitute the "safe" default for a rendered
+    value that's actually wrong.
 
     Returns `None` (unresolved, NOT the default) when `block` contains a
     `**overrides`/`**{...}` expansion — it could set this exact kwarg to
@@ -1604,7 +1614,10 @@ def _kwarg_or_default(block: str, name: str) -> str | None:
     """
     if any(p.strip().startswith("**") for p in _split_top_level_quoted(block)):
         return None
-    v = _unquote(_kwarg_value(block, name))
+    val = _kwarg_value(block, name)
+    if val is None and positionals is not None and index is not None and len(positionals) > index:
+        val = positionals[index]
+    v = _unquote(val)
     if v is None or v == "None":
         return _DATA_COLOR_DEFAULTS[name]
     return v
@@ -1703,9 +1716,11 @@ def _color_mechanics(source: str) -> list[dict]:
             "columns": resolved_columns,
             "palette": _palette_of_block(block),
             "domain": domain_val,
-            "na_color": _kwarg_or_default(block, "na_color"),
-            "truncate": _kwarg_or_default(block, "truncate"),
-            "autocolor_text": _kwarg_or_default(block, "autocolor_text"),
+            # data_color(columns, rows, palette, domain, na_color, alpha,
+            # reverse, autocolor_text, truncate) -- positional slots 4/7/8.
+            "na_color": _kwarg_or_default(block, "na_color", positionals, 4),
+            "truncate": _kwarg_or_default(block, "truncate", positionals, 8),
+            "autocolor_text": _kwarg_or_default(block, "autocolor_text", positionals, 7),
             "via_helper": False,
         }))
     for pos, block in _bare_call_blocks_pos(source, "heatmap"):
@@ -1979,8 +1994,14 @@ def _hlines_active(source: str) -> bool:
     return _has_active_tab_style_border(source, "top|bottom", require_loc_pattern=r"loc\s*\.\s*body\s*\(")
 
 
-def _fmt_column_map(source: str) -> dict[str, str]:
+def _fmt_column_map(source: str) -> dict[str, str | bool]:
     """Best-effort `{source column -> the EFFECTIVE fmt_* name}`.
+
+    A value of `False` (never a real formatter name) means "explicitly
+    NOT covered" -- overrides the `_ALL_COLUMNS` fallback for that one
+    column without discarding the sentinel's credit for every other
+    column it still validly covers. See the row-scoped-invalidation note
+    below.
 
     Feeds the per-column semantic `fmt_*` check (against `SEMANTIC_TYPES`).
     Reads the `columns=` kwarg (or first positional) of each `.fmt_*(...)`
@@ -2031,7 +2052,7 @@ def _fmt_column_map(source: str) -> dict[str, str]:
     row-restricted and this parser can't tell.
     """
     var_map = _list_var_map(source)
-    out: dict[str, str] = {}
+    out: dict[str, str | bool] = {}
     for name, block in _fmt_calls(source):
         # Quote-aware (see _heatmap_columns_raw): a column name can itself
         # contain a comma. Every `fmt_*` function shares the same
@@ -2055,14 +2076,13 @@ def _fmt_column_map(source: str) -> dict[str, str]:
             else:
                 for col in _resolve_columns_list(val, var_map):
                     if out.get(col, out.get(_ALL_COLUMNS)) != name:
-                        out.pop(col, None)
                         # This row-scoped call disagrees with the earlier
-                        # "every column, uniformly" claim for `col` -- Tier
-                        # 1 has no schema to know which OTHER columns that
-                        # sentinel still validly covers, so drop it
-                        # entirely rather than risk crediting a now-
-                        # nonuniform column through the stale sentinel.
-                        out.pop(_ALL_COLUMNS, None)
+                        # effective formatter for `col` specifically --
+                        # `False` explicitly excludes JUST this column from
+                        # any `_ALL_COLUMNS` fallback, rather than dropping
+                        # the sentinel entirely and losing formatting
+                        # credit for every OTHER, unaffected column too.
+                        out[col] = False
             continue
         if val is None or val.strip() == "None":
             out.clear()

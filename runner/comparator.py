@@ -195,8 +195,21 @@ def _actual_value_range(fp: dict, columns: list[str]) -> tuple[float, float] | N
     return min(vals), max(vals)
 
 
-_DIVERGING_PALETTES = {"rdylgn", "rdbu", "puor"}
-_SEQUENTIAL_PALETTES = {"blues", "greens", "reds", "oranges"}
+# The full standard ColorBrewer diverging/sequential name sets (not just
+# the house skill's own narrower prescribed subset -- RdYlGn/RdBu/PuOr
+# diverging, Blues/Greens/Reds/Oranges sequential) -- a candidate using
+# any OTHER standard name (e.g. `Spectral`, a diverging palette, on
+# all-positive data) previously fell through to "unknown" and got the
+# same benefit-of-the-doubt as a genuinely unclassifiable custom hex-list,
+# silently passing a real sequential/diverging mismatch.
+_DIVERGING_PALETTES = {
+    "brbg", "piyg", "prgn", "puor", "rdbu", "rdgy", "rdylbu", "rdylgn", "spectral",
+}
+_SEQUENTIAL_PALETTES = {
+    "blues", "bugn", "bupu", "gnbu", "greens", "greys", "oranges", "orrd",
+    "pubu", "pubugn", "purd", "purples", "rdpu", "reds", "ylgn", "ylgnbu",
+    "ylorbr", "ylorrd",
+}
 
 
 def _palette_kind(palette: str | None) -> str:
@@ -209,7 +222,8 @@ def _palette_kind(palette: str | None) -> str:
     treating that as "unknown" (which `check_sequential_vs_diverging`
     already gives the benefit of the doubt) rather than defaulting it to
     "sequential" avoids penalizing a genuinely diverging custom palette for
-    not being one of the ~7 names this function actually recognizes.
+    not being one of the standard ColorBrewer names this function
+    recognizes.
     """
     if not palette:
         return "unknown"
@@ -341,6 +355,15 @@ def _any_colored_column_matches(cand_tier2: dict, truth_tier2: dict, colored_col
     return False
 
 
+def _truth_requires_color(meta: dict) -> bool:
+    """True if the ground truth's own §5 metadata declares at least one
+    canonical colored measure -- the authoritative "was coloring actually
+    required here" signal, same source `check_colored_measure_selection`
+    already uses for its own identity check.
+    """
+    return bool(meta["CANONICAL_MEASURES"].get("colored"))
+
+
 def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Colored-measure selection (≤2 ceiling + right measure(s))"
     cand_mechanics = cand["tier1"].get("color_mechanics", [])
@@ -381,6 +404,8 @@ def check_sequential_vs_diverging(cand: dict, truth: dict, meta: dict) -> CheckR
     name = "Sequential-vs-diverging matches data shape"
     mechanics = cand["tier1"].get("color_mechanics", [])
     if not mechanics:
+        if _truth_requires_color(meta):
+            return CheckResult(name, 5, 0, False, "ground truth requires colored measure(s) but candidate has none")
         return _na(name, "candidate has no colored measures")
     if not cand["tier2"].get("ok"):
         return CheckResult(name, 5, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
@@ -695,6 +720,8 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
     name = "Domain computation (symmetric / full-range / data-driven)"
     mechanics = cand["tier1"].get("color_mechanics", [])
     if not mechanics:
+        if _truth_requires_color(meta):
+            return CheckResult(name, 8, 0, False, "ground truth requires colored measure(s) but candidate has none")
         return _na(name, "candidate has no colored measures")
     correct, total, notes = 0, 0, []
     for i, entry in enumerate(mechanics):
@@ -876,6 +903,8 @@ def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Color mechanics (na_color, truncate, autocolor_text)"
     mechanics = cand["tier1"].get("color_mechanics", [])
     if not mechanics:
+        if _truth_requires_color(meta):
+            return CheckResult(name, 4, 0, False, "ground truth requires colored measure(s) but candidate has none")
         return _na(name, "candidate has no colored measures")
     n = len(mechanics)
     na_ok = sum(1 for e in mechanics if e.get("na_color") == "#808080")
@@ -921,7 +950,7 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     ]
     if not numeric_cols:
         return _na(name, "grand-summary row has no numeric values to check")
-    covered = [c for c in numeric_cols if c in fmt_map or convergence._ALL_COLUMNS in fmt_map]
+    covered = [c for c in numeric_cols if fmt_map.get(c, fmt_map.get(convergence._ALL_COLUMNS))]
     pts = _round_points(len(covered) / len(numeric_cols), 4)
     detail = (
         f"{len(covered)}/{len(numeric_cols)} numeric summary columns are covered by a fmt_* call "
@@ -986,7 +1015,11 @@ def check_title_subtitle_caption_source(cand: dict, truth: dict, meta: dict) -> 
     caption_present = len(notes) >= 1 and notes[0] is not None
     source_expected = bool(truth["tier1"].get("source_note_texts")) and len(truth["tier1"]["source_note_texts"]) >= 2
     source_present = len(notes) >= 2 and notes[1] is not None
-    footer_ok = (caption_present == caption_expected) and (source_present == source_expected or not source_expected)
+    # "present if expected" for both -- neither ever REQUIRES absence when
+    # optional (fewer than 5 rows): a compliant short table that
+    # voluntarily includes a caption anyway must not lose this point, the
+    # same tolerance already given to an optional source note.
+    footer_ok = (caption_present or not caption_expected) and (source_present or not source_expected)
     footer_pts = 1 if footer_ok else 0
     pts = title_pts + subtitle_pts + footer_pts
     return CheckResult(
