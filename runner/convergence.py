@@ -1666,16 +1666,20 @@ def _color_mechanics(source: str) -> list[dict]:
     var_map = _list_var_map(source)
     entries: list[tuple[int, dict]] = []
     for pos, block in _call_arg_blocks_pos(source, "data_color"):
+        # `data_color(columns, rows, palette, domain, ...)` -- shared once
+        # so `rows`/`columns`/`domain` positional fallbacks (slots 1/0/3)
+        # all line up against the SAME split, quote-aware (see
+        # _heatmap_columns_raw: a column name can itself contain a comma).
+        positionals = [
+            p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+        ]
         rows_val = _kwarg_value(block, "rows")
+        if rows_val is None and len(positionals) > 1:
+            rows_val = positionals[1]
         if rows_val is not None and rows_val.strip() != "None":
             continue
         cols_val = _kwarg_value(block, "columns")
         if cols_val is None:
-            # Quote-aware (see _heatmap_columns_raw): a column name can
-            # itself contain a comma.
-            positionals = [
-                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
-            ]
             cols_val = positionals[0] if positionals else None
         if cols_val is None or cols_val.strip() == "None":
             # `columns` omitted entirely, or explicit `columns=None` --
@@ -1689,18 +1693,12 @@ def _color_mechanics(source: str) -> list[dict]:
         else:
             resolved_columns = _resolve_columns_list(cols_val, var_map)
         domain_val = _kwarg_value(block, "domain")
-        if domain_val is None:
-            # `data_color(columns, rows, palette, domain, ...)` -- domain
-            # is positional slot 3. Python's calling convention means a
-            # positional `domain` can ONLY occur if columns/rows/palette
+        if domain_val is None and len(positionals) > 3:
+            # A positional `domain` can ONLY occur if columns/rows/palette
             # were ALSO all positional (you can't skip earlier positions),
-            # so the same `positionals` list used for `columns` above
-            # already lines up domain at index 3 when it's long enough.
-            positionals = [
-                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
-            ]
-            if len(positionals) > 3:
-                domain_val = positionals[3]
+            # so the shared `positionals` list above already lines up
+            # domain at index 3 when it's long enough.
+            domain_val = positionals[3]
         entries.append((pos, {
             "columns": resolved_columns,
             "palette": _palette_of_block(block),
@@ -2005,10 +2003,15 @@ def _fmt_column_map(source: str) -> dict[str, str]:
 
     A LATER call that targets EVERY column (`columns=None`, or `columns`
     omitted entirely — both mean "every column" per the documented
-    default) invalidates every column tracked so far, even though its own
-    full target set can't be enumerated without the real schema: every
-    prior per-column entry is now stale (overwritten by this call), so it
-    must not survive as though it were still the effective formatter.
+    default) invalidates every per-column entry tracked so far (they're
+    now stale, overwritten by this call) but is itself recorded under the
+    `_ALL_COLUMNS` sentinel key rather than discarded outright — an
+    all-percent table using only `.fmt_percent()` must still get semantic-
+    format credit for every visible column, not lose it just because this
+    parser can't enumerate the real schema itself. Callers that key by
+    column name (`check_fmt_semantic_type`, `check_summary_row_formatting`)
+    fall back to `map.get(_ALL_COLUMNS)` for any column with no more
+    specific entry.
 
     A row-scoped LATER call for a column that ALREADY has a whole-column
     entry also invalidates that entry (rather than merely being skipped)
@@ -2051,11 +2054,19 @@ def _fmt_column_map(source: str) -> dict[str, str]:
                 out.clear()
             else:
                 for col in _resolve_columns_list(val, var_map):
-                    if out.get(col) != name:
+                    if out.get(col, out.get(_ALL_COLUMNS)) != name:
                         out.pop(col, None)
+                        # This row-scoped call disagrees with the earlier
+                        # "every column, uniformly" claim for `col` -- Tier
+                        # 1 has no schema to know which OTHER columns that
+                        # sentinel still validly covers, so drop it
+                        # entirely rather than risk crediting a now-
+                        # nonuniform column through the stale sentinel.
+                        out.pop(_ALL_COLUMNS, None)
             continue
         if val is None or val.strip() == "None":
             out.clear()
+            out[_ALL_COLUMNS] = name
             continue
         for col in _resolve_columns_list(val, var_map):
             out[col] = name

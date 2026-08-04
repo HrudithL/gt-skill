@@ -77,12 +77,25 @@ def load_ground_truth_metadata(gt_path: Path) -> dict:
     tree = ast.parse(gt_path.read_text(), filename=str(gt_path))
     found: dict[str, object] = {}
     for node in tree.body:
-        if not isinstance(node, ast.Assign):
+        # A type-annotated assignment (`SEMANTIC_TYPES: dict[str, str] =
+        # {...}`) is `ast.AnnAssign`, not `ast.Assign` -- its target is a
+        # single `Name` (not a `targets` list), and its value can be
+        # `None` for a bare annotation with no assignment at all
+        # (`SEMANTIC_TYPES: dict`), which isn't literal-evaluable.
+        if isinstance(node, ast.AnnAssign):
+            if node.value is None or not isinstance(node.target, ast.Name):
+                continue
+            targets = [node.target]
+            value = node.value
+        elif isinstance(node, ast.Assign):
+            targets = node.targets
+            value = node.value
+        else:
             continue
-        for target in node.targets:
+        for target in targets:
             if isinstance(target, ast.Name) and target.id in _METADATA_DEFAULTS:
                 try:
-                    found[target.id] = ast.literal_eval(node.value)
+                    found[target.id] = ast.literal_eval(value)
                 except (ValueError, SyntaxError):
                     pass
     return {name: found.get(name, default) for name, default in _METADATA_DEFAULTS.items()}
@@ -606,7 +619,16 @@ def check_label_concept_correctness(cand: dict, truth: dict, meta: dict) -> Chec
     synonyms = meta["LABEL_SYNONYMS"]
     if not synonyms:
         return _na(name, "ground truth declares no LABEL_SYNONYMS to check")
-    cand_labels = _parse_columns_signature_labels(cand["tier1"].get("columns_signature", ""))
+    # Seed every visible Tier-2 column with its DEFAULT rendered label (the
+    # source column name itself -- great_tables' own default when
+    # cols_label(...) is never called for it), then let explicit `label:`
+    # entries from columns_signature override. Without this seed, a
+    # candidate that omits cols_label() entirely renders raw source names
+    # (e.g. `pop_change_1996_2001_pct`) but cand_labels came back empty,
+    # making `applicable` empty and this check score N/A instead of failing
+    # a genuinely non-matching default label.
+    cand_labels = {c: c for c in _visible_columns(cand)}
+    cand_labels.update(_parse_columns_signature_labels(cand["tier1"].get("columns_signature", "")))
     applicable = {col: syns for col, syns in synonyms.items() if col in cand_labels}
     if not applicable:
         return _na(name, "none of the candidate's rendered columns are covered by LABEL_SYNONYMS")
@@ -899,7 +921,7 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     ]
     if not numeric_cols:
         return _na(name, "grand-summary row has no numeric values to check")
-    covered = [c for c in numeric_cols if c in fmt_map]
+    covered = [c for c in numeric_cols if c in fmt_map or convergence._ALL_COLUMNS in fmt_map]
     pts = _round_points(len(covered) / len(numeric_cols), 4)
     detail = (
         f"{len(covered)}/{len(numeric_cols)} numeric summary columns are covered by a fmt_* call "
@@ -935,7 +957,7 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
     fmt_map = cand["tier1"].get("fmt_column_map", {})
     ok_count = sum(
         1 for c, t in applicable.items()
-        if fmt_map.get(c) in _SEMANTIC_TO_FMT.get(t, set())
+        if fmt_map.get(c, fmt_map.get(convergence._ALL_COLUMNS)) in _SEMANTIC_TO_FMT.get(t, set())
     )
     all_ok = ok_count == len(applicable)
     return CheckResult(name, 4, _round_points(ok_count / len(applicable), 4), all_ok, f"{ok_count}/{len(applicable)} columns formatted per their semantic type")
@@ -955,10 +977,15 @@ def check_title_subtitle_caption_source(cand: dict, truth: dict, meta: dict) -> 
     subtitle_pts = 1 if t1.get("caption_present") else 0
     n = _n_rows(cand)
     caption_expected = n is not None and n >= 5
+    # `None` means a `tab_source_note(...)` call exists but its text is a
+    # dynamic expression (a variable, an unresolved f-string) -- same
+    # benefit-of-the-doubt treatment as title_text/subtitle_text above: the
+    # call is genuinely present, just not statically readable, so it must
+    # not read as "missing" the way an explicit empty-string literal would.
     notes = cand["tier1"].get("source_note_texts") or []
-    caption_present = len(notes) >= 1 and bool(notes[0])
+    caption_present = len(notes) >= 1 and notes[0] is not None
     source_expected = bool(truth["tier1"].get("source_note_texts")) and len(truth["tier1"]["source_note_texts"]) >= 2
-    source_present = len(notes) >= 2 and bool(notes[1])
+    source_present = len(notes) >= 2 and notes[1] is not None
     footer_ok = (caption_present == caption_expected) and (source_present == source_expected or not source_expected)
     footer_pts = 1 if footer_ok else 0
     pts = title_pts + subtitle_pts + footer_pts
@@ -1144,6 +1171,11 @@ def check_caption_not_restating_subtitle(cand: dict, truth: dict, meta: dict) ->
     if n is not None and n < 5:
         return _na(name, "fewer than 5 rows; caption is optional")
     notes = cand["tier1"].get("source_note_texts") or []
+    if notes and notes[0] is None:
+        # The caption call exists but its text is a dynamic expression --
+        # unlike a merely-missing caption (a real failure), there's
+        # nothing here to check the required keywords against.
+        return _na(name, "candidate's caption text is a dynamic expression; keyword match not statically verifiable")
     caption = (notes[0] or "").lower() if notes else ""
     subtitle = (cand["tier1"].get("subtitle_text") or "").lower()
     should_mention = keywords.get("caption_should_mention", [])
@@ -1236,6 +1268,9 @@ def format_report(report: ComparatorReport) -> str:
         "",
     ]
     for r in report.checks:
-        mark = "PASS" if r.passed else "FAIL"
+        # `_na()` results have `passed=True` (so they don't drag down a
+        # rollup) but graded nothing (points_possible == 0) -- reporting
+        # those as PASS claims the condition was verified when it wasn't.
+        mark = "N/A" if r.points_possible == 0 else ("PASS" if r.passed else "FAIL")
         lines.append(f"[{mark}] {r.name}: {r.points_earned}/{r.points_possible} -- {r.detail}")
     return "\n".join(lines)
