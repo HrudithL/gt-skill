@@ -33,7 +33,7 @@ _ROOT = _HERE.parent.parent.parent
 
 # Acceptable label synonyms per underlying data column. Wording is free;
 # the label just has to name the right concept. Keys are the SOURCE CSV
-# column name(s) the label is standing in for. The stub (car) and the
+# column name(s) the label is standing in for. The stub (model) and the
 # group (ctry_origin) aren't rendered through cols_label, so they have no
 # entry here -- LABEL_SYNONYMS only covers ordinary body columns.
 LABEL_SYNONYMS = {
@@ -63,8 +63,20 @@ REQUIRED_INSTRUCTIONS = {
 }
 
 # Keyword-presence check for the caption/subtitle overlap rule (see §9).
+# `caption_should_mention` is an ANY-of-these match (see comparator.py's
+# check_caption_not_restating_subtitle) -- unlike towny's genuinely
+# ambiguous "which growth definition" question, "most expensive" here has
+# only one real candidate metric (msrp), so a compliant caption need not
+# restate that methodology at all to be a good, non-duplicative takeaway.
+# Broadened well beyond the original 3 phrases to include this specific
+# top-10 slice's own dominant facts (Italy/Ferrari/Lamborghini account for
+# 6 of the 10 cars) -- any reasonable, data-grounded insight will mention
+# at least one of a country, a specific car, or the ranking concept.
 CAPTION_KEYWORDS = {
-    "caption_should_mention": ["most expensive", "msrp", "country of origin"],
+    "caption_should_mention": [
+        "most expensive", "msrp", "country of origin",
+        "italy", "italian", "ferrari", "lamborghini", "laferrari",
+    ],
     "subtitle_should_not_duplicate": ["ordered by their priciest car", "sorted by price"],
 }
 
@@ -104,7 +116,6 @@ TRANSMISSION_LABELS = {
 }
 top["trsmn"] = top["trsmn"].map(TRANSMISSION_LABELS).fillna(top["trsmn"])
 top["drivetrain"] = top["drivetrain"].str.upper()
-top["car"] = top["mfr"] + " " + top["model"]
 
 # "Grouped by country of origin" -- countries are ordered by their OWN
 # priciest car (Italy's LaFerrari > the US's Ford GT > the UK's Rolls-Royce
@@ -117,21 +128,26 @@ top = (
     top.assign(_group_rank=group_rank)
        .sort_values(["_group_rank", "msrp"], ascending=[False, False])
        .drop(columns="_group_rank")
-       .loc[:, ["car", "ctry_origin", "msrp", "drivetrain", "trsmn"]]
+       .loc[:, ["model", "ctry_origin", "msrp", "drivetrain", "trsmn"]]
        .reset_index(drop=True)
 )
+# Stub = bare `model`, not `mfr + model` -- verified unique across all 10
+# selected cars (no collisions in this specific top-10 slice). A candidate
+# using the source `model` column directly as its own stub (the more
+# obvious, "just use the source column" choice) must not be penalized for
+# not matching a synthesized concatenation this ground truth doesn't need.
 
 msrp_lo = float(top["msrp"].min())
 msrp_hi = float(top["msrp"].max())
 
 # ---- Table -----------------------------------------------------------------
 gt = (
-    GT(top, rowname_col="car", groupname_col="ctry_origin")
+    GT(top, rowname_col="model", groupname_col="ctry_origin")
     .tab_header(
         title="The 10 Priciest GT Cars, by Country of Origin",
         subtitle="MSRP, drivetrain, and transmission for the ten most expensive cars in the gtcars dataset",
     )
-    .tab_stubhead(label="Car")
+    .tab_stubhead(label="Model")
     .cols_label(msrp="MSRP", drivetrain="Drivetrain", trsmn="Transmission")
     .fmt_currency(columns=["msrp"], decimals=0)
     # Big Color 1/1 (well under the 2-measure ceiling): msrp is the literal
