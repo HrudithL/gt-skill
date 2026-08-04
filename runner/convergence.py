@@ -337,14 +337,29 @@ def _palette_of_block(block: str) -> str:
     """Palette name for one `data_color(...)` arg block.
 
     A quoted string -> its name; a list literal -> 'custom'; no palette arg ->
-    'default'. Shared by `_extract_palettes` and `_color_signature`.
+    'default'. Falls back to the positional slot (`data_color(columns, rows,
+    palette, domain, ...)` -- palette is slot 2, verified against the
+    installed great_tables==0.22.0 signature) when there's no `palette=`
+    keyword, mirroring the same positional fallback `_color_mechanics`
+    already applies to `columns`/`domain`. Shared by `_extract_palettes`
+    and `_color_signature`.
     """
     m = re.search(r"palette\s*=\s*(\[[^\]]*\]|['\"]([^'\"]+)['\"])", block)
-    if not m:
-        return "default"
-    if m.group(2):
-        return m.group(2)
-    return "custom"
+    if m:
+        if m.group(2):
+            return m.group(2)
+        return "custom"
+    positionals = [
+        p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+    ]
+    if len(positionals) > 2:
+        pos_val = positionals[2].strip()
+        if re.match(r"^\[[^\]]*\]$", pos_val):
+            return "custom"
+        qm = re.match(r"""^['"]([^'"]+)['"]$""", pos_val)
+        if qm:
+            return qm.group(1)
+    return "default"
 
 
 def _extract_palettes(source: str) -> list[str]:
@@ -1957,15 +1972,20 @@ def _fmt_column_map(source: str) -> dict[str, str]:
     var_map = _list_var_map(source)
     out: dict[str, str] = {}
     for name, block in _fmt_calls(source):
+        # Quote-aware (see _heatmap_columns_raw): a column name can itself
+        # contain a comma. Every `fmt_*` function shares the same
+        # `(columns, rows, ...)` positional order (verified against the
+        # installed great_tables==0.22.0 signatures), so this one
+        # `positionals` list backs both the columns AND rows fallback below.
+        positionals = [
+            p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+        ]
         val = _kwarg_value(block, "columns")
         if val is None:
-            # Quote-aware (see _heatmap_columns_raw): a column name can
-            # itself contain a comma.
-            positionals = [
-                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
-            ]
             val = positionals[0] if positionals else None
         rows_val = _kwarg_value(block, "rows")
+        if rows_val is None and len(positionals) > 1:
+            rows_val = positionals[1]
         has_expansion = any(p.strip().startswith("**") for p in _split_top_level_quoted(block))
         row_restricted = has_expansion or (rows_val is not None and rows_val.strip() != "None")
         if row_restricted:

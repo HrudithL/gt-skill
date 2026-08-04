@@ -425,12 +425,23 @@ def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckRes
             n = _n_rows(cand)
             ok = n == expected
         elif key == "sort":
-            col, direction = expected
+            # expected is (column, direction) or (column, direction, scope);
+            # scope defaults to "global". "within_group" verifies each
+            # candidate row-group's OWN segment is independently ordered --
+            # for a table required to sort AND group, a single global
+            # monotonicity check is either too strict (grouped display
+            # legitimately breaks strict cross-group ordering) or, if
+            # dropped entirely, too lax (a candidate could shuffle rows
+            # WITHIN a group with no penalty at all). Checking order
+            # per-group threads both: it doesn't require cross-group
+            # monotonicity, but a shuffled group still fails.
+            col, direction = expected[0], expected[1]
+            scope = expected[2] if len(expected) > 2 else "global"
             if not cand["tier2"].get("ok") or not truth["tier2"].get("ok"):
                 ok = False
             else:
                 vals = cand["tier2"].get("columns", {}).get(col)
-                if not vals or any(v is None for v in vals):
+                if not vals:
                     ok = False
                 else:
                     # Verify the column's VALUES actually match the ground
@@ -444,18 +455,45 @@ def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckRes
                     if not value_check["passed"]:
                         ok = False
                     else:
-                        # Generic ordering check (works for numbers, strings,
-                        # and ISO-date strings alike) rather than requiring
-                        # numeric values -- a text or date sort column must
-                        # not be treated as unsatisfiable just because its
-                        # values aren't int/float.
-                        try:
-                            ok = (
-                                all(a >= b for a, b in zip(vals, vals[1:])) if direction == "desc"
-                                else all(a <= b for a, b in zip(vals, vals[1:]))
-                            )
-                        except TypeError:
-                            ok = False
+                        def _monotonic(seq: list) -> bool:
+                            # Generic ordering check (works for numbers,
+                            # strings, and ISO-date strings alike) rather
+                            # than requiring numeric values. Nulls are
+                            # skipped for the comparison itself (sorting
+                            # nullable data with nulls first/last is a
+                            # valid, common convention) but must be
+                            # CONTIGUOUS at one end, not scattered through
+                            # otherwise-ordered values.
+                            non_null = [v for v in seq if v is not None]
+                            if not non_null:
+                                return False
+                            try:
+                                ordered = (
+                                    all(a >= b for a, b in zip(non_null, non_null[1:])) if direction == "desc"
+                                    else all(a <= b for a, b in zip(non_null, non_null[1:]))
+                                )
+                            except TypeError:
+                                return False
+                            if not ordered:
+                                return False
+                            null_positions = [i for i, v in enumerate(seq) if v is None]
+                            if not null_positions:
+                                return True
+                            at_start = null_positions == list(range(len(null_positions)))
+                            at_end = null_positions == list(range(len(seq) - len(null_positions), len(seq)))
+                            return at_start or at_end
+
+                        if scope == "within_group":
+                            group_ids = cand["tier2"].get("row_group_ids")
+                            if not group_ids or len(group_ids) != len(vals):
+                                ok = False
+                            else:
+                                segments: dict[Any, list] = {}
+                                for v, g in zip(vals, group_ids):
+                                    segments.setdefault(g, []).append(v)
+                                ok = all(_monotonic(seg) for seg in segments.values())
+                        else:
+                            ok = _monotonic(vals)
         else:
             ok = False
         satisfied += 1 if ok else 0
@@ -536,13 +574,31 @@ def check_summary_row_existence(cand: dict, truth: dict, meta: dict) -> CheckRes
     cand_summary = cand["tier2"].get("summary_rows") or []
     if not cand_summary:
         return CheckResult(name, 1, 0, False, "candidate has no grand-summary row")
-    truth_values = truth_summary[0].get("values", {})
-    cand_values = cand_summary[0].get("values", {})
-    shared = [k for k in truth_values if k in cand_values]
-    if not shared:
+    # Compare EVERY truth summary row (not just the first -- a ground truth
+    # can have multiple, e.g. per-group subtotals) and require EVERY
+    # truth-declared value to have a matching, correct candidate value (not
+    # just whichever columns the candidate happens to also supply) --
+    # otherwise a candidate reproducing one value from the first summary
+    # row while omitting its other aggregates (and every later summary
+    # row entirely) previously still earned full credit here. Truth rows
+    # are matched to candidate rows by label, falling back to position
+    # when labels don't line up (e.g. one side omits a label).
+    cand_by_label = {r.get("label"): r for r in cand_summary}
+    all_ok = True
+    compared_cols: list[str] = []
+    for i, truth_row in enumerate(truth_summary):
+        cand_row = cand_by_label.get(truth_row.get("label"))
+        if cand_row is None:
+            cand_row = cand_summary[i] if i < len(cand_summary) else None
+        truth_values = truth_row.get("values", {})
+        cand_values = cand_row.get("values", {}) if cand_row is not None else {}
+        for k, tv in truth_values.items():
+            compared_cols.append(k)
+            if k not in cand_values or not execution_tier.values_close(cand_values[k], tv):
+                all_ok = False
+    if not compared_cols:
         return CheckResult(name, 1, 0, False, "summary rows share no comparable columns")
-    all_close = all(execution_tier.values_close(cand_values[k], truth_values[k]) for k in shared)
-    return CheckResult(name, 1, 1 if all_close else 0, all_close, f"summary values compared on {shared}")
+    return CheckResult(name, 1, 1 if all_ok else 0, all_ok, f"summary values compared on {sorted(set(compared_cols))}")
 
 
 def check_label_concept_correctness(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -587,8 +643,15 @@ def _domain_element_symmetric(lo: str, hi: str) -> bool:
     try:
         flo, fhi = float(lo), float(hi)
     except ValueError:
-        a, b = lo.strip().lstrip("-").strip(), hi.strip().lstrip("-").strip()
-        return a == b and lo.strip() != hi.strip()
+        # Non-numeric literal (a variable/expression pair, e.g. `[-m, m]`
+        # or two DIFFERENTLY-named variables computed elsewhere as
+        # negations of each other, `lo = -m; hi = m` then `[lo, hi]`).
+        # Tracing that generally requires resolving assignments this
+        # function can't see from the domain's own text alone -- benefit
+        # of the doubt here, same as every other genuinely unresolvable
+        # domain expression elsewhere in this check (a bare variable
+        # reference, an entirely non-bracketed expression, etc.).
+        return True
     # Require an actually-negative lower bound and an actually-positive
     # upper bound, not just equal magnitudes -- a collapsed `[0, 0]` domain
     # (zero-width; every value maps to the same color) and a REVERSED
@@ -901,8 +964,33 @@ def check_hero_column_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     name = "Hero-column formatting when nothing is colored"
     if cand["tier1"].get("color_mechanics"):
         return _na(name, "candidate has colored measures; hero-bold rule doesn't apply")
-    bolded = bool(cand["tier1"].get("bold_columns"))
-    return CheckResult(name, 2, 2 if bolded else 0, bolded, f"bold_columns={cand['tier1'].get('bold_columns')}")
+    hero_measures = meta["CANONICAL_MEASURES"].get("hero_uncolored", [])
+    if not hero_measures:
+        # No canonical hero measure declared to target -- fall back to the
+        # original "some column is bold" signal (there's nothing more
+        # specific to check against).
+        bolded = bool(cand["tier1"].get("bold_columns"))
+        return CheckResult(
+            name, 2, 2 if bolded else 0, bolded,
+            f"bold_columns={cand['tier1'].get('bold_columns')} (no canonical hero measure declared)",
+        )
+    if not cand["tier2"].get("ok"):
+        return CheckResult(name, 2, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
+    # Bolding is only meaningful when it targets the ACTUAL declared hero
+    # measure(s), matched by VALUE (not name) like every other measure
+    # check here -- bolding an unrelated identifier or secondary metric
+    # previously earned full credit just for being nonempty.
+    bold_cols = set(cand["tier1"].get("bold_columns") or [])
+    covered = 0
+    for m in hero_measures:
+        matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
+        if matched_col and matched_col in bold_cols:
+            covered += 1
+    pts = _round_points(covered / len(hero_measures), 2)
+    return CheckResult(
+        name, 2, pts, covered == len(hero_measures),
+        f"{covered}/{len(hero_measures)} canonical hero-uncolored measures are bolded",
+    )
 
 
 def check_render_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -1051,7 +1139,13 @@ def check_caption_not_restating_subtitle(cand: dict, truth: dict, meta: dict) ->
     subtitle = (cand["tier1"].get("subtitle_text") or "").lower()
     should_mention = keywords.get("caption_should_mention", [])
     should_not_duplicate = keywords.get("subtitle_should_not_duplicate", [])
-    mentions_ok = not should_mention or any(k.lower() in caption for k in should_mention)
+    # ALL declared keywords, not just one -- the §5 schema calls these the
+    # terms "the footer's takeaway sentence must include" (plural), and
+    # towny's own ground truth treats its 3 keywords as jointly making up
+    # "the actual unique insight", not alternatives. A caption mentioning
+    # only 1 of 3 required concepts (e.g. just "1996") was previously
+    # awarded full credit here.
+    mentions_ok = not should_mention or all(k.lower() in caption for k in should_mention)
     no_duplicate = not any(k.lower() in subtitle for k in should_not_duplicate)
     ok = mentions_ok and no_duplicate
     return CheckResult(name, 1, 1 if ok else 0, ok, f"caption mentions required keyword={mentions_ok}, subtitle avoids caption-only keywords={no_duplicate}")
