@@ -113,7 +113,7 @@ _MAX_TOKENS = 8192  # thinking (on by default, see below) shares this budget wit
 _TIMEOUT_S = 120.0
 _UNAVAILABLE_PREFIX = "judge unavailable: "
 
-# Model ids (by prefix) known to support `thinking={"type": "adaptive"}`
+# Model ids known to support `thinking={"type": "adaptive"}`
 # (Codex round-1 finding: this was previously sent unconditionally, which
 # 400s on GTSKILL_JUDGE_MODEL overrides like "claude-haiku-4-5" -- a real,
 # documented MODELS["haiku"] entry -- since older/smaller models only
@@ -123,15 +123,24 @@ _UNAVAILABLE_PREFIX = "judge unavailable: "
 # that's the safe default for anything not explicitly known to support
 # adaptive thinking -- unlike guessing "adaptive" is fine and risking a 400
 # on a model that doesn't support it.
+#
+# Round-2 scope note: deliberately narrowed to exactly the two models this
+# repo's own `runner.spec.MODELS` actually references and that are confirmed
+# to support adaptive thinking (`claude-sonnet-5`, the pinned default, and
+# `claude-opus-4-8`) -- NOT the broader current model catalog. An earlier
+# version of this list also included claude-fable-5/claude-mythos-5/
+# claude-opus-4-7/claude-opus-4-6/claude-sonnet-4-6, none of which
+# `spec.py` references anywhere; a Codex round-3 finding raised an
+# unverifiable claim about tool_choice behavior on a gated, untestable
+# model (claude-mythos-5, Project Glasswing-only) that this list had no
+# real reason to reach for in the first place. `claude-haiku-4-5`
+# (spec.py's third model) stays excluded -- it doesn't support adaptive
+# thinking at all. Anything outside these three known ids -- including a
+# hypothetical future Fable/Mythos override -- falls through to "no
+# thinking param sent," the safe, always-accepted default.
 _ADAPTIVE_THINKING_MODEL_PREFIXES = (
     "claude-sonnet-5",
-    "claude-sonnet-4-6",
-    "claude-opus-5",
     "claude-opus-4-8",
-    "claude-opus-4-7",
-    "claude-opus-4-6",
-    "claude-fable-5",
-    "claude-mythos-5",
 )
 
 # Long-edge pixel cap a single image is kept under before this module starts
