@@ -80,7 +80,9 @@ the structured-output contract this module depends on.
 from __future__ import annotations
 
 import base64
+import io
 import json
+import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -111,6 +113,43 @@ _MAX_TOKENS = 8192  # thinking (on by default, see below) shares this budget wit
 _TIMEOUT_S = 120.0
 _UNAVAILABLE_PREFIX = "judge unavailable: "
 
+# Model ids (by prefix) known to support `thinking={"type": "adaptive"}`
+# (Codex round-1 finding: this was previously sent unconditionally, which
+# 400s on GTSKILL_JUDGE_MODEL overrides like "claude-haiku-4-5" -- a real,
+# documented MODELS["haiku"] entry -- since older/smaller models only
+# support `{"type": "enabled", "budget_tokens": N}` or no `thinking` at all,
+# never "adaptive"). Deliberately an ALLOWLIST, not a denylist: omitting
+# `thinking` entirely is accepted by every model tier without erroring, so
+# that's the safe default for anything not explicitly known to support
+# adaptive thinking -- unlike guessing "adaptive" is fine and risking a 400
+# on a model that doesn't support it.
+_ADAPTIVE_THINKING_MODEL_PREFIXES = (
+    "claude-sonnet-5",
+    "claude-sonnet-4-6",
+    "claude-opus-5",
+    "claude-opus-4-8",
+    "claude-opus-4-7",
+    "claude-opus-4-6",
+    "claude-fable-5",
+    "claude-mythos-5",
+)
+
+# Long-edge pixel cap a single image is kept under before this module starts
+# splitting it into vertical tiles (Codex round-1 finding: real ground
+# truths in this corpus can be very tall -- e.g. sp500_monthly_performance.png
+# at 2012x5936 -- and Claude's vision pipeline downscales anything over its
+# own resolution cap before the model ever "sees" it, which for an image
+# this tall shrinks title/caption/column-label text past legibility).
+# Matches claude-sonnet-5's (the pinned default model) own documented
+# high-resolution cap, so an ordinary table -- even a moderately tall one
+# like towny_growth_trends.png at 2014x1782 -- is sent untouched as a single
+# image; only genuinely extreme heights get split.
+_MAX_TILE_DIMENSION = 2576
+# Defensive ceiling on tile count so a pathologically tall image can't
+# balloon one request into dozens of images -- no ground truth in this
+# corpus needs more than ~3.
+_MAX_TILES = 12
+
 
 @dataclass
 class JudgeDimension:
@@ -140,8 +179,62 @@ def _resolve_model() -> str:
     return os.environ.get(_MODEL_ENV_VAR) or _DEFAULT_MODEL
 
 
+def _supports_adaptive_thinking(model: str) -> bool:
+    """Whether ``model`` is known to accept ``thinking={"type": "adaptive"}``.
+
+    See ``_ADAPTIVE_THINKING_MODEL_PREFIXES`` -- an allowlist, so an
+    unrecognized model id (a future model this list hasn't been updated
+    for, or a typo) defaults to False, i.e. no ``thinking`` parameter at
+    all, which every model tier accepts.
+    """
+    return model.startswith(_ADAPTIVE_THINKING_MODEL_PREFIXES)
+
+
 def _load_png_b64(path: Path) -> str:
     return base64.standard_b64encode(path.read_bytes()).decode("ascii")
+
+
+def _load_image_tiles_b64(path: Path) -> list[str]:
+    """Base64 PNG tile(s) for ``path``, top-to-bottom, each within a safe
+    long-edge dimension for Claude's vision pipeline.
+
+    The common case (a table whose rendered height is already within
+    ``_MAX_TILE_DIMENSION`` -- true for every ground truth in this corpus
+    except ``sp500_monthly_performance.png``) returns the file's own bytes
+    completely untouched, via ``_load_png_b64`` -- no PIL re-encoding, no
+    behavior change from before this fix. Only when the image is genuinely
+    too tall does this crop it into vertical bands (full width, bounded
+    height each) and PNG-re-encode each band; only height is ever split --
+    width isn't part of the reported problem and every table in this corpus
+    stays comfortably under the cap on that axis.
+
+    Splitting trades a small increase in image tokens and asking the model
+    to mentally stitch bands back into one table (mitigated by the explicit
+    "part i of N" labels ``_image_blocks`` attaches, and by the system
+    prompt's "Image tiling" section) for keeping small text legible -- an
+    acceptable tradeoff here since this judge's 7 dimensions are about
+    labels/captions/titles/column-order/color, not the kind of precise
+    cross-row numeric reading the deterministic comparator's own value-diff
+    checks already own.
+    """
+    from PIL import Image
+
+    with Image.open(path) as img:
+        width, height = img.size
+        if height <= _MAX_TILE_DIMENSION:
+            return [_load_png_b64(path)]
+
+        tile_height = max(_MAX_TILE_DIMENSION, math.ceil(height / _MAX_TILES))
+        n_tiles = math.ceil(height / tile_height)
+        tiles: list[str] = []
+        for i in range(n_tiles):
+            top = i * tile_height
+            bottom = min(top + tile_height, height)
+            crop = img.crop((0, top, width, bottom))
+            buf = io.BytesIO()
+            crop.save(buf, format="PNG")
+            tiles.append(base64.standard_b64encode(buf.getvalue()).decode("ascii"))
+        return tiles
 
 
 def _format_metadata_context(metadata: dict) -> str:
@@ -155,11 +248,33 @@ def _format_metadata_context(metadata: dict) -> str:
     return json.dumps(metadata or {}, indent=2, ensure_ascii=False, default=str)
 
 
-def _build_user_content(prompt_text: str, metadata: dict, truth_b64: str, candidate_b64: str) -> list[dict]:
-    """One user message: intro + grounding metadata, then the two images,
-    each preceded by an explicit text label -- the standard, reliable way
-    to disambiguate multiple images to the model (there is no separate
-    per-image "role" in the Messages API).
+def _image_blocks(tiles_b64: list[str], label: str) -> list[dict]:
+    """Text-labeled image content block(s) for one rendering's tile(s).
+
+    A single tile (the common case) gets one plain ``=== {label} ===``
+    caption. Multiple tiles (a table too tall for one image -- see
+    ``_load_image_tiles_b64``) each get an explicit "part i of N" caption so
+    the model treats them as sequential vertical slices of ONE table, not
+    separate tables -- reinforcing the system prompt's "Image tiling"
+    section rather than relying on it alone.
+    """
+    blocks: list[dict] = []
+    n = len(tiles_b64)
+    for i, tile_b64 in enumerate(tiles_b64, 1):
+        caption = label if n == 1 else f"{label}, part {i} of {n} (top-to-bottom, same table)"
+        blocks.append({"type": "text", "text": f"=== {caption} ==="})
+        blocks.append({"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": tile_b64}})
+    return blocks
+
+
+def _build_user_content(
+    prompt_text: str, metadata: dict, truth_tiles: list[str], candidate_tiles: list[str]
+) -> list[dict]:
+    """One user message: intro + grounding metadata, then the two renderings
+    (each 1+ tiles, see ``_load_image_tiles_b64``), each preceded by an
+    explicit text label -- the standard, reliable way to disambiguate
+    multiple images to the model (there is no separate per-image "role" in
+    the Messages API).
     """
     intro = (
         "## Original user prompt\n"
@@ -170,18 +285,15 @@ def _build_user_content(prompt_text: str, metadata: dict, truth_b64: str, candid
         f"```json\n{_format_metadata_context(metadata)}\n```"
     )
     closing = (
-        "Score the CANDIDATE (second image above) against the GROUND "
-        "TRUTH (first image above) now, following the rubric and output "
-        "contract in your system instructions."
+        "Score the CANDIDATE rendering against the GROUND TRUTH rendering "
+        "now, following the rubric and output contract in your system "
+        "instructions."
     )
-    return [
-        {"type": "text", "text": intro},
-        {"type": "text", "text": "=== GROUND TRUTH (reference) rendering ==="},
-        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": truth_b64}},
-        {"type": "text", "text": "=== CANDIDATE rendering (the one you are scoring) ==="},
-        {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": candidate_b64}},
-        {"type": "text", "text": closing},
-    ]
+    content: list[dict] = [{"type": "text", "text": intro}]
+    content += _image_blocks(truth_tiles, "GROUND TRUTH (reference) rendering")
+    content += _image_blocks(candidate_tiles, "CANDIDATE rendering (the one you are scoring)")
+    content.append({"type": "text", "text": closing})
+    return content
 
 
 def _extract_tool_input(response: Any) -> Any:
@@ -305,34 +417,42 @@ def judge(
             return _unavailable(f"anthropic package not importable: {type(e).__name__}: {e}")
 
         try:
-            truth_b64 = _load_png_b64(truth_path)
-            candidate_b64 = _load_png_b64(candidate_path)
+            truth_tiles = _load_image_tiles_b64(truth_path)
+            candidate_tiles = _load_image_tiles_b64(candidate_path)
         except Exception as e:
-            return _unavailable(f"could not read PNG bytes: {type(e).__name__}: {e}")
+            return _unavailable(f"could not read/tile PNG bytes: {type(e).__name__}: {e}")
 
         model = _resolve_model()
-        user_content = _build_user_content(str(prompt_text), metadata, truth_b64, candidate_b64)
+        user_content = _build_user_content(str(prompt_text), metadata, truth_tiles, candidate_tiles)
         tool_schema = judge_rubric.build_tool_schema()
+
+        # No temperature/top_p/top_k: removed for claude-sonnet-5 (any
+        # non-default value 400s) -- see module docstring's "Consistency
+        # mechanics" section. `thinking` is model-gated (Codex round-1
+        # finding): sent only for models known to support the "adaptive"
+        # mode (see _supports_adaptive_thinking) -- sending it unconditionally
+        # 400s on a GTSKILL_JUDGE_MODEL override to an older/smaller model
+        # (e.g. "claude-haiku-4-5", a real MODELS["haiku"] entry) that only
+        # supports `{"type": "enabled", "budget_tokens": N}` or no thinking
+        # at all. When sent, adaptive is preferred over disabling thinking
+        # -- disabling it is the documented trigger for a forced tool call
+        # silently arriving as plain text instead of a `tool_use` block,
+        # which would break this call's contract.
+        create_kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": _MAX_TOKENS,
+            "system": judge_rubric.SYSTEM_PROMPT,
+            "tools": [tool_schema],
+            "tool_choice": {"type": "tool", "name": judge_rubric.TOOL_NAME},
+            "messages": [{"role": "user", "content": user_content}],
+            "timeout": _TIMEOUT_S,
+        }
+        if _supports_adaptive_thinking(model):
+            create_kwargs["thinking"] = {"type": "adaptive"}
 
         try:
             client = anthropic.Anthropic()
-            response = client.messages.create(
-                model=model,
-                max_tokens=_MAX_TOKENS,
-                # No temperature/top_p/top_k: removed for this model generation
-                # (any non-default value 400s) -- see module docstring's
-                # "Consistency mechanics" section. Thinking is left at its
-                # adaptive default (explicit here for clarity) rather than
-                # disabled -- disabling it is the documented trigger for a
-                # forced tool call silently arriving as plain text instead of
-                # a `tool_use` block, which would break this call's contract.
-                thinking={"type": "adaptive"},
-                system=judge_rubric.SYSTEM_PROMPT,
-                tools=[tool_schema],
-                tool_choice={"type": "tool", "name": judge_rubric.TOOL_NAME},
-                messages=[{"role": "user", "content": user_content}],
-                timeout=_TIMEOUT_S,
-            )
+            response = client.messages.create(**create_kwargs)
         except Exception as e:
             return _unavailable(f"model call failed (model={model}): {type(e).__name__}: {e}")
 

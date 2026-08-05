@@ -252,6 +252,16 @@ candidate on its own merits relative to it, never for matching it \
 verbatim. Wording, column order, and specific hue choices only need to be \
 EQUALLY SENSIBLE, not identical.
 
+## Image tiling
+
+A very tall rendered table may arrive as multiple sequential images \
+instead of one, each labeled "part i of N (top-to-bottom, same table)", so \
+that small text (labels, titles, captions) stays legible instead of being \
+downscaled past readability. Treat every tile under the same GROUND TRUTH \
+or CANDIDATE label as ONE continuous table read top-to-bottom -- never as \
+separate tables, and never penalize a dimension just because evidence for \
+it happens to sit in a later tile.
+
 ## The 7 dimensions
 
 {_render_rubric_section()}
@@ -305,7 +315,21 @@ Never invent a score for a dimension you marked inapplicable.
 def build_tool_schema() -> dict:
     """The Anthropic tool-use schema forcing one single structured call.
 
-    See the ``TOOL_NAME`` docstring note above re: this not being a
+    ``strict: True`` (Codex round-1 finding) grammar-constrains the model's
+    tool call to this exact schema -- without it, a syntactically valid API
+    response could still omit a dimension or return ``score`` as a string
+    (``"5"``), which made ``_validate_and_build()`` reject the WHOLE payload
+    even though the call itself succeeded. Strict mode requires
+    ``additionalProperties: False`` on every object level (added below, both
+    the outer schema and each per-dimension schema) and drops a few
+    constraint keywords it doesn't support -- notably ``minimum``/
+    ``maximum`` on numbers, per Anthropic's structured-outputs docs, which
+    silently strips them rather than erroring. ``score``'s 1-5 numeric range
+    is therefore NOT schema-enforced (the description still states it, as a
+    hint) -- ``runner.judge._validate_and_build()`` remains the actual
+    enforcement of that range, exactly as before; strict mode only closes
+    the "wrong type or missing key" gap, not the numeric-range one. See the
+    ``TOOL_NAME`` docstring note above re: this not being a
     ``jsonschema``-package dependency.
     """
     dimension_schema = {
@@ -316,9 +340,13 @@ def build_tool_schema() -> dict:
                 "description": "Whether this dimension applies to this comparison at all.",
             },
             "score": {
-                "type": ["integer", "null"],
-                "minimum": 1,
-                "maximum": 5,
+                # anyOf (not a `type` array) -- the documented, definitely-
+                # supported way to express "integer or null" under strict
+                # mode. `minimum`/`maximum` deliberately omitted: unsupported
+                # under strict mode (silently stripped), so keeping them
+                # would be misleading dead weight; the 1-5 range is instead
+                # enforced in Python by _validate_and_build().
+                "anyOf": [{"type": "integer"}, {"type": "null"}],
                 "description": "1-5 when applicable is true; null when applicable is false.",
             },
             "rationale": {
@@ -327,6 +355,7 @@ def build_tool_schema() -> dict:
             },
         },
         "required": ["applicable", "score", "rationale"],
+        "additionalProperties": False,
     }
     return {
         "name": TOOL_NAME,
@@ -338,5 +367,7 @@ def build_tool_schema() -> dict:
             "type": "object",
             "properties": {key: dimension_schema for key in DIMENSION_KEYS},
             "required": list(DIMENSION_KEYS),
+            "additionalProperties": False,
         },
+        "strict": True,
     }
