@@ -150,14 +150,41 @@ _ADAPTIVE_THINKING_MODEL_PREFIXES = (
 # own resolution cap before the model ever "sees" it, which for an image
 # this tall shrinks title/caption/column-label text past legibility).
 # Matches claude-sonnet-5's (the pinned default model) own documented
-# high-resolution cap, so an ordinary table -- even a moderately tall one
-# like towny_growth_trends.png at 2014x1782 -- is sent untouched as a single
-# image; only genuinely extreme heights get split.
+# high-resolution cap. This is ONE of two independent constraints a tile
+# height must satisfy -- see _max_tile_height() below; by itself it's not
+# sufficient for a WIDE image (Codex round-4 finding).
 _MAX_TILE_DIMENSION = 2576
+
+# Claude's vision pipeline tokenizes an image into ~28px patches and caps a
+# single image around ~4784 tokens at the high-resolution tier -- a SECOND,
+# width-dependent constraint on tile height that _MAX_TILE_DIMENSION alone
+# doesn't capture (Codex round-4 finding: a 2576px-tall tile for a WIDE
+# image like sp500_monthly_performance.png, 2012px wide, costs
+# ceil(2012/28) * ceil(2576/28) = 72 * 92 = 6624 tokens -- well over budget,
+# so Claude's own pipeline downscales that "tile" anyway, defeating the
+# whole point of tiling). See _max_tile_height().
+_VISION_TOKEN_PATCH_PX = 28
+_MAX_IMAGE_TOKENS = 4784
+
 # Defensive ceiling on tile count so a pathologically tall image can't
 # balloon one request into dozens of images -- no ground truth in this
-# corpus needs more than ~3.
+# corpus needs more than ~4.
 _MAX_TILES = 12
+
+
+def _max_tile_height(width: int) -> int:
+    """Max tile height (px), for an image of the given ``width``, that
+    satisfies BOTH constraints: the flat long-edge cap (``_MAX_TILE_DIMENSION``)
+    and the width-dependent vision-token budget (``_MAX_IMAGE_TOKENS`` at
+    ``_VISION_TOKEN_PATCH_PX``-sized patches) -- whichever is smaller
+    actually binds. A narrow table (few patches wide) still gets tiles up
+    to the full 2576px long-edge cap; a wide one gets shorter tiles so its
+    token cost stays in budget.
+    """
+    width_patches = math.ceil(width / _VISION_TOKEN_PATCH_PX)
+    height_patches_budget = max(1, _MAX_IMAGE_TOKENS // width_patches)
+    token_budget_height = height_patches_budget * _VISION_TOKEN_PATCH_PX
+    return min(_MAX_TILE_DIMENSION, token_budget_height)
 
 
 @dataclass
@@ -205,17 +232,19 @@ def _load_png_b64(path: Path) -> str:
 
 def _load_image_tiles_b64(path: Path) -> list[str]:
     """Base64 PNG tile(s) for ``path``, top-to-bottom, each within a safe
-    long-edge dimension for Claude's vision pipeline.
+    height for Claude's vision pipeline -- see ``_max_tile_height()`` for
+    what "safe" means (both the long-edge cap AND the width-dependent
+    vision-token budget, not just the former; Codex round-4 finding).
 
-    The common case (a table whose rendered height is already within
-    ``_MAX_TILE_DIMENSION`` -- true for every ground truth in this corpus
-    except ``sp500_monthly_performance.png``) returns the file's own bytes
-    completely untouched, via ``_load_png_b64`` -- no PIL re-encoding, no
-    behavior change from before this fix. Only when the image is genuinely
-    too tall does this crop it into vertical bands (full width, bounded
-    height each) and PNG-re-encode each band; only height is ever split --
-    width isn't part of the reported problem and every table in this corpus
-    stays comfortably under the cap on that axis.
+    The common case (a table whose rendered height is already within the
+    computed max for its own width -- true for every ground truth in this
+    corpus except ``sp500_monthly_performance.png``) returns the file's own
+    bytes completely untouched, via ``_load_png_b64`` -- no PIL re-encoding,
+    no behavior change from before this fix. Only when the image is
+    genuinely too tall does this crop it into vertical bands (full width,
+    bounded height each) and PNG-re-encode each band; only height is ever
+    split -- width isn't part of the reported problem and every table in
+    this corpus stays comfortably under the long-edge cap on that axis.
 
     Splitting trades a small increase in image tokens and asking the model
     to mentally stitch bands back into one table (mitigated by the explicit
@@ -230,10 +259,11 @@ def _load_image_tiles_b64(path: Path) -> list[str]:
 
     with Image.open(path) as img:
         width, height = img.size
-        if height <= _MAX_TILE_DIMENSION:
+        max_height = _max_tile_height(width)
+        if height <= max_height:
             return [_load_png_b64(path)]
 
-        tile_height = max(_MAX_TILE_DIMENSION, math.ceil(height / _MAX_TILES))
+        tile_height = max(max_height, math.ceil(height / _MAX_TILES))
         n_tiles = math.ceil(height / tile_height)
         tiles: list[str] = []
         for i in range(n_tiles):
