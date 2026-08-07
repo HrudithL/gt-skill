@@ -108,19 +108,40 @@ def _find_band_color_last(source: str) -> str | None:
     autocolor_text). A script that sets an initial band color via one
     `tab_options(...)` call and overrides it via a LATER call (an
     initial-theme-then-override pattern) had the ORIGINAL, overridden
-    value trusted instead of the one actually rendered. `runner/
-    convergence.py` is a hard non-goal for this slice, so this is the
-    same shim pattern used throughout: a corrected local
-    reimplementation (`re.findall` + take the last match, instead of
-    `re.search`'s first-match), otherwise identical to the original --
-    same two keys, checked in the same preference order (`column_labels_
-    background_color` over `heading_background_color`, not merged
-    together).
+    value trusted instead of the one actually rendered.
+
+    Codex round-10 finding: the round-8 fix still scanned raw SOURCE TEXT
+    via `re.findall`, with no comment/string stripping at all -- a `#
+    column_labels_background_color="#000000"` comment (or a docstring
+    mentioning the same) was misdetected as a real, later-OVERRIDING
+    `tab_options()` call, the exact same source-wide-text-scan bug class
+    already fixed for stub_tint/color-mechanics/frame/fmt_* detection.
+    Extracts from genuine `.tab_options(...)` AST call blocks (via
+    `_ast_call_blocks`, sorted into true source order, already scoped to
+    top-level-only calls per the round-9 `_walk_top_level` fix) instead
+    of raw text -- still takes the LAST occurrence of the preferred key
+    across ALL `tab_options()` calls, preserving the round-8 override-
+    resolution fix, and still only accepts a genuine quoted string
+    literal as a value (via `_quoted_string_literal_value`), matching the
+    original regex's own "only ever a quoted literal, never a bare
+    variable" behavior exactly. `runner/convergence.py` is a hard
+    non-goal for this slice, so this stays a local shim rather than a
+    fix to `_find_band_color` itself.
     """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    blocks = sorted(_ast_call_blocks(source, tree, "tab_options", allow_bare=False), key=lambda b: b[0])
     for key in ("column_labels_background_color", "heading_background_color"):
-        matches = re.findall(rf"{key}\s*=\s*['\"]([^'\"]+)['\"]", source)
-        if matches:
-            return matches[-1]
+        last_value = None
+        for _, block in blocks:
+            val = convergence._kwarg_value(block, key)
+            literal = _quoted_string_literal_value(val) if val is not None else None
+            if literal is not None:
+                last_value = literal
+        if last_value is not None:
+            return last_value
     return None
 
 
@@ -293,11 +314,49 @@ def _normalize_css_color(value: str | None) -> str | None:
     return None
 
 
+def _find_stub_tint_hue_local(source: str) -> str | None:
+    """AST-based replacement for `convergence._find_stub_tint_hue`'s
+    detection of a runtime `stub_tint(gt, *, hue)` call -- same `hue`
+    extraction (first matching call, `_unquote`d, `"unknown"` fallback
+    when the call exists but `hue=` itself doesn't resolve), different
+    call-site DETECTION.
+
+    Codex round-10 finding: `convergence._find_stub_tint_hue` (off-limits
+    -- see this file's Tier-1 compatibility-shim section) scans via
+    `convergence._bare_call_blocks`, a source-wide regex with no comment
+    or string stripping at all -- the exact same bug class already fixed
+    here for color-mechanics (`_ast_call_blocks`), frame/finalize
+    (`_has_real_call`), and formatter-call (`_ast_fmt_calls`) detection:
+    `# stub_tint(gt, hue="navy")` sitting in a comment or docstring is
+    misdetected as a real call. Reuses `_ast_call_blocks` (already scoped
+    to top-level-only calls via the round-9 `_walk_top_level` fix) with
+    `allow_bare=True` (matching `_bare_call_blocks`'s own "bare OR one
+    level of attribute-qualified" convention -- `ast.Attribute` handles
+    any receiver expression, a strict superset of the regex's single-
+    identifier qualifier).
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+    # `_ast_call_blocks` doesn't itself guarantee source-order output (its
+    # other callers sort by the returned position when order matters) --
+    # sorted here so `blocks[0]` is genuinely the FIRST call, matching
+    # `convergence._bare_call_blocks`'s own left-to-right scan order.
+    blocks = sorted(_ast_call_blocks(source, tree, "stub_tint", allow_bare=True), key=lambda b: b[0])
+    if not blocks:
+        return None
+    _, first_block = blocks[0]
+    return convergence._unquote(convergence._kwarg_value(first_block, "hue")) or "unknown"
+
+
 def _stub_tint_present(source: str) -> bool:
     """True if a VISIBLE stub tint is applied, by EITHER accepted mechanism.
 
     The `stub_tint(gt, *, hue)` runtime helper is one way (detected via
-    convergence.py's own still-present `_find_stub_tint_hue`); a literal
+    the local `_find_stub_tint_hue_local` AST-based shim, not convergence.
+    py's own regex-based version -- see that function's docstring); a
+    literal
     `tab_style(style=style.fill(color=...), locations=loc.stub())` call is
     the other (what `towny_growth_trends.py` actually uses) -- both are
     equally valid per the outcome-only scoring rule. A `style.fill(color=...)`
@@ -317,7 +376,7 @@ def _stub_tint_present(source: str) -> bool:
     Every stub-scoped call is now collected first, in source order, and
     only the LAST one is evaluated.
     """
-    if convergence._find_stub_tint_hue(source) is not None:
+    if _find_stub_tint_hue_local(source) is not None:
         return True
     stub_blocks: list[str] = []
     for block in convergence._call_arg_blocks(source, "tab_style"):
@@ -587,12 +646,19 @@ def _frame_present(source: str) -> bool:
     Checks each accepted mechanism's ACTUAL resolved value instead:
     - `opt_table_outline(...)`: present unless explicitly disabled via a
       `style="none"`/`"hidden"` kwarg (its only disabling kwarg).
-    - `.tab_options(table_border_<side>_...)`: a side counts as framed
-      only if its own style/width/color (whichever are set) are all
+    - `.tab_options(table_border_<side>_...)`: per-side, framed only if
+      that side's own style/width/color (whichever are set) are all
       non-disabling -- style not "none"/"hidden", width not a zero
       length, color not effectively transparent. Reuses `_is_zero_length`/
       `_is_effectively_transparent`, the same visibility tests
-      `_stub_tint_present` already applies elsewhere in this file.
+      `_stub_tint_present` already applies elsewhere in this file. Codex
+      round-10 finding: this returned `True` as soon as ONE side (left OR
+      right) was visible, but this repo's own authoritative `gt_check.py`
+      (already cited correctly in round 8's finding #4) requires BOTH a
+      visible left AND a visible right border style for a genuine
+      enclosing frame (`has_side_border_styles = _frame_style_set(source,
+      "left") and _frame_style_set(source, "right")`) -- a single visible
+      side is a partial border, not a box. Now requires BOTH sides.
     - `frame(...)` (the scripted skill's helper): kept as an unconditional
       True when called, same as convergence.py's own bare-token behavior
       -- the helper exposes no disabling kwarg. Codex round-6 finding:
@@ -632,7 +698,7 @@ def _frame_present(source: str) -> bool:
             disabled = bool(unquoted and unquoted.strip().lower() in ("none", "hidden"))
         if not disabled:
             return True
-    for side in ("left", "right"):
+    def _side_border_visible(side: str) -> bool:
         # Sweep-A finding (round 8): `re.search` returns the FIRST
         # occurrence in the whole source -- a script setting an initial
         # border and overriding it later (or repeating the kwarg across
@@ -645,21 +711,26 @@ def _frame_present(source: str) -> bool:
         width_matches = re.findall(rf"table_border_{side}_width\s*=\s*([^\s,)]+)", source)
         color_matches = re.findall(rf"table_border_{side}_color\s*=\s*([^\s,)]+)", source)
         if not (style_matches or width_matches or color_matches):
-            continue
+            return False
         if style_matches:
             s = convergence._unquote(style_matches[-1])
             if s and s.strip().lower() in ("none", "hidden"):
-                continue
+                return False
         if width_matches:
             w = convergence._unquote(width_matches[-1])
             if w and convergence._is_zero_length(w):
-                continue
+                return False
         if color_matches:
             col = convergence._unquote(color_matches[-1])
             if col and _is_effectively_transparent(col.strip()):
-                continue
+                return False
         return True
-    return False
+
+    # Codex round-10 finding: BOTH sides must be independently visible --
+    # a lone visible left (or right) border alone is a partial rule, not
+    # an enclosing box, matching `gt_check.py`'s own `has_side_border_
+    # styles` requirement exactly.
+    return _side_border_visible("left") and _side_border_visible("right")
 
 
 def _has_visible_tab_style_border(source: str, side_pattern: str, location_pattern: str) -> bool:
@@ -815,19 +886,26 @@ def _dividers_present(source: str) -> bool:
 
 def _striping_present(source: str) -> bool:
     """Like `convergence._striping_present`-equivalent bare token search
-    (inlined in `parse_design_choices`), but ALSO validates that
-    `row_striping_background_color=` (when set) is genuinely visible --
-    convergence.py's own regex is a bare `option=` NAME search that never
-    even reads the value at all, so `row_striping_background_color=
-    "transparent"` satisfied it despite rendering no visible stripe.
+    (inlined in `parse_design_choices`), but restricted to the mechanisms
+    that actually ENABLE striping -- `opt_row_striping(...)`, `stripe(
+    ...)`, or `row_striping_include_table_body=True` -- per this repo's
+    own authoritative `.claude/skills/great-tables-ci/scripts/gt_check.py`
+    (`check_striping_gate`'s own comment: "A bare `row_striping_
+    background_color=` (color only) does NOT turn striping on, so it no
+    longer counts").
 
-    Found during the round-4 proactive sweep for this exact "presence
-    without visibility" pattern (not flagged directly by Codex, but the
-    same class of bug as `frame_present`/`hairlines_present`/
-    `dividers_present`). `opt_row_striping(row_striping: bool = True)`
-    (verified against the installed `great_tables` signature) has no
-    color parameter -- calling it with a truthy/omitted `row_striping`
-    always means "stripe with great_tables' own default, visible color."
+    Codex round-10 finding: this previously ALSO treated a literal,
+    non-transparent `row_striping_background_color=` as its own
+    independent activation signal -- but that option only configures the
+    stripe COLOR; it has no effect at all unless striping is separately
+    enabled by one of the three real mechanisms above. Removed as an
+    independent signal (still doesn't need its own visibility check,
+    since it's not a mechanism this function trusts anymore).
+
+    `opt_row_striping(row_striping: bool = True)` (verified against the
+    installed `great_tables` signature) has no color parameter -- calling
+    it with a truthy/omitted `row_striping` always means "stripe with
+    great_tables' own default, visible color."
 
     Codex round-5 finding: this originally treated ANY `opt_row_striping(`
     call as striping present, without reading its own `row_striping=`
@@ -846,9 +924,8 @@ def _striping_present(source: str) -> bool:
     pattern already used for hairlines/dividers) -- if that last call
     explicitly disables striping, this falls through to the OTHER
     independent striping mechanisms below (`row_striping_include_table_
-    body`, `stripe(...)`, a literal background color) rather than
-    returning `False` outright, since striping could still genuinely be
-    present via one of those.
+    body`, `stripe(...)`) rather than returning `False` outright, since
+    striping could still genuinely be present via one of those.
     """
     blocks = convergence._call_arg_blocks(source, "opt_row_striping")
     if blocks:
@@ -867,22 +944,19 @@ def _striping_present(source: str) -> bool:
         # else: the LAST call explicitly disables striping -- fall through to
         # the other independent mechanisms below instead of returning False.
     #
-    # Sweep-A finding (round 8): both checks below used `re.search`, which
+    # Sweep-A finding (round 8): this check used `re.search`, which
     # returns the FIRST match in the whole source -- the same "first call
     # wins" bug already fixed for `opt_row_striping` just above. A script
     # setting `row_striping_include_table_body=True` once and later
-    # `=False` (or a background color set once then overridden), across
-    # repeated/chained `.tab_options(...)` calls, had the ORIGINAL value
-    # trusted instead of the one actually rendered. `re.findall` + the
-    # last match mirrors `_option_line_present`'s existing pattern for the
-    # exact same `.tab_options(...)`-kwarg-repetition shape.
+    # `=False`, across repeated/chained `.tab_options(...)` calls, had the
+    # ORIGINAL value trusted instead of the one actually rendered.
+    # `re.findall` + the last match mirrors `_option_line_present`'s
+    # existing pattern for the exact same `.tab_options(...)`-kwarg-
+    # repetition shape.
     include_matches = re.findall(r"row_striping_include_table_body\s*=\s*(\w+)", source)
     if include_matches and include_matches[-1] == "True":
         return True
     if convergence._bare_call_blocks(source, "stripe"):
-        return True
-    color_matches = re.findall(r"row_striping_background_color\s*=\s*['\"]([^'\"]+)['\"]", source)
-    if color_matches and not _is_effectively_transparent(color_matches[-1].strip()):
         return True
     return False
 
@@ -1251,6 +1325,107 @@ def _is_unresolvable_columns_selector(cols_val: str) -> bool:
     return bool(re.match(r"^cs\s*\.\s*\w+\s*\(", cols_val.strip()))
 
 
+# The small, fixed set of `cs.<kind>("pattern")` column-selector shapes this
+# file actually resolves -- NOT full tidyselect emulation (a compound
+# expression via `|`/`&`/`~`, or any other `cs.*` function, stays genuinely
+# unresolved). Each maps to a simple, one-argument STRING predicate against a
+# real column name.
+_CS_SELECTOR_KINDS = ("starts_with", "ends_with", "contains", "matches")
+
+
+class _PendingColumnSelector:
+    """A SIMPLE, single `cs.<kind>("pattern")` column-selector expression
+    (see `_CS_SELECTOR_KINDS`) whose actual target columns can't be known
+    until Tier-2's real visible-columns schema is available -- resolved
+    lazily by `_mechanics_columns` once both tiers exist together, unlike
+    `_UNRESOLVED_COLUMNS` (a selector this file doesn't know how to
+    resolve AT ALL, even with the schema, e.g. a compound expression or
+    an unrecognized `cs.*` function).
+
+    Codex round-10 finding: `cs.starts_with(...)`/`ends_with`/`contains`/
+    `matches` are a small, fixed set of prefix/suffix/substring/regex
+    patterns (not full tidyselect emulation) -- Codex found a concrete
+    real-world case where treating this as unresolved cost real points:
+    `cs.starts_with("density_")` matches EXACTLY the density columns in
+    `towny_growth_trends`'s own ground truth, and an equivalent candidate
+    using that selector lost up to 9 points across the checks that
+    iterate a colored measure's columns (identity, signedness, domain,
+    striping coverage) purely because the selector was treated as
+    "unknowable," despite its target being perfectly resolvable once the
+    real column list is available.
+    """
+
+    __slots__ = ("kind", "pattern")
+
+    def __init__(self, kind: str, pattern: str):
+        self.kind = kind
+        self.pattern = pattern
+
+    def __repr__(self) -> str:
+        # A few check functions interpolate `entry.get("columns")` directly
+        # into a human-readable detail/notes string -- a readable `repr`
+        # here (matching the source syntax) keeps those reports legible
+        # instead of printing a bare object address.
+        return f"cs.{self.kind}({self.pattern!r})"
+
+
+def _parse_cs_selector(cols_val: str) -> tuple[str, str] | None:
+    """Parse a SIMPLE, STANDALONE `cs.<kind>("pattern")` expression into
+    `(kind, pattern)`, else `None` for anything this file doesn't
+    implement: a compound expression (`cs.starts_with("a") | cs.ends_
+    with("b")` -- rejected via the "nothing may follow this call's own
+    closing paren" check below), an unrecognized `cs.*` function, or a
+    non-literal/dynamic pattern argument (`cs.starts_with(prefix_var)`).
+    All of those keep the existing `_UNRESOLVED_COLUMNS` benefit-of-the-
+    doubt treatment, unchanged.
+    """
+    text = cols_val.strip()
+    m = re.match(r"^cs\s*\.\s*(\w+)\s*\(", text)
+    if not m:
+        return None
+    kind = m.group(1)
+    if kind not in _CS_SELECTOR_KINDS:
+        return None
+    open_idx = m.end() - 1
+    close_idx = convergence._scan_balanced_paren(text, open_idx)
+    if close_idx is None:
+        return None
+    if text[close_idx + 1:].strip():
+        return None  # trailing text after this call -- a compound expression
+    arg_text = text[open_idx + 1 : close_idx]
+    positionals = [
+        p for p in convergence._split_top_level_quoted(arg_text) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+    ]
+    pattern_val = convergence._kwarg_value(arg_text, "pattern") or (positionals[0] if positionals else None)
+    pattern = _quoted_string_literal_value(pattern_val) if pattern_val else None
+    if pattern is None:
+        return None  # a dynamic/variable pattern argument -- can't resolve statically
+    return kind, pattern
+
+
+def _cs_selector_matches(kind: str, pattern: str, column: str) -> bool:
+    """Does `column` match the SIMPLE `cs.<kind>("pattern")` selector --
+    the same one-argument string predicate great_tables' own `cs.<kind>`
+    applies (a case-sensitive Python string operation for the first
+    three; `re.search` for `matches`, since that's the one genuinely
+    regex-based selector). An invalid regex pattern (can't happen for a
+    real great_tables script, but keeps this total) matches nothing
+    rather than raising.
+    """
+    if kind == "starts_with":
+        return column.startswith(pattern)
+    if kind == "ends_with":
+        return column.endswith(pattern)
+    if kind == "contains":
+        return pattern in column
+    if kind == "matches":
+        try:
+            return re.search(pattern, column) is not None
+        except re.error:
+            return False
+    return False
+
+
 # A distinct sentinel for "columns targeted by this call are UNKNOWN/
 # unresolvable from static text" (e.g. `columns=cs.starts_with("rate_")`)
 # -- deliberately NOT the same value as `None`, which is Tier 1's existing
@@ -1389,7 +1564,14 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
         if cols_val is None or cols_val.strip() == "None":
             resolved_columns = None  # omitted/explicit None -- targets EVERY column
         elif _is_unresolvable_columns_selector(cols_val):
-            resolved_columns = _UNRESOLVED_COLUMNS  # unknown -- NOT the same as "every column"
+            # Codex round-10 finding: a SIMPLE `cs.<kind>("pattern")` call
+            # (see `_CS_SELECTOR_KINDS`) is resolvable once Tier-2's real
+            # column schema is available -- deferred via `_PendingColumn
+            # Selector` instead of the blanket `_UNRESOLVED_COLUMNS`
+            # sentinel; only a genuinely unparseable/compound/dynamic
+            # selector still falls back to that.
+            parsed = _parse_cs_selector(cols_val)
+            resolved_columns = _PendingColumnSelector(*parsed) if parsed is not None else _UNRESOLVED_COLUMNS
         else:
             resolved_columns = convergence._resolve_columns_list(cols_val, var_map)
         domain_val = convergence._kwarg_value(block, "domain")
@@ -1420,7 +1602,10 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
     for pos, block in _ast_call_blocks(source, tree, "heatmap", allow_bare=True):
         heatmap_cols_val = convergence._heatmap_columns_raw(block)
         if heatmap_cols_val is not None and _is_unresolvable_columns_selector(heatmap_cols_val):
-            resolved_heatmap_columns = _UNRESOLVED_COLUMNS  # unknown -- NOT "every column"
+            # See the identical `_PendingColumnSelector` handling in the
+            # `data_color` branch above (Codex round-10 finding).
+            parsed = _parse_cs_selector(heatmap_cols_val)
+            resolved_heatmap_columns = _PendingColumnSelector(*parsed) if parsed is not None else _UNRESOLVED_COLUMNS
         else:
             resolved_heatmap_columns = convergence._resolve_columns_list(heatmap_cols_val, var_map)
         hue_raw = convergence._kwarg_value(block, "hue")
@@ -1715,13 +1900,24 @@ def _mechanics_columns(entry: dict, fp: dict) -> list[str]:
     Returns an empty list for it instead -- benefit of the doubt means
     "credit/blame nothing specific to this entry," not "assume the most
     generous possible interpretation."
+
+    Codex round-10 finding: `entry["columns"]` can ALSO be a
+    `_PendingColumnSelector` -- a SIMPLE `cs.<kind>("pattern")` call (see
+    that class's own docstring) that couldn't be resolved at Tier-1 parse
+    time (no schema available yet) but CAN be resolved now, against the
+    same visible-columns base the `None` ("every column") sentinel
+    already expands against, filtered down to whichever columns actually
+    match the selector's own pattern.
     """
     cols = entry.get("columns")
     if cols is _UNRESOLVED_COLUMNS:
         return []
+    tier2 = fp["tier2"]
+    if isinstance(cols, _PendingColumnSelector):
+        visible = _visible_columns(fp) - {tier2.get("stub_column"), tier2.get("group_column")}
+        return sorted(c for c in visible if _cs_selector_matches(cols.kind, cols.pattern, c))
     if cols is not None:
         return cols
-    tier2 = fp["tier2"]
     visible = _visible_columns(fp) - {tier2.get("stub_column"), tier2.get("group_column")}
     return sorted(visible)
 
@@ -2219,6 +2415,45 @@ def _group_overlap(a: Counter, b: Counter) -> int:
     return sum(min(n, b.get(rid, 0)) for rid, n in a.items())
 
 
+_GROUP_LABEL_NUMERIC_RE = re.compile(r"\d+")
+
+
+def _group_label_similarity(a: Any, b: Any) -> float:
+    """A small `[0, 1]` TIE-BREAKING signal between two group identifiers'
+    OWN text -- used ONLY to break ties in row-CONTENT overlap (see
+    `_hungarian_group_assignment`'s docstring), never to override a real
+    content-overlap difference.
+
+    Codex round-10 finding (P1): when every group in a table shares
+    identical row-content (e.g. every year-group repeats the same 12
+    month stub labels), row content alone carries ZERO information
+    distinguishing one truth/candidate group pair from another -- this
+    is the signal that lets the assignment still resolve sensibly in
+    that case.
+
+    Extracts the first run of digits from each side and compares them as
+    text when BOTH have one -- `"2010"` vs `"FY2010"` both extract
+    `"2010"`, a full match, regardless of the surrounding non-numeric
+    text. This keeps the established "group labels are free-wording,
+    only the partition matters" philosophy (round 1's relabeling fix)
+    fully intact for the legitimate case. Falls back to a case-
+    insensitive substring check when either side has no numeric content
+    at all (e.g. purely textual group names). Returns `0.0` -- not a
+    guess -- when neither signal distinguishes the pair; the caller's
+    own ambiguity detection is what actually decides whether that `0.0`
+    represents a real "these clearly don't match" or a "there's no
+    information to tell them apart at all" tie.
+    """
+    sa, sb = str(a), str(b)
+    ma, mb = _GROUP_LABEL_NUMERIC_RE.search(sa), _GROUP_LABEL_NUMERIC_RE.search(sb)
+    if ma and mb:
+        return 1.0 if ma.group() == mb.group() else 0.0
+    la, lb = sa.strip().lower(), sb.strip().lower()
+    if la and lb and (la in lb or lb in la):
+        return 1.0
+    return 0.0
+
+
 def _hungarian_min_cost(cost: list[list[float]]) -> list[int]:
     """Solve the assignment problem on a SQUARE `cost` matrix (minimize
     total cost of a one-to-one row->column assignment) via the classic
@@ -2294,27 +2529,72 @@ def _hungarian_min_cost(cost: list[list[float]]) -> list[int]:
 
 def _hungarian_group_assignment(
     cand_groups: dict[Any, Counter], truth_groups: dict[Any, Counter],
-) -> tuple[list, list, list[list[int]], list[int]]:
+) -> tuple[list, list, list[list[int]], list[int], bool]:
     """Shared setup for `_group_partition_match`/`_relabel_candidate_groups`:
     sorted truth/candidate group-id lists, their pairwise row-content
     overlap matrix (square, zero-padded to the larger side -- a truth/
     candidate group beyond the other side's actual count is a "dummy"
-    with zero overlap, contributing nothing), and the Hungarian-optimal
+    with zero overlap, contributing nothing), the Hungarian-optimal
     one-to-one assignment (`assignment[i]` is the column index -- into
     `cand_keys` -- assigned to `truth_keys[i]`; an index `>= len(cand_keys)`
     means that truth group has no real candidate counterpart in the
-    optimal assignment).
+    optimal assignment), and an `ambiguous` flag (see below).
+
+    Codex round-10 finding (P1): when row CONTENT is fully tied across
+    every group pair -- e.g. a table grouped by year where every year's
+    group repeats the identical 12 month stub labels, so overlap between
+    ANY truth year and ANY candidate year is the same 12 regardless of
+    whether the years themselves match -- the overlap matrix alone
+    carries ZERO information distinguishing "2010" from "2000". The
+    Hungarian algorithm still returns SOME valid one-to-one assignment
+    (by construction), but WHICH candidate group lands on which truth
+    group is then arbitrary, and a caller that trusts it unconditionally
+    (`_relabel_candidate_groups`) can relabel an entirely WRONG set of
+    candidate groups onto the truth's correct labels, manufacturing a
+    false exact match a downstream check has no real basis for.
+
+    Before falling back to an arbitrary tie, the assignment now ALSO
+    weighs `_group_label_similarity` (the group identifiers' OWN text) as
+    a strictly SECONDARY signal: `combined = overlap * 1000 +
+    similarity`, where 1000 is comfortably larger than any plausible
+    total similarity swing (bounded by the group count, which is never
+    remotely close to 1000 in real tables) -- so this can only ever break
+    a tie in total overlap, never sacrifice real overlap for a better
+    label match. This resolves the LEGITIMATE relabeling case ("FY2010"
+    vs "2010" -- same numeric content, similarity=1 breaks the tie
+    cleanly) without weakening the "group labels are free-wording, only
+    the partition matters" philosophy established since round 1.
+
+    `ambiguous` is `True` when, even after this tie-breaker, some REAL
+    truth group's best combined score is still shared by 2+ REAL
+    candidate groups (a per-row tie-check -- e.g. a candidate using
+    entirely the wrong 6 years, where no candidate year's label matches
+    any truth year's numerically, leaves every truth year tied across
+    every candidate year at the exact same combined score). Callers use
+    this to avoid confidently claiming an exact/one-to-one match that's
+    actually built on an arbitrary pick.
     """
     truth_keys = sorted(truth_groups, key=str)
     cand_keys = sorted(cand_groups, key=str)
     n = max(len(truth_keys), len(cand_keys))
     overlap_matrix = [[0] * n for _ in range(n)]
+    combined_matrix = [[0.0] * n for _ in range(n)]
     for i, tg in enumerate(truth_keys):
         for j, cg in enumerate(cand_keys):
             overlap_matrix[i][j] = _group_overlap(truth_groups[tg], cand_groups[cg])
-    cost = [[-overlap_matrix[i][j] for j in range(n)] for i in range(n)]  # minimize cost == maximize overlap
+            combined_matrix[i][j] = overlap_matrix[i][j] * 1000 + _group_label_similarity(tg, cg)
+    cost = [[-combined_matrix[i][j] for j in range(n)] for i in range(n)]  # minimize cost == maximize combined
     assignment = _hungarian_min_cost(cost)
-    return truth_keys, cand_keys, overlap_matrix, assignment
+    ambiguous = False
+    for i in range(len(truth_keys)):
+        row = combined_matrix[i][: len(cand_keys)]
+        if not row:
+            continue
+        best = max(row)
+        if sum(1 for v in row if v == best) > 1:
+            ambiguous = True
+            break
+    return truth_keys, cand_keys, overlap_matrix, assignment, ambiguous
 
 
 def _group_partition_match(
@@ -2388,7 +2668,7 @@ def _group_partition_match(
     # correct relabeling whenever one exists, and still returns SOME valid
     # one-to-one mapping achieving the same optimal total when multiple
     # mappings tie -- exactly the guarantee this check needs.
-    truth_keys, cand_keys, overlap_matrix, assignment = _hungarian_group_assignment(cand_groups, truth_groups)
+    truth_keys, cand_keys, overlap_matrix, assignment, ambiguous = _hungarian_group_assignment(cand_groups, truth_groups)
     agree = 0
     matched_cand_indices: set[int] = set()
     for i in range(len(truth_keys)):
@@ -2404,7 +2684,16 @@ def _group_partition_match(
     # this only fails when a truth group had no real candidate
     # counterpart to be assigned at all (mapped to a dummy column).
     one_to_one = len(matched_cand_indices) == len(truth_keys)
-    match = one_to_one and agree / shared_rows >= execution_tier._MATCH_THRESHOLD
+    # Codex round-10 finding (P1): an assignment built on a GENUINE tie in
+    # both row-content overlap AND group-label similarity (see
+    # `_hungarian_group_assignment`'s own docstring -- e.g. a candidate
+    # using entirely the wrong years, where every year-group shares the
+    # same month labels and no candidate year's label numerically matches
+    # any truth year's) is arbitrary. Reporting `match=True` off the back
+    # of an arbitrary pick would be a confident claim this check has no
+    # real basis for -- `ambiguous` makes that genuine uncertainty an
+    # explicit non-match instead.
+    match = one_to_one and not ambiguous and agree / shared_rows >= execution_tier._MATCH_THRESHOLD
     return {"comparable": True, "match": match, "shared_rows": shared_rows}
 
 
@@ -2418,9 +2707,9 @@ def _relabel_candidate_groups(
     differently than the ground truth (e.g. "FY2010"/"FY2011" instead of
     "2010"/"2011"), doesn't lose row-identity credit purely from the label
     difference. Returns `None` when there's nothing to relabel against (no
-    shared row content at all between any candidate/truth group pair) --
-    the caller falls back to the candidate's own, unrelabeled group ids in
-    that case.
+    shared row content at all between any candidate/truth group pair, OR
+    the assignment is genuinely ambiguous -- see below) -- the caller
+    falls back to the candidate's own, unrelabeled group ids in that case.
 
     Codex round-4 finding: `execution_tier.row_set_identity` compares
     `(group_id, row_id)` tuples LITERALLY -- necessary so a repeated stub
@@ -2433,12 +2722,28 @@ def _relabel_candidate_groups(
     (built in round 2 for the analogous "same partition, different
     labels" problem in `check_explicit_instructions`) rather than
     inventing new matching logic.
+
+    Codex round-10 finding (P1): when row CONTENT is fully tied across
+    every group pair (e.g. every year-group repeats the same 12 month
+    stub labels) AND the group identifiers' own text carries no
+    distinguishing signal either (e.g. a candidate using entirely the
+    wrong years -- no candidate year's label numerically matches any
+    truth year's, see `_hungarian_group_assignment`/`_group_label_
+    similarity`'s own docstrings), relabeling anyway would arbitrarily
+    overwrite the candidate's OWN (and possibly entirely WRONG) group
+    labels with the truth's, manufacturing a false partition match
+    downstream. Returns `None` in that genuinely ambiguous case too --
+    the caller then compares the candidate's own, unrelabeled group ids
+    directly, which correctly fails a group-aware row-identity comparison
+    instead of silently "succeeding" off an arbitrary relabel.
     """
     cand_groups = _group_row_multisets(candidate_row_ids, candidate_group_ids)
     truth_groups = _group_row_multisets(truth_row_ids, truth_group_ids)
     if not cand_groups or not truth_groups:
         return None
-    truth_keys, cand_keys, overlap_matrix, assignment = _hungarian_group_assignment(cand_groups, truth_groups)
+    truth_keys, cand_keys, overlap_matrix, assignment, ambiguous = _hungarian_group_assignment(cand_groups, truth_groups)
+    if ambiguous:
+        return None
     relabel: dict[Any, Any] = {}
     for i, tg in enumerate(truth_keys):
         j = assignment[i]
@@ -3334,16 +3639,34 @@ def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
             reverse_total += 1
             if cand_entry.get("reverse") == truth_entry.get("reverse"):
                 reverse_ok += 1
-    # A single rounding over all sub-checks (rather than one
-    # _round_points() call per dimension) so a fully-correct candidate
-    # always sums to exactly 4, and "autocolor_text=False" (readable text
-    # isn't guaranteed over a dark fill) actually costs points -- the name
-    # already promised this field was checked; it wasn't.
-    total_checks = 3 * n + reverse_total
-    total_ok = na_ok + trunc_ok + autocolor_ok + reverse_ok
-    pts = _round_points(total_ok / total_checks, 4)
+    # Codex round-10 finding: pooling `reverse` into the SAME averaged
+    # fraction as na_color/truncate/autocolor_text let a single wrong
+    # reverse value get diluted away by rounding once there were enough
+    # OTHER (correct) sub-checks in the pool -- Codex's concrete example
+    # on towny_growth_trends: 39/44 correct sub-checks (with a genuine
+    # reverse-orientation mismatch among them) still rounds to a full
+    # 4/4, fully erasing a provable polarity error that should never wash
+    # out. `reverse` is now its own SEPARATE, independently-rounded
+    # 1-point component (whenever there's a real reverse check to make),
+    # not folded into the base na_color/truncate/autocolor_text pool --
+    # a mismatch there always costs a visible amount of this check's
+    # total, regardless of how many OTHER properties happen to be
+    # correct. This deliberately does NOT make the whole check binary-
+    # fail on a reverse mismatch (too harsh -- reverse is only checked
+    # for canonical measures with a declared truth mechanics entry, so
+    # it's often not applicable at all): when there's nothing to check
+    # (`reverse_total == 0`), the full 4 points stay with the base pool
+    # exactly as before this fix.
+    base_total = 3 * n
+    base_ok = na_ok + trunc_ok + autocolor_ok
+    if reverse_total:
+        base_pts = _round_points(base_ok / base_total, 3) if base_total else 3
+        reverse_pts = _round_points(reverse_ok / reverse_total, 1)
+        pts = base_pts + reverse_pts
+    else:
+        pts = _round_points(base_ok / base_total, 4) if base_total else 4
     return CheckResult(
-        name, 4, pts, total_ok == total_checks,
+        name, 4, pts, pts == 4,
         f"na_color correct {na_ok}/{n}, truncate=False correct {trunc_ok}/{n}, autocolor_text=True correct {autocolor_ok}/{n}"
         + (f", reverse orientation matches truth {reverse_ok}/{reverse_total}" if reverse_total else ""),
     )
@@ -3721,7 +4044,16 @@ def check_render_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
     try:
         expand = float(params.get("expand", "5"))
     except ValueError:
-        expand = 5.0
+        # Codex round-10 finding: this used to silently substitute the
+        # DEFAULT value (5.0) for a non-literal `expand` (e.g. `expand=
+        # EXPAND`, a variable) -- treating an unresolvable expression as
+        # if it resolved to the exact default is wrong in BOTH
+        # directions (a candidate that raised expand via a variable
+        # scored as if it hadn't; one that lowered it scored as if it
+        # hadn't either), and inconsistent with `zoom`'s own handling
+        # just above, which correctly returns N/A for the identical
+        # non-literal case. Mirrors that treatment exactly.
+        return _na(name, f"non-literal expand value '{params.get('expand')}' -- not verifiable")
     # The fit-order rule is "grow room before shrinking zoom" -- vwidth/
     # vheight are an EQUALLY valid way to grow room as expand is (both are
     # captured by _render_params, but only expand was ever checked here).
