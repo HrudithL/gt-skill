@@ -1,17 +1,29 @@
 #!/usr/bin/env python3
 """The ground-truth comparator — scores a candidate `table.py` against its
-prompt's ground truth, deterministically.
+prompt's ground truth, via a HYBRID of deterministic checks and one grounded
+LLM judge call.
 
-Per ``.planning/09-ground-truth-comparator.md``: no LLM anywhere in this
-path. Every check is regex/AST parsing (Tier 1, ``runner.convergence``),
-execution + value comparison (Tier 2, ``runner.execution_tier``), or a
-lookup against the ground truth's own authored metadata (§5). Outcome-only
-scoring — a check never penalizes *how* a table reached a compliant result,
-only whether the result itself is compliant.
+Per ``.planning/10-hybrid-comparator.md`` (supersedes ``09``'s "no LLM
+anywhere" lock): most checks are still regex/AST parsing (Tier 1,
+``runner.convergence``), execution + value comparison (Tier 2,
+``runner.execution_tier``), or a lookup against the ground truth's own
+authored metadata (§5) — these have exactly one provably-correct answer and
+stay fully deterministic. A handful of checks are instead about wording or
+an open-ended space of valid choices (column-label clarity, caption/title/
+subtitle quality, column order, palette taste) — those are computed by one
+batched call to ``runner.judge.judge()`` (a vision-capable LLM call, see
+that module) and read out of the single combined result ``compare()``
+stashes in ``meta["_judge_result"]`` before running the check functions.
+Every check function still has the exact same signature and every
+judge-backed check degrades to the existing ``_na()`` pattern (0/0,
+excluded from the denominator) if the judge is unavailable or the
+dimension doesn't apply to this comparison — nothing ever silently passes
+or fails. ``CheckResult.tier`` ("mechanical" or "judge") makes the
+distinction visible in the printed report, not just in code comments.
 
-Report shape: a 0–100 total = Data-compliance (0–50) + Formatting-compliance
-(0–50), plus one line per check naming what passed/failed, its point value,
-and why (§7).
+Report shape: a 0–114 total = Data-compliance (0–53) + Formatting-compliance
+(0–61), plus one line per check naming its tier, what passed/failed, its
+point value, and why (§7).
 """
 
 from __future__ import annotations
@@ -24,6 +36,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from runner import convergence, execution_tier
+from runner import judge as judge_module
 
 # ----------------------------------------------------------------------- #
 # fingerprint + metadata loading
@@ -378,6 +391,7 @@ def build_fingerprint(py_path: Path) -> dict:
     tier2 = execution_tier.exec_table(py_path)
     return {"tier1": tier1, "tier2": tier2, "source": source, "path": py_path}
 
+
 def load_ground_truth_metadata(gt_path: Path) -> dict:
     """Read a ground truth's §5 metadata literals via AST parsing -- no
     execution of the module at all.
@@ -596,18 +610,49 @@ class CheckResult:
     points_earned: int
     passed: bool
     detail: str
+    # "mechanical" (regex/AST/execution -- provably correct) or "judge" (the
+    # LLM call scored this dimension). Defaults to "mechanical" so every
+    # pre-existing positional `CheckResult(...)` call site in this file
+    # (there are dozens) needs no change -- only the 2 moved checks and 5
+    # new judge-backed checks pass `tier="judge"` explicitly.
+    tier: str = "mechanical"
 
 
 CheckFn = Callable[[dict, dict, dict], CheckResult]
 
 
-def _na(name: str, detail: str) -> CheckResult:
+def _na(name: str, detail: str, tier: str = "mechanical") -> CheckResult:
     """A check with nothing to grade this run (e.g. an optional
     REQUIRED_INSTRUCTIONS key the prompt never asked for) — contributes 0 to
     BOTH earned and possible, so the report's denominator shrinks instead of
     silently awarding or docking points for something that was never asked.
     """
-    return CheckResult(name, 0, 0, True, detail)
+    return CheckResult(name, 0, 0, True, detail, tier=tier)
+
+
+def _judge_dimension_check(meta: dict, dimension_key: str, name: str, points: int) -> CheckResult:
+    """Shared body for every judge-backed check (the 2 moved checks + 5 new
+    ones): look up ``dimension_key`` in the single combined judge result
+    ``compare()`` stashes in ``meta["_judge_result"]`` (a
+    ``dict[str, judge_module.JudgeDimension]``, see that function), convert
+    ``.score`` (1-5) to ``points`` via the same ``_round_points`` helper
+    every mechanical check already uses, and degrade to the existing
+    ``_na()`` pattern when the dimension isn't applicable -- whether because
+    the judge itself is unavailable (``JudgeDimension.rationale`` then
+    starts with the ``"judge unavailable: "`` prefix -- see
+    ``runner.judge.judge()``'s docstring) or because this specific
+    comparison genuinely has nothing to judge (e.g. no grouping to assess
+    quality of). Either way this reads as N/A (0/0), never a silent
+    pass/fail -- ``dim.rationale`` (surfaced verbatim in the detail) is how
+    a report reader tells those two cases apart.
+    """
+    judge_result = meta.get("_judge_result") or {}
+    dim = judge_result.get(dimension_key)
+    if dim is None or not dim.applicable:
+        reason = dim.rationale if dim is not None else "judge result missing for this dimension"
+        return _na(name, reason, tier="judge")
+    pts = _round_points(dim.score / 5, points)
+    return CheckResult(name, points, pts, pts == points, f"judge score {dim.score}/5 -- {dim.rationale}", tier="judge")
 
 
 # ----------------------------------------------------------------------- #
@@ -985,30 +1030,24 @@ def check_summary_row_existence(cand: dict, truth: dict, meta: dict) -> CheckRes
 
 
 def check_label_concept_correctness(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    name = "Column-label concept-correctness"
-    synonyms = meta["LABEL_SYNONYMS"]
-    if not synonyms:
-        return _na(name, "ground truth declares no LABEL_SYNONYMS to check")
-    # Seed every visible Tier-2 column with its DEFAULT rendered label (the
-    # source column name itself -- great_tables' own default when
-    # cols_label(...) is never called for it), then let explicit `label:`
-    # entries from columns_signature override. Without this seed, a
-    # candidate that omits cols_label() entirely renders raw source names
-    # (e.g. `pop_change_1996_2001_pct`) but cand_labels came back empty,
-    # making `applicable` empty and this check score N/A instead of failing
-    # a genuinely non-matching default label.
-    cand_labels = {c: c for c in _visible_columns(cand)}
-    cand_labels.update(_parse_columns_signature_labels(cand["tier1"].get("columns_signature", "")))
-    applicable = {col: syns for col, syns in synonyms.items() if col in cand_labels}
-    if not applicable:
-        return _na(name, "none of the candidate's rendered columns are covered by LABEL_SYNONYMS")
-    ok_count = 0
-    for col, syns in applicable.items():
-        label = cand_labels[col].lower()
-        if any(s.lower() in label for s in syns):
-            ok_count += 1
-    all_ok = ok_count == len(applicable)
-    return CheckResult(name, 1, 1 if all_ok else 0, all_ok, f"{ok_count}/{len(applicable)} rendered labels match an acceptable synonym")
+    # Moved to the judge per .planning/10-hybrid-comparator.md §3: a
+    # LABEL_SYNONYMS literal-substring lookup can't handle all valid
+    # phrasings for "is this column labeled with the right concept" --
+    # same name/points/slot as before, computation only moved. LABEL_
+    # SYNONYMS itself is still passed to the judge as grounding context
+    # (see runner.judge._build_user_content), just no longer gates here.
+    return _judge_dimension_check(meta, "label_concept_correctness", "Column-label concept-correctness", 1)
+
+
+def check_grouping_choice_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    # New per .planning/10-hybrid-comparator.md §3: no existing check graded
+    # WHICH grouping variable (or the choice not to group) was a sensible,
+    # goal-serving decision -- only whether grouping was present at all
+    # (check_grouping_existence, unchanged above). The judge itself gates
+    # applicability (ground truth groups AND REQUIRED_INSTRUCTIONS has no
+    # "grouping" key -- see judge_rubric.py), so no extra gating is needed
+    # here beyond the shared _judge_dimension_check degrade path.
+    return _judge_dimension_check(meta, "grouping_choice_quality", "Grouping-choice quality", 3)
 
 
 DATA_CHECKS: list[CheckFn] = [
@@ -1019,6 +1058,7 @@ DATA_CHECKS: list[CheckFn] = [
     check_explicit_instructions,
     check_column_set,
     check_grouping_existence,
+    check_grouping_choice_quality,
     check_spanner_existence,
     check_stub_existence,
     check_hue_collision,
@@ -1601,41 +1641,43 @@ def check_summary_row_visual_distinction(cand: dict, truth: dict, meta: dict) ->
 
 
 def check_caption_not_restating_subtitle(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    name = "Caption doesn't just restate the subtitle"
-    keywords = meta["CAPTION_KEYWORDS"]
-    if not keywords:
-        return _na(name, "ground truth declares no CAPTION_KEYWORDS to check")
-    n = _n_rows(cand)
-    if n is not None and n < 5:
-        return _na(name, "fewer than 5 rows; caption is optional")
-    notes = cand["tier1"].get("source_note_texts") or []
-    if notes and notes[0] is None:
-        # The caption call exists but its text is a dynamic expression --
-        # unlike a merely-missing caption (a real failure), there's
-        # nothing here to check the required keywords against.
-        return _na(name, "candidate's caption text is a dynamic expression; keyword match not statically verifiable")
-    caption = (notes[0] or "").lower() if notes else ""
-    # `caption_present` (Tier 1's field name for "tab_header's subtitle=
-    # kwarg is present") true but `subtitle_text` None means the subtitle
-    # IS there, just a dynamic expression -- collapsing that to "" (same
-    # as genuinely no subtitle) would make the forbidden-keyword search
-    # always pass, crediting "no duplicate" for content we can't actually
-    # read. Only a genuinely ABSENT subtitle correctly reads as "".
-    if cand["tier1"].get("caption_present") and cand["tier1"].get("subtitle_text") is None:
-        return _na(name, "candidate's subtitle text is a dynamic expression; overlap not statically verifiable")
-    subtitle = (cand["tier1"].get("subtitle_text") or "").lower()
-    should_mention = keywords.get("caption_should_mention", [])
-    should_not_duplicate = keywords.get("subtitle_should_not_duplicate", [])
-    # ALL declared keywords, not just one -- the §5 schema calls these the
-    # terms "the footer's takeaway sentence must include" (plural), and
-    # towny's own ground truth treats its 3 keywords as jointly making up
-    # "the actual unique insight", not alternatives. A caption mentioning
-    # only 1 of 3 required concepts (e.g. just "1996") was previously
-    # awarded full credit here.
-    mentions_ok = not should_mention or all(k.lower() in caption for k in should_mention)
-    no_duplicate = not any(k.lower() in subtitle for k in should_not_duplicate)
-    ok = mentions_ok and no_duplicate
-    return CheckResult(name, 1, 1 if ok else 0, ok, f"caption mentions required keyword={mentions_ok}, subtitle avoids caption-only keywords={no_duplicate}")
+    # Moved to the judge per .planning/10-hybrid-comparator.md §3: a
+    # CAPTION_KEYWORDS lookup can't handle all valid phrasings for "does the
+    # caption add real information beyond the subtitle" -- same name/points/
+    # slot as before, computation only moved. CAPTION_KEYWORDS itself is
+    # still passed to the judge as grounding context, just no longer gates.
+    return _judge_dimension_check(meta, "caption_quality", "Caption doesn't just restate the subtitle", 1)
+
+
+def check_title_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    # New per .planning/10-hybrid-comparator.md §3: the prior
+    # check_title_subtitle_caption_source above is presence-only ("does a
+    # title exist"); this grades whether it's clear, accurate, and matches
+    # the ground truth's core framing -- a wording judgment, not a fact.
+    return _judge_dimension_check(meta, "title_quality", "Title quality", 3)
+
+
+def check_subtitle_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    # New, same rationale as check_title_quality: does the subtitle add real
+    # clarifying context, non-redundant with the title.
+    return _judge_dimension_check(meta, "subtitle_quality", "Subtitle quality", 3)
+
+
+def check_column_order_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    # New: `09` explicitly left column order ungraded ("Doesn't grade...
+    # column order", `09` §3) since a sensible left-to-right reading order
+    # is one of several valid choices, not a single fixed answer.
+    return _judge_dimension_check(meta, "column_order_quality", "Column order quality", 2)
+
+
+def check_color_theme_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    # New: check_sequential_vs_diverging/check_domain_computation/check_
+    # band_hue_harmonization above already verify shape/family/mechanics
+    # correctness deterministically; this grades the remaining subjective
+    # layer -- is the SPECIFIC hue/palette choice tasteful and harmonious --
+    # previously an explicit non-goal (`09` §3: "only family/shape-
+    # correctness is checked").
+    return _judge_dimension_check(meta, "color_theme_quality", "Color theme/palette taste", 3)
 
 
 FORMAT_CHECKS: list[CheckFn] = [
@@ -1651,6 +1693,10 @@ FORMAT_CHECKS: list[CheckFn] = [
     check_hero_column_formatting,
     check_render_mechanics,
     check_summary_row_visual_distinction,
+    check_title_quality,
+    check_subtitle_quality,
+    check_column_order_quality,
+    check_color_theme_quality,
     check_caption_not_restating_subtitle,
 ]
 
@@ -1678,15 +1724,40 @@ class ComparatorReport:
         return self.data_possible + self.format_possible
 
 
-def compare(candidate_path: Path, ground_truth_path: Path) -> ComparatorReport:
+def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = "") -> ComparatorReport:
     """Run every check and roll up the score. Never raises on a candidate
     that fails to execute or parse — every check function is written to
     degrade to a 0-point failure (or an N/A skip) rather than crash, so a
     broken candidate still gets a full, itemized report.
+
+    ``prompt_text`` is the original natural-language prompt's own text
+    (``gt_compare.py`` resolves it from ``prompts/<difficulty>/<prompt_id>.json``'s
+    ``"prompt"`` field) -- threaded straight through to the one grounded
+    judge call below. It's optional (defaults to ``""``) so a caller that
+    only needs the deterministic checks (e.g. a unit test) doesn't have to
+    supply it; the judge call itself still runs and simply has less context
+    to ground its wording judgments in.
+
+    The judge is invoked exactly ONCE per comparison (§4 of
+    ``.planning/10-hybrid-comparator.md``: "one batched call... scoring all
+    7 dimensions together"), and its single combined result is stashed in
+    ``meta["_judge_result"]`` before any check function runs, so every
+    judge-backed check (see ``_judge_dimension_check``) reads from the same
+    call rather than each triggering its own. Candidate/ground-truth PNGs
+    are derived by the same convention this repo already uses elsewhere:
+    each `.py` has a checked-in or freshly-rendered `.png` twin alongside
+    it. If either PNG doesn't exist, or the model call itself fails,
+    ``judge()`` degrades to its own "unavailable" result (see that
+    function's docstring) -- this never raises and never blocks the
+    deterministic checks from running.
     """
     cand = build_fingerprint(candidate_path)
     truth = build_fingerprint(ground_truth_path)
     meta = load_ground_truth_metadata(ground_truth_path)
+
+    candidate_png = candidate_path.with_suffix(".png")
+    truth_png = ground_truth_path.with_suffix(".png")
+    meta["_judge_result"] = judge_module.judge(candidate_png, truth_png, prompt_text, meta)
 
     data_results = [fn(cand, truth, meta) for fn in DATA_CHECKS]
     format_results = [fn(cand, truth, meta) for fn in FORMAT_CHECKS]
@@ -1718,5 +1789,11 @@ def format_report(report: ComparatorReport) -> str:
         # rollup) but graded nothing (points_possible == 0) -- reporting
         # those as PASS claims the condition was verified when it wasn't.
         mark = "N/A" if r.points_possible == 0 else ("PASS" if r.passed else "FAIL")
-        lines.append(f"[{mark}] {r.name}: {r.points_earned}/{r.points_possible} -- {r.detail}")
+        # Per .planning/10-hybrid-comparator.md §7/§8: make judge-backed vs.
+        # mechanical visible in the printed report itself, not just in code
+        # comments -- a reader shouldn't have to open comparator.py to know
+        # whether a given line came from a regex/execution check or an LLM
+        # call.
+        tier_tag = "JUDGE" if r.tier == "judge" else "MECHANICAL"
+        lines.append(f"[{mark}] [{tier_tag}] {r.name}: {r.points_earned}/{r.points_possible} -- {r.detail}")
     return "\n".join(lines)
