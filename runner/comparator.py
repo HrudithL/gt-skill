@@ -472,12 +472,20 @@ def _render_target_var_literals(source: str, tree: ast.Module) -> dict[tuple[int
     gt.gtsave(output)` had the SECOND assignment clobber the single
     name-keyed entry used to judge BOTH calls, misjudging the first
     (correct) call using the second (wrong) value. Keyed by the CALL
-    NODE's own `(lineno, col_offset)` instead -- the exact same sort key
-    `_ast_call_blocks` already uses for this same call node -- so each
-    call site resolves strictly against the statement immediately
-    preceding IT, never a different call's binding. `tree` is passed in
-    (rather than re-parsed here) so callers building `_ast_call_blocks`
-    results from the SAME parse can look up by identical keys.
+    NODE's own position instead -- the exact same sort key `_ast_call_
+    blocks` already uses for this same call node -- so each call site
+    resolves strictly against the statement immediately preceding IT,
+    never a different call's binding. `tree` is passed in (rather than
+    re-parsed here) so callers building `_ast_call_blocks` results from
+    the SAME parse can look up by identical keys.
+
+    Codex round-13 finding: keyed on `(lineno, col_offset)` -- the call's
+    OWN START position -- which MUST match `_ast_call_blocks`'s own key
+    exactly for the position-based correlation lookup to work at all.
+    `_ast_call_blocks` switched to `(end_lineno, end_col_offset)` (its
+    own round-13 fix, for fluent-chain ordering correctness) -- this
+    function's key is updated identically, or every lookup here would
+    silently miss.
     """
 
     def _matching_calls(stmt: ast.stmt) -> list[tuple[ast.Call, str]]:
@@ -521,7 +529,7 @@ def _render_target_var_literals(source: str, tree: ast.Module) -> dict[tuple[int
                     continue
                 for call_node, var_name in _matching_calls(stmts[i]):
                     if var_name == prev.targets[0].id:
-                        out[(call_node.lineno, call_node.col_offset)] = prev.value.value
+                        out[(call_node.end_lineno, call_node.end_col_offset)] = prev.value.value
     return out
 
 
@@ -637,6 +645,26 @@ def _has_real_call(source: str, func_name: str, *, allow_bare: bool = False) -> 
         if allow_bare and isinstance(func, ast.Name) and func.id == func_name:
             return True
     return False
+
+
+def _spanner_present_local(source: str) -> bool:
+    """AST-based replacement for convergence.py's own `spanner_present`
+    field -- true if a genuine `.tab_spanner(...)` or `.tab_spanner_delim(
+    ...)` call exists (both render column-group spanners -- a delimiter
+    in column names via `tab_spanner_delim` counts too, not just an
+    explicit `tab_spanner` call, matching convergence.py's own stated
+    intent for this field).
+
+    Codex round-13 finding: convergence.py's own `spanner_present` field
+    (off-limits -- see this file's Tier-1 compatibility-shim section) is
+    computed via `convergence._call_arg_blocks` (a source-wide regex with
+    no comment/string stripping at all) -- the same recurring bug class
+    already fixed for color-mechanics/frame/fmt_*/tab_options/tab_style/
+    tab_header/stripe detection elsewhere in this file: a comment
+    mentioning `.tab_spanner(...)` is misdetected as a real spanner.
+    Switched to `_ast_call_arg_blocks` (AST-based).
+    """
+    return bool(_ast_call_arg_blocks(source, "tab_spanner") or _ast_call_arg_blocks(source, "tab_spanner_delim"))
 
 
 def _frame_present(source: str) -> bool:
@@ -1076,6 +1104,18 @@ def _render_params_local(source: str) -> dict:
     resolves to table.png at all) but through the shared, smarter
     resolution machinery, so both checks agree on WHICH call actually
     produced the mandated artifact.
+
+    Codex round-13 finding: this still mirrored `convergence._render_
+    params`'s own STRUCTURE of trying every `gtsave(...)` call first and
+    only falling back to `finalize(...)` calls when NO `gtsave(...)` call
+    exists at all -- so a candidate using `finalize()` for the actual
+    `table.png`-producing render, plus an unrelated `gtsave("backup.png",
+    ...)` call elsewhere, never even considered the finalize call (since
+    `gtsave_blocks` was non-empty) and scored the unrelated gtsave call's
+    params instead. `gtsave(...)` and `finalize(...)` calls are now
+    merged into ONE chronologically-ordered pool and the effective call
+    is selected from that combined set, matching `_render_call_present`'s
+    own "check both mechanisms together" semantics exactly.
     """
     try:
         tree = ast.parse(source)
@@ -1110,23 +1150,39 @@ def _render_params_local(source: str) -> dict:
                 out[kw] = v.strip()
         return out
 
-    gtsave_blocks = sorted(_ast_call_blocks(source, tree, "gtsave", allow_bare=False), key=lambda b: b[0])
-    if gtsave_blocks:
-        chosen_pos, chosen_block = gtsave_blocks[-1]  # last-wins default when none resolves to table.png
-        for pos, block in gtsave_blocks:
-            if _call_targets_table_png(pos, block, "file", 0):
-                chosen_pos, chosen_block = pos, block  # keep scanning -- a LATER table.png write wins
-        return _extract_params(chosen_block, {"zoom": "2.0", "expand": "5"})
-
-    finalize_blocks = sorted(_ast_call_blocks(source, tree, "finalize", allow_bare=True), key=lambda b: b[0])
-    if finalize_blocks:
-        chosen_pos, chosen_block = finalize_blocks[-1]
-        for pos, block in finalize_blocks:
-            if _call_targets_table_png(pos, block, "path", 1):
-                chosen_pos, chosen_block = pos, block
-        return _extract_params(chosen_block, {"expand": "15", "zoom": "2.0"})
-
-    return {}
+    # Codex round-13 finding: this returned as soon as it found ANY
+    # `gtsave(...)` call at all, never even looking at `finalize(...)`
+    # calls in that case -- so a candidate using `finalize()` for the
+    # CORRECT render (the one that actually produces `table.png`) plus a
+    # separate, unrelated `gtsave("backup.png", ...)` call elsewhere had
+    # this scored against the unrelated gtsave call's params instead,
+    # even though `render_call_present`/`_blocks_target_table_png`
+    # correctly recognize BOTH mechanisms together (checking gtsave OR
+    # finalize, not gtsave THEN finalize only as a fallback when gtsave
+    # is entirely absent). Both call forms are now merged into ONE
+    # chronologically-ordered pool and the effective call is selected
+    # from that combined set -- whichever call (from EITHER mechanism)
+    # is the LAST one resolving to `table.png` wins; only when NONE of
+    # them resolve to `table.png` does this fall back to the overall
+    # last call from either mechanism.
+    gtsave_items = [
+        (pos, block, "file", 0, {"zoom": "2.0", "expand": "5"})
+        for pos, block in _ast_call_blocks(source, tree, "gtsave", allow_bare=False)
+    ]
+    finalize_items = [
+        (pos, block, "path", 1, {"expand": "15", "zoom": "2.0"})
+        for pos, block in _ast_call_blocks(source, tree, "finalize", allow_bare=True)
+    ]
+    combined = sorted(gtsave_items + finalize_items, key=lambda item: item[0])
+    if not combined:
+        return {}
+    chosen = combined[-1]  # last-wins default when none resolves to table.png
+    for item in combined:
+        pos, block, path_kwarg, path_index, _defaults = item
+        if _call_targets_table_png(pos, block, path_kwarg, path_index):
+            chosen = item  # keep scanning -- a LATER table.png write (either mechanism) wins
+    _, chosen_block, _, _, chosen_defaults = chosen
+    return _extract_params(chosen_block, chosen_defaults)
 
 
 def _tab_header_kwarg_present(source: str, kwarg: str) -> bool:
@@ -1305,12 +1361,31 @@ def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: 
     calculation) leaves exactly `"(args...)"`, however many lines the
     receiver chain or the call's own arguments span.
 
-    The sort key is `(lineno, col_offset)` -- true SOURCE ORDER
+    The sort key is `(end_lineno, end_col_offset)` -- true SOURCE ORDER
     (interleaving `data_color`/`heatmap` calls correctly) is all this
     needs, and a (line, byte-offset) pair sorts identically to a (line,
     char-offset) pair on the same line (both increase monotonically
     together), so there's no need to convert to a character offset just
     to preserve ordering.
+
+    Codex round-13 finding: this originally keyed on `(node.lineno, node.
+    col_offset)` -- the call's OWN START position. That's correct for
+    calls in separate statements, but for a FLUENT CHAIN (`.tab_options(
+    a=1).tab_options(a=2)`), EVERY link in the chain shares the exact
+    SAME start position (a `Call` node's span starts at the beginning of
+    its entire receiver chain -- see the docstring paragraph above -- so
+    the outer, later call and the inner, earlier call both report the
+    same `(lineno, col_offset)`). Sorting by a tied key falls back to
+    Python's stable-sort, which preserves `_walk_top_level`'s own
+    traversal order -- and that traversal visits the OUTER (later,
+    effective) call before the INNER (earlier) one, so every consumer
+    reading `blocks[-1]` to mean "the last/effective call" actually got
+    the chronologically FIRST one for chained calls specifically. `end_
+    lineno`/`end_col_offset` don't have this problem: each link's END
+    position is exactly where ITS OWN closing paren is, strictly
+    increasing outward through the chain (the outer call's closing paren
+    always comes after every inner call's), so it correctly orders both
+    chained AND separate-statement calls alike.
     """
     out: list[tuple[tuple[int, int], str]] = []
     for node in _walk_top_level(tree):
@@ -1338,7 +1413,7 @@ def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: 
         if not (rest.startswith("(") and rest.endswith(")")):
             continue
         block = convergence._strip_line_comments(rest[1:-1])
-        out.append(((node.lineno, node.col_offset), block))
+        out.append(((node.end_lineno, node.end_col_offset), block))
     return out
 
 
@@ -1390,6 +1465,15 @@ def _ast_fmt_calls(source: str) -> list[tuple[str, str]]:
     slice, so this is the same Tier-1 compatibility-shim pattern used
     throughout this file: walk genuine `ast.Call` nodes instead of
     re-scanning source text.
+
+    Codex round-13 finding: sorted on `(node.lineno, node.col_offset)` --
+    the call's OWN START position, which every link of a FLUENT CHAIN
+    (`.fmt_number(...).fmt_percent(...)`) shares identically (see `_ast_
+    call_blocks`'s own round-13 docstring paragraph for the full
+    explanation) -- so a stable sort on a tied key could put the later,
+    effective call before the earlier one. Sorts on `(end_lineno, end_
+    col_offset)` instead, which strictly increases outward through a
+    chain and still increases correctly across separate statements.
     """
     try:
         tree = ast.parse(source)
@@ -1410,7 +1494,7 @@ def _ast_fmt_calls(source: str) -> list[tuple[str, str]]:
         if not (rest.startswith("(") and rest.endswith(")")):
             continue
         block = convergence._strip_line_comments(rest[1:-1])
-        out.append(((node.lineno, node.col_offset), func.attr, block))
+        out.append(((node.end_lineno, node.end_col_offset), func.attr, block))
     out.sort(key=lambda e: e[0])
     return [(name, block) for _, name, block in out]
 
@@ -2115,6 +2199,10 @@ def build_fingerprint(py_path: Path) -> dict:
     # binding `render_call_present` (just above) uses -- see `_render_
     # params_local`'s own docstring.
     tier1["render_params"] = _render_params_local(source)
+    # Codex round-13 finding: convergence.py's own `spanner_present` is a
+    # source-wide regex scan with no comment/string stripping -- see
+    # `_spanner_present_local`'s own docstring.
+    tier1["spanner_present"] = _spanner_present_local(source)
     # Codex round-2 finding: convergence.py's own `frame_present` is a bare
     # token search that doesn't check whether the border option's actual
     # value is visible (nonzero width, non-"none" style, non-transparent
@@ -2478,6 +2566,38 @@ def _round_points(fraction: float, possible: int) -> int:
     return max(0, min(possible, round(fraction * possible)))
 
 
+def _round_points_covered(covered: int, total: int, possible: int) -> int:
+    """Like `_round_points(covered/total, possible)`, but caps the result
+    at `possible - 1` whenever coverage is genuinely INCOMPLETE (`covered
+    < total`) -- ordinary rounding can otherwise turn a real, required-
+    but-missing item into full credit.
+
+    Codex round-13 finding: covering 10 of 11 canonical colored measures
+    (`check_colored_measure_selection`) computes `round((10/11)*4) == 4`
+    -- a perfect score despite one required measure being visibly
+    uncolored. The identical shape was confirmed ALREADY LIVE (not just
+    theoretical) in this corpus for `check_sequential_vs_diverging`/
+    `check_domain_computation` (both now weighted per-column via
+    `_effective_mechanics_units`, easily reaching a denominator of 10+
+    for a real table) and plausible for `check_fmt_semantic_type` (a
+    ground truth with 13 semantic-typed columns already exists in this
+    corpus) and `check_hero_column_formatting` (`round(1.5) == 2` at just
+    4 hero measures, via Python's round-half-to-even) -- applied
+    consistently across every "N of M required items covered" check
+    rather than leaving the identical gap in checks that simply hadn't
+    hit an unlucky total yet. Coverage that's ACTUALLY complete (`covered
+    == total`) still earns the full `possible` points, unaffected -- this
+    only ever COSTS a point ordinary rounding would have wrongly
+    granted, never adds one.
+    """
+    if total <= 0:
+        return possible
+    pts = _round_points(covered / total, possible)
+    if covered < total:
+        pts = min(pts, possible - 1)
+    return pts
+
+
 # ----------------------------------------------------------------------- #
 # check result + registry
 # ----------------------------------------------------------------------- #
@@ -2717,7 +2837,7 @@ def check_computed_value_correctness(cand: dict, truth: dict, meta: dict) -> Che
     for m in measures:
         found = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
         (matched if found else missing).append(m)
-    pts = _round_points(len(matched) / len(measures), 10)
+    pts = _round_points_covered(len(matched), len(measures), 10)
     detail = f"{len(matched)}/{len(measures)} canonical measures have a value-matching candidate column"
     if missing:
         detail += f"; unmatched: {missing}"
@@ -2794,7 +2914,10 @@ def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> Chec
         for m in canonical_colored:
             if _any_colored_column_matches(cand["tier2"], truth["tier2"], colored_cols, m):
                 covered += 1
-        identity_pts = _round_points(covered / len(canonical_colored), 4)
+        # Codex round-13 finding: plain `_round_points` let incomplete
+        # coverage round UP to full credit (e.g. 10/11 covered rounds to
+        # 4/4) -- see `_round_points_covered`'s own docstring.
+        identity_pts = _round_points_covered(covered, len(canonical_colored), 4)
         identity_detail = f"{covered}/{len(canonical_colored)} canonical colored measures covered by a candidate color call"
     pts = ceiling_pts + identity_pts
     detail = f"{'≤2 measures OK' if ceiling_ok else f'{n_measures} colored measures exceeds the ceiling of 2'}; {identity_detail}"
@@ -2843,7 +2966,7 @@ def check_sequential_vs_diverging(cand: dict, truth: dict, meta: dict) -> CheckR
             notes.append(f"{entry.get('columns')}: data is {shape} but palette '{entry.get('palette')}' is {kind}")
     if total == 0:
         return _na(name, "no colored measure had usable numeric values to classify")
-    pts = _round_points(correct / total, 5)
+    pts = _round_points_covered(correct, total, 5)
     detail = f"{correct}/{total} colored measures use an encoding matching their data shape"
     if notes:
         detail += "; " + "; ".join(notes)
@@ -3412,8 +3535,19 @@ def check_column_set(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # genuine tie matters here) means a second truth column that would
     # otherwise re-claim an already-used candidate column instead gets NO
     # rename -- it correctly stays a real gap in the Jaccard math.
+    #
+    # Codex round-13 finding: `used_cand_cols` started EMPTY, so a
+    # candidate column ALREADY correctly satisfying a SAME-NAMED truth
+    # column (never entering the rename-search loop below at all, since
+    # it's excluded from `truth_cols - cand_cols`) wasn't reserved before
+    # rename-resolution ran -- a DIFFERENT, genuinely-missing truth column
+    # with the SAME underlying values (e.g. two truth columns that are
+    # honest duplicates of each other) could still value-match and
+    # "steal" that same candidate column, hiding the real gap. Seeding
+    # with the name-matched set (`truth_cols & cand_cols`) up front
+    # reserves those first.
     renamed_truth_to_cand: dict[str, str] = {}
-    used_cand_cols: set[str] = set()
+    used_cand_cols: set[str] = set(truth_cols & cand_cols)
     if cand["tier2"].get("ok") and truth["tier2"].get("ok"):
         for tc in sorted(truth_cols - cand_cols):
             matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], tc)
@@ -3769,8 +3903,16 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
     # didn't.
     if not cand["tier2"].get("ok"):
         return CheckResult(name, 8, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
+    # Codex round-13 finding: this iterated raw `mechanics` -- every
+    # historical `data_color()`/`heatmap()` call -- instead of `_effective_
+    # mechanics_units` (the last-effective-entry-per-column collapse
+    # already applied to `check_sequential_vs_diverging`/`check_color_
+    # mechanics`). An early, WRONG domain overridden by a later, correct
+    # one on the same column still counted as a failure (and vice versa),
+    # even though only the later call's domain is what actually renders.
+    units = _effective_mechanics_units(mechanics, cand)
     correct, total, notes = 0, 0, []
-    for i, entry in enumerate(mechanics):
+    for i, entry in enumerate(units):
         shape = _measure_signedness(cand, _mechanics_columns(entry, cand))
         if shape is None:
             continue
@@ -3894,7 +4036,7 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
             notes.append(f"measure {i} ({entry.get('columns')}): domain '{dom}' doesn't match a {shape} shape")
     if total == 0:
         return _na(name, "no colored measure had usable numeric values to classify")
-    pts = _round_points(correct / total, 8)
+    pts = _round_points_covered(correct, total, 8)
     detail = f"{correct}/{total} colored measures have a shape-appropriate domain"
     if notes:
         detail += "; " + "; ".join(notes)
@@ -4310,7 +4452,7 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
                 covered_pairs += 1
     if required_pairs == 0:
         return _na(name, "grand-summary row(s) have no numeric values to check")
-    pts = _round_points(covered_pairs / required_pairs, 4)
+    pts = _round_points_covered(covered_pairs, required_pairs, 4)
     detail = (
         f"{covered_pairs}/{required_pairs} numeric summary-row/column pairs across "
         f"{len(truth_summary)} ground-truth summary row(s) ({sorted(distinct_cols)}) are covered by a "
@@ -4477,7 +4619,7 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
     detail = f"{ok_count}/{total} columns formatted per their semantic type"
     if uncovered:
         detail += f"; not covered (missing, hidden, or wrong format): {uncovered}"
-    return CheckResult(name, 4, _round_points(ok_count / total, 4), all_ok, detail)
+    return CheckResult(name, 4, _round_points_covered(ok_count, total, 4), all_ok, detail)
 
 
 def check_title_subtitle_caption_source(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -4597,7 +4739,7 @@ def check_hero_column_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
         matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
         if matched_col and matched_col in bold_cols and matched_col not in colored_cols:
             covered += 1
-    pts = _round_points(covered / len(hero_measures), 2)
+    pts = _round_points_covered(covered, len(hero_measures), 2)
     return CheckResult(
         name, 2, pts, covered == len(hero_measures),
         f"{covered}/{len(hero_measures)} canonical hero-uncolored measures are bolded",
