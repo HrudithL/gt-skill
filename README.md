@@ -12,6 +12,8 @@ pip install claude-agent-sdk great_tables pandas python-dotenv anyio pillow
 pip install anthropic
 # for the web UI backend:
 pip install starlette uvicorn sse-starlette websockets
+# for regenerating the eval-results/ plots:
+pip install matplotlib
 # also need the Claude Code CLI on PATH:
 npm install -g @anthropic-ai/claude-code
 ```
