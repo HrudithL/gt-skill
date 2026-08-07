@@ -1,0 +1,36 @@
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080530_scripts_6prompts/prompts/gtcars_hp_price/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/gtcars_hp_price.py
+
+TOTAL: 85/99 (85.9%)
+  Data-compliance:        41/43
+  Formatting-compliance:  44/56
+
+[PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
+[PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 2/2 canonical measures have a value-matching candidate column
+[PASS] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 6/6 -- ≤2 measures OK; 1/1 canonical colored measures covered by a candidate color call
+[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
+[N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.50 (candidate-only=['Car'], missing=['car']); value-matched renamed columns: {'hp': 'Horsepower', 'msrp': 'Price'}
+[PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Grouping_choice_quality is only applicable when the ground truth uses visible row grouping AND there is no 'grouping' key in REQUIRED_INSTRUCTIONS. The ground truth does not group rows by any variable, so this dimension does not apply.
+[PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
+[PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
+[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- The candidate correctly labels 'Horsepower' and 'Price' – both concepts match the ground truth's labels and align with the LABEL_SYNONYMS (hp/horsepower, msrp/price). Column headers are unambiguous and clearly name the underlying concepts.
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
+[PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=47, fully_filled=False -> expected striping=True, actual=False
+[PASS] [MECHANICAL] Stub tint + grey-budget correctness: 5/5 -- stub=True, striped=False -> expected tint=True, actual=True
+[PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; expected hue family 'navy' for palette 'blues', got 'navy'
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
+[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
+[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- 0/1 canonical hero-uncolored measures are bolded
+[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
+[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'GT Cars: Horsepower and Price' is identical to the ground truth's title and captures the exact same framing—a straightforward presentation of the dataset with the two key metrics.
+[FAIL] [JUDGE] Subtitle quality: 1/3 -- judge score 2/5 -- The candidate's subtitle 'Performance specifications and MSRP by manufacturer' adds some clarifying context but is quite generic and does not indicate the table's scope (all 47 makes and models, sorted by MSRP) as clearly as the ground truth's 'All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP.' It also avoids the analytical framing about the relationship between horsepower and price.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate's column order (Car | Horsepower | Price) is sensible and reads naturally for the story. However, the ground truth places Horsepower before Price in the header (same order), making them equally good. The candidate groups cars somewhat by brand within the listed rows, which aids readability, though neither table explicitly enforces or disallows this pattern across all 47 vehicles.
+[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a light blue highlighting on the Price column, which is harmonious and consistent with the ground truth's dark-blue-to-light-blue gradient palette for price data. The hue choices are tasteful and legible; the only minor difference is the candidate uses a more uniform light blue, whereas the ground truth applies a darker blue at the top (Ferrari LaFerrari at $1.4M), but both palettes are equally valid and well-suited to the story.
+[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 2/5 -- The candidate's caption 'Data includes 2014-2017 grand-touring and high-performance vehicles' adds scope information but completely misses the ground truth's key insight—that price and horsepower don't move together, exemplified by the Bentley Continental GT vs. Chevrolet Corvette. This is the critical analytical point the CAPTION_KEYWORDS flag ('don't move together', 'bentley', 'corvette') emphasizes.
