@@ -313,8 +313,26 @@ def _stub_tint_present(source: str) -> bool:
             stripped = unquoted_color.strip()
             if _is_effectively_transparent(stripped):
                 continue
-            if stripped.startswith("#") and stripped.upper() not in _ALLOWED_TINT_HEXES:
-                continue
+            # Codex round-6 finding: this only ever validated a color
+            # literal that starts with "#", so a named CSS color like
+            # `style.fill(color="red")` bypassed the approved-color check
+            # entirely (a saturated color, never one of palettes.md §2's
+            # neutral/washed tints, silently treated as approved). Reuses
+            # `_normalize_css_color` (the SAME normalizer already built
+            # for `na_color`, per Codex's own suggestion) so hex, `rgb()`/
+            # `rgba()`, and the small recognized named-color spellings all
+            # get resolved equally before checking `_ALLOWED_TINT_HEXES`.
+            # Only a genuinely UNRESOLVABLE expression (a bare variable
+            # reference, not a quoted literal at all) keeps the benefit of
+            # the doubt below -- a real, statically-known literal that
+            # isn't transparent and doesn't normalize to an approved hex
+            # is a real, visible, non-approved color and must fail here,
+            # whether or not it happens to be spelled as a "#..." string.
+            literal_color = _quoted_string_literal_value(color_val) if color_val else None
+            if literal_color is not None:
+                normalized = _normalize_css_color(literal_color.strip())
+                if normalized is None or normalized not in _ALLOWED_TINT_HEXES:
+                    continue
         return True
     return False
 
@@ -343,6 +361,44 @@ def _blocks_target_table_png(blocks: list[str], path_kwarg: str, path_index: int
     return False
 
 
+def _has_real_call(source: str, func_name: str, *, allow_bare: bool = False) -> bool:
+    """True if `source` contains a GENUINE `ast.Call` node naming
+    `func_name` -- `allow_bare=True` also matches a bare call
+    (`func_name(...)`), otherwise only an attribute/method call
+    (`.func_name(...)`). Unlike a source-wide regex
+    (a source-wide `re.search` for `func_name` followed by an open paren),
+    this can't be fooled by a
+    `def func_name(...):` function DEFINITION, a comment, or a docstring
+    merely mentioning the name -- it only ever visits nodes that are
+    ACTUALLY calls in the executable code.
+
+    Codex round-6 finding: `_frame_present`'s own `frame(...)`/
+    `finalize(...)` detection still used exactly this kind of source-wide
+    regex, never migrated to the AST-based approach already built for
+    color-mechanics call detection (`_ast_call_blocks`) -- a candidate
+    script defining its OWN helper function named `frame`
+    (`def frame(gt, ...):`), or a comment/docstring merely mentioning
+    "frame(", satisfied it despite never actually CALLING anything.
+
+    Returns `False` for unparseable source -- consistent with
+    `_enrich_color_mechanics`'s own "can't prove a call exists, so don't
+    fabricate one" behavior for a broken candidate.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Attribute) and func.attr == func_name:
+            return True
+        if allow_bare and isinstance(func, ast.Name) and func.id == func_name:
+            return True
+    return False
+
+
 def _frame_present(source: str) -> bool:
     """True if a candidate's table FRAME is genuinely VISIBLE -- not merely
     whether a frame-related option/call NAME appears in the source.
@@ -366,8 +422,13 @@ def _frame_present(source: str) -> bool:
     - `frame(...)`/`finalize(...)` (the scripted skill's helpers): kept as
       an unconditional True when called, same as convergence.py's own
       bare-token behavior -- neither helper exposes a disabling kwarg.
+      Codex round-6 finding: detected via `_has_real_call` (AST-based,
+      same approach `_ast_call_blocks` already uses for color mechanics)
+      instead of a source-wide regex, which a `def frame(gt, ...):`
+      function definition, a comment, or a docstring mentioning "frame("
+      could all satisfy despite no call ever happening.
     """
-    if re.search(r"\b(?:frame|finalize)\s*\(", source):
+    if _has_real_call(source, "frame", allow_bare=True) or _has_real_call(source, "finalize", allow_bare=True):
         return True
     for block in convergence._call_arg_blocks(source, "opt_table_outline"):
         style_val = convergence._kwarg_value(block, "style")
@@ -452,61 +513,69 @@ def _has_visible_tab_style_border(source: str, side_pattern: str) -> bool:
     return False
 
 
-def _hairlines_present(source: str) -> bool:
-    """Like `convergence._hlines_active`, but ALSO validates that a
-    `table_body_hlines_color=` (when set) is genuinely visible, not merely
-    a string that isn't the literal `"none"`/`"hidden"` -- e.g.
-    `table_body_hlines_color="transparent"` satisfied convergence.py's own
-    regex despite rendering no visible line at all. Codex round-3 finding,
-    same class of bug as round 2's `_frame_present` fix. The disabling
-    checks (an explicit `style="none"`, or a zero-length `width`) are
-    unchanged from `convergence._hlines_active`'s own documented
-    semantics; only the "is this actually visible" side gains the color
-    check, and the `tab_style` fallback mechanism now goes through
-    `_has_visible_tab_style_border` instead of convergence.py's own
-    (color-blind) `_has_active_tab_style_border`.
+def _option_line_present(source: str, prefix: str) -> bool | None:
+    """True/False if `{prefix}_style`/`{prefix}_width`/`{prefix}_color`
+    (whichever are set, taking the LAST occurrence of each -- a script
+    commonly chains multiple `.tab_options(...)` calls, and a later one
+    overrides an earlier one for the same attribute) together indicate a
+    genuinely VISIBLE line; `None` if none of the three are set at all
+    (this option-family contributes nothing either way).
+
+    Codex round-6 finding: `_hairlines_present`/`_dividers_present`
+    previously checked style/width/color INDEPENDENTLY -- an early
+    `return True` as soon as ANY ONE indicated a non-disabling value let a
+    non-disabling `style` short-circuit past a genuinely transparent
+    `color` set on the SAME options call:
+    `table_body_hlines_style="solid", table_body_hlines_color=
+    "transparent"` still read as "present" because the style check ran
+    (and returned) before the color was ever inspected. All THREE
+    attributes that are actually set must agree the line is visible; any
+    ONE of them indicating invisibility (an explicit `"none"`/`"hidden"`
+    style, a zero-length width, or an effectively-transparent color) is
+    authoritative and disables it, regardless of what the others say.
     """
     def _last(attr: str) -> str | None:
-        matches = re.findall(rf"table_body_hlines_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
+        matches = re.findall(rf"{re.escape(prefix)}_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
         return matches[-1] if matches else None
 
     style = _last("style")
     width = _last("width")
     color = _last("color")
-    disabled = (style is not None and style.strip().lower() in ("none", "hidden", "")) or (
-        width is not None and convergence._is_zero_length(width)
-    )
-    if not disabled:
-        if style is not None and style.strip().lower() not in ("none", "hidden", ""):
-            return True
-        if width is not None and width.strip().lower() not in ("none", "hidden", ""):
-            return True
-        if color is not None and color.strip().lower() not in ("none", "hidden", "") and not _is_effectively_transparent(color.strip()):
-            return True
+    if style is None and width is None and color is None:
+        return None
+    if style is not None and style.strip().lower() in ("none", "hidden", ""):
+        return False
+    if width is not None and convergence._is_zero_length(width):
+        return False
+    if color is not None and _is_effectively_transparent(color.strip()):
+        return False
+    return True
+
+
+def _hairlines_present(source: str) -> bool:
+    """Like `convergence._hlines_active`, but ALSO validates that
+    `table_body_hlines_style`/`_width`/`_color` (whichever are set)
+    TOGETHER indicate a genuinely visible line -- see
+    `_option_line_present`'s docstring for the exact bug this fixes. The
+    `tab_style` fallback mechanism goes through `_has_visible_tab_style_
+    border` instead of convergence.py's own (color-blind)
+    `_has_active_tab_style_border`.
+    """
+    if _option_line_present(source, "table_body_hlines"):
+        return True
     return _has_visible_tab_style_border(source, "top|bottom")
 
 
 def _dividers_present(source: str) -> bool:
-    """Like `convergence._vlines_active`, but ALSO validates a zero-length
-    width and an effectively-transparent color for the
-    `table_body_vlines_*`/`column_labels_vlines_*` `tab_options` mechanism
-    -- convergence.py's own regex only ever checked each matched value
-    against a small literal set (`"none"`/`"hidden"`/`""`), missing e.g.
-    `width="0px"` or a transparent color entirely. Codex round-3 finding,
-    same class of bug as round 2's `_frame_present` fix.
+    """Like `convergence._vlines_active`, but ALSO validates that
+    `table_body_vlines_*`/`column_labels_vlines_*` (whichever of style/
+    width/color are set, checked as ONE combination per prefix, not
+    independently -- see `_option_line_present`'s docstring) indicate a
+    genuinely visible divider.
     """
-    for m in re.finditer(
-        r"(?:table_body|column_labels)_vlines_(style|width|color)\s*=\s*['\"]([^'\"]+)['\"]",
-        source,
-    ):
-        kind, val = m.group(1), m.group(2).strip()
-        if val.lower() in ("none", "hidden", ""):
-            continue
-        if kind == "width" and convergence._is_zero_length(val):
-            continue
-        if kind == "color" and _is_effectively_transparent(val):
-            continue
-        return True
+    for prefix in ("table_body_vlines", "column_labels_vlines"):
+        if _option_line_present(source, prefix):
+            return True
     return _has_visible_tab_style_border(source, "left|right")
 
 
@@ -916,8 +985,22 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
         # `data_color(columns, rows, palette, domain, ...)` -- shared once so
         # `rows`/`columns`/`domain` positional fallbacks (slots 1/0/3) all
         # line up against the SAME split.
+        #
+        # Codex round-6 finding: a `**`-prefixed expansion token (whether
+        # the no-op `**{}`/`**dict()` round-3 already special-cases, or a
+        # genuinely unresolvable `**overrides`) was left IN this list, so
+        # `.data_color("x", **{})` had `positionals = ['"x"', '**{}']` --
+        # `rows_val = positionals[1]` then picked up the literal `"**{}"`
+        # text, which isn't the string `"None"`, so the ENTIRE call was
+        # wrongly discarded as row-restricted. A `**expansion` can only
+        # ever be the LAST token in a call's argument list (Python doesn't
+        # allow a positional arg after `**kwargs`), so dropping it from
+        # this list never shifts any REAL positional argument's index --
+        # it's always safe to exclude, whether or not it happens to be a
+        # no-op.
         positionals = [
-            p for p in convergence._split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            p for p in convergence._split_top_level_quoted(block)
+            if not re.match(r"[A-Za-z_]\w*\s*=", p) and not p.strip().startswith("**")
         ]
         rows_val = convergence._kwarg_value(block, "rows")
         if rows_val is None and len(positionals) > 1:
@@ -2003,12 +2086,25 @@ def check_column_set(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # match then correctly reads as present in both sets, without
     # inflating the union with the truth column's original name (which
     # nothing on the candidate side actually corresponds to anymore).
+    # Codex round-6 finding: matching each truth column independently let
+    # TWO different truth columns with IDENTICAL values (e.g. a genuinely
+    # duplicated measure) both value-match the SAME single candidate
+    # column when the candidate kept only ONE renamed copy -- both entries
+    # then collapsed to that one candidate name in `normalized_truth_cols`
+    # below, hiding that the candidate is actually missing a whole column.
+    # Consuming each candidate match ONE-TO-ONE (sorted for a
+    # deterministic processing order, since which truth column "wins" a
+    # genuine tie matters here) means a second truth column that would
+    # otherwise re-claim an already-used candidate column instead gets NO
+    # rename -- it correctly stays a real gap in the Jaccard math.
     renamed_truth_to_cand: dict[str, str] = {}
+    used_cand_cols: set[str] = set()
     if cand["tier2"].get("ok") and truth["tier2"].get("ok"):
-        for tc in truth_cols - cand_cols:
+        for tc in sorted(truth_cols - cand_cols):
             matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], tc)
-            if matched_col is not None and matched_col in cand_cols:
+            if matched_col is not None and matched_col in cand_cols and matched_col not in used_cand_cols:
                 renamed_truth_to_cand[tc] = matched_col
+                used_cand_cols.add(matched_col)
     normalized_truth_cols = {renamed_truth_to_cand.get(tc, tc) for tc in truth_cols}
     union = cand_cols | normalized_truth_cols
     jaccard = len(cand_cols & normalized_truth_cols) / len(union) if union else 1.0
@@ -2712,7 +2808,13 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
             # (weaker, but only available) signal.
             semantic_type = semantic_types.get(c)
             if semantic_type is not None:
-                if effective_fmt in _SEMANTIC_TO_FMT.get(semantic_type, set()):
+                # Codex round-6 finding: `fmt_integer` on a "number"-typed
+                # aggregate (e.g. a monthly average) silently rounds away
+                # real fractional data -- only accept it when the actual
+                # summary value is genuinely a whole number.
+                if _fmt_covers_semantic_type(
+                    semantic_type, effective_fmt, all_integral=_is_integral_value(cand_values.get(matched_col))
+                ):
                     covered_pairs += 1
             else:
                 covered_pairs += 1
@@ -2733,6 +2835,56 @@ _SEMANTIC_TO_FMT = {
     "currency": {"fmt_currency"},
     "integer": {"fmt_integer", "fmt_number"},
 }
+
+
+def _is_integral_value(v: Any) -> bool:
+    """True if `v` is a whole number (works for an `int`, a `float`, or a
+    numeric-looking string) -- `False` for anything non-numeric or
+    genuinely fractional.
+    """
+    try:
+        return float(v).is_integer()
+    except (TypeError, ValueError):
+        return False
+
+
+def _column_values_are_integral(tier2: dict, column: str) -> bool:
+    """True if every usable value in `tier2`'s `column` is a whole number,
+    or the column has no usable numeric values at all (nothing to
+    contradict "integral" -- benefit of the doubt, same as every other
+    "can't verify from what's available" case in this file).
+    """
+    for v in tier2.get("columns", {}).get(column, []) or []:
+        if v is None:
+            continue
+        try:
+            fv = float(v)
+        except (TypeError, ValueError):
+            continue
+        if not fv.is_integer():
+            return False
+    return True
+
+
+def _fmt_covers_semantic_type(sem_type: str, effective_fmt: Any, *, all_integral: bool) -> bool:
+    """True if `effective_fmt` is an honest, accepted formatter for
+    `sem_type`.
+
+    Codex round-6 finding: `_SEMANTIC_TO_FMT["number"]` accepts
+    `fmt_integer` as well as `fmt_number` -- reasonable for a genuinely
+    whole-number "number" column, but `fmt_integer()` silently ROUNDS AWAY
+    real fractional data (a density, a monthly average, etc.), so a
+    fractional "number"-typed measure formatted with `fmt_integer` was
+    still credited as correctly formatted. `fmt_integer` is only accepted
+    for a `"number"`-typed column when the actual matched value(s) are
+    genuinely integral; every other accepted (formatter, semantic type)
+    pairing is unaffected.
+    """
+    if effective_fmt not in _SEMANTIC_TO_FMT.get(sem_type, set()):
+        return False
+    if sem_type == "number" and effective_fmt == "fmt_integer" and not all_integral:
+        return False
+    return True
 
 
 def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -2771,10 +2923,13 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
     uncovered: list[str] = []
     for c, sem_type in semantic_types.items():
         matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], c)
+        effective_fmt = fmt_map.get(matched_col, fmt_map.get(convergence._ALL_COLUMNS)) if matched_col else None
         if (
             matched_col is not None
             and matched_col in visible
-            and fmt_map.get(matched_col, fmt_map.get(convergence._ALL_COLUMNS)) in _SEMANTIC_TO_FMT.get(sem_type, set())
+            and _fmt_covers_semantic_type(
+                sem_type, effective_fmt, all_integral=_column_values_are_integral(cand["tier2"], matched_col)
+            )
         ):
             ok_count += 1
         else:
@@ -2814,10 +2969,26 @@ def check_title_subtitle_caption_source(cand: dict, truth: dict, meta: dict) -> 
     # call, always -- so the SLOT existing (`len(notes) >= N`) is what
     # establishes "the call is present," independent of whether its text
     # happened to resolve statically.
+    #
+    # Codex round-6 finding: a bare `len(notes) >= N` slot-existence check
+    # doesn't distinguish a genuinely unresolved DYNAMIC expression
+    # (`None` -- benefit of the doubt, still "present") from a statically
+    # EXPLICIT empty-string literal (`tab_source_note(source_note="")`) --
+    # the latter is a real call that adds NO actual text, not a footer
+    # that's "present" in any meaningful sense.
     notes = cand["tier1"].get("source_note_texts") or []
-    caption_present = len(notes) >= 1
+
+    def _note_slot_present(index: int) -> bool:
+        if index >= len(notes):
+            return False
+        val = notes[index]
+        if val is None:
+            return True  # dynamic expression -- benefit of the doubt
+        return val.strip() != ""
+
+    caption_present = _note_slot_present(0)
     source_expected = bool(truth["tier1"].get("source_note_texts")) and len(truth["tier1"]["source_note_texts"]) >= 2
-    source_present = len(notes) >= 2
+    source_present = _note_slot_present(1)
     # "present if expected" for both -- neither ever REQUIRES absence when
     # optional (fewer than 5 rows): a compliant short table that
     # voluntarily includes a caption anyway must not lose this point, the
@@ -2869,11 +3040,24 @@ def check_hero_column_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     # measure(s), matched by VALUE (not name) like every other measure
     # check here -- bolding an unrelated identifier or secondary metric
     # previously earned full credit just for being nonempty.
+    #
+    # Codex round-6 finding (important): this never checked that the
+    # bold, "hero_uncolored" column ISN'T *also* colored -- but the whole
+    # design intent (per the metadata's own name, and Step 3's rule
+    # elsewhere in this file: bold text is the ALTERNATIVE to a third
+    # color fill, not an addition to it) is that a hero measure is
+    # uncolored. Concretely, on `gtcars_hp_price`: a candidate could color
+    # BOTH `msrp` and the supposedly-uncolored `hp` hero, bold `hp` too,
+    # stay within the ≤2 colored-measure ceiling, and get full credit on
+    # both check_colored_measure_selection AND this check simultaneously.
+    # Excluding any column that's also colored-matched from hero coverage
+    # closes that gap.
     bold_cols = set(cand["tier1"].get("bold_columns") or [])
+    colored_cols = {c for m in cand["tier1"].get("color_mechanics", []) for c in _mechanics_columns(m, cand)}
     covered = 0
     for m in hero_measures:
         matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
-        if matched_col and matched_col in bold_cols:
+        if matched_col and matched_col in bold_cols and matched_col not in colored_cols:
             covered += 1
     pts = _round_points(covered / len(hero_measures), 2)
     return CheckResult(
