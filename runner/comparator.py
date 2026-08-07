@@ -337,13 +337,84 @@ def _stub_tint_present(source: str) -> bool:
     return False
 
 
-def _blocks_target_table_png(blocks: list[str], path_kwarg: str, path_index: int) -> bool:
+def _render_target_var_literals(source: str) -> dict[str, str]:
+    """`{variable name -> literal string value}` for a NARROW, purely
+    syntactic pattern: a plain `name = "literal"` assignment on the
+    statement IMMEDIATELY PRECEDING (same body/scope) a statement that
+    calls `.gtsave(...)`/`finalize(...)` passing that same bare name as
+    its path argument -- e.g. `output = "backup.png"` then
+    `gt.gtsave(output)` on the very next line of the same function (or
+    module) body.
+
+    Codex round-7 finding: `_blocks_target_table_png` gave UNCONDITIONAL
+    benefit of the doubt to any non-literal render-target argument,
+    including a bare variable whose value is trivially resolvable from
+    static text -- `output = "backup.png"; gt.gtsave(output)` was scored
+    identically to a genuinely dynamic/unknowable path. This deliberately
+    does NOT attempt general data-flow analysis: a function parameter, a
+    computed/formatted string (an f-string, `+` concatenation, `.format(
+    )`), or an assignment several statements earlier or in a DIFFERENT
+    scope/branch all still correctly resolve to nothing here, and callers
+    keep their existing benefit-of-the-doubt behavior for them.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+
+    def _call_target_var(stmt: ast.stmt) -> str | None:
+        for node in ast.walk(stmt):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            is_gtsave = isinstance(func, ast.Attribute) and func.attr == "gtsave"
+            is_finalize = isinstance(func, ast.Name) and func.id == "finalize"
+            if not (is_gtsave or is_finalize):
+                continue
+            for kw in node.keywords:
+                if kw.arg in ("file", "path") and isinstance(kw.value, ast.Name):
+                    return kw.value.id
+            idx = 0 if is_gtsave else 1
+            if len(node.args) > idx and isinstance(node.args[idx], ast.Name):
+                return node.args[idx].id
+        return None
+
+    out: dict[str, str] = {}
+    for node in ast.walk(tree):
+        for field in ("body", "orelse", "finalbody"):
+            stmts = getattr(node, field, None)
+            if not isinstance(stmts, list):
+                continue
+            for i in range(1, len(stmts)):
+                prev = stmts[i - 1]
+                if not (
+                    isinstance(prev, ast.Assign)
+                    and len(prev.targets) == 1
+                    and isinstance(prev.targets[0], ast.Name)
+                    and isinstance(prev.value, ast.Constant)
+                    and isinstance(prev.value.value, str)
+                ):
+                    continue
+                referenced = _call_target_var(stmts[i])
+                if referenced == prev.targets[0].id:
+                    out[referenced] = prev.value.value
+    return out
+
+
+def _blocks_target_table_png(
+    blocks: list[str], path_kwarg: str, path_index: int, var_literals: dict[str, str] | None = None
+) -> bool:
     """True if any call block's path argument plausibly targets `table.png`.
 
     A literal path only counts when `convergence._targets_table_png`
     confirms it; a non-literal path (a variable, an f-string) can't be
-    proven wrong from source text alone and gets the benefit of the doubt.
-    Ported verbatim from the closed branch.
+    proven wrong from source text alone and gets the benefit of the doubt
+    -- UNLESS `var_literals` (see `_render_target_var_literals`) resolves
+    that exact bare-variable path to a known literal, in which case it's
+    checked directly and does NOT fall back to the benefit of the doubt
+    (a resolved-but-wrong literal is a real, provable failure, not an
+    unknowable one). Ported verbatim from the closed branch, plus the
+    round-7 variable-resolution layer.
     """
     for b in blocks:
         path_val = convergence._kwarg_value(b, path_kwarg)
@@ -354,7 +425,12 @@ def _blocks_target_table_png(blocks: list[str], path_kwarg: str, path_index: int
             path_val = positionals[path_index] if len(positionals) > path_index else None
         if path_val is None:
             continue
-        if not _is_static_string_literal(path_val.strip()):
+        stripped = path_val.strip()
+        if var_literals and re.fullmatch(r"[A-Za-z_]\w*", stripped) and stripped in var_literals:
+            if convergence._targets_table_png(var_literals[stripped]):
+                return True
+            continue  # resolved to a known, non-matching literal -- not "unknown"
+        if not _is_static_string_literal(stripped):
             return True  # non-literal -- can't prove it's the wrong target
         if convergence._targets_table_png(path_val):
             return True
@@ -628,11 +704,14 @@ def _render_call_present(source: str) -> bool:
     """True if some `gtsave`/`finalize` call plausibly produced the
     harness's mandated `table.png` artifact. Ported verbatim from the
     closed branch (`render_call_present` itself doesn't exist in the
-    version of `convergence.py` merged to `gtc/root` today).
+    version of `convergence.py` merged to `gtc/root` today), plus the
+    round-7 `_render_target_var_literals` resolution layer for a simple
+    same-scope literal-string variable passed as the render target.
     """
-    if _blocks_target_table_png(convergence._call_arg_blocks(source, "gtsave"), "file", 0):
+    var_literals = _render_target_var_literals(source)
+    if _blocks_target_table_png(convergence._call_arg_blocks(source, "gtsave"), "file", 0, var_literals):
         return True
-    return _blocks_target_table_png(convergence._bare_call_blocks(source, "finalize"), "path", 1)
+    return _blocks_target_table_png(convergence._bare_call_blocks(source, "finalize"), "path", 1, var_literals)
 
 
 def _tab_header_kwarg_present(source: str, kwarg: str) -> bool:
@@ -839,6 +918,53 @@ def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: 
         block = convergence._strip_line_comments(rest[1:-1])
         out.append(((node.lineno, node.col_offset), block))
     return out
+
+
+def _ast_fmt_calls(source: str) -> list[tuple[str, str]]:
+    """AST-based replacement for `convergence._fmt_calls`: every genuine
+    `.fmt_*(...)` method CALL as `(formatter_name, arg_block_text)`, in
+    true source order. Mirrors `_ast_call_blocks`'s call-detection
+    approach (comment-stripped via `convergence._strip_line_comments`,
+    UTF-8-byte-offset-safe via `ast.get_source_segment`, receiver-chain-
+    safe by stripping `func_segment` as a text prefix) but matches the
+    WILDCARD `fmt_*` method-name family instead of one fixed name, so it
+    can't share `_ast_call_blocks`'s single-`func_name` signature
+    directly.
+
+    Codex round-7 finding: `convergence._fmt_calls` is a source-wide
+    regex (`\\.(fmt_[a-z_]+)\\s*\\(`) -- the exact same bug class this
+    file already fixed for color-mechanics call detection
+    (`_ast_call_blocks`) and frame/finalize detection (`_has_real_
+    call`): a comment (`# gt.fmt_percent(columns="rate")`) or a
+    docstring mentioning `.fmt_number(...)` is misdetected as a real
+    formatter call, corrupting `_fmt_column_map` and every check that
+    depends on it. `runner/convergence.py` is a hard non-goal for this
+    slice, so this is the same Tier-1 compatibility-shim pattern used
+    throughout this file: walk genuine `ast.Call` nodes instead of
+    re-scanning source text.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    out: list[tuple[tuple[int, int], str, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr.startswith("fmt_")):
+            continue
+        full_segment = ast.get_source_segment(source, node)
+        func_segment = ast.get_source_segment(source, func)
+        if full_segment is None or func_segment is None or not full_segment.startswith(func_segment):
+            continue
+        rest = full_segment[len(func_segment):].lstrip()
+        if not (rest.startswith("(") and rest.endswith(")")):
+            continue
+        block = convergence._strip_line_comments(rest[1:-1])
+        out.append(((node.lineno, node.col_offset), func.attr, block))
+    out.sort(key=lambda e: e[0])
+    return [(name, block) for _, name, block in out]
 
 
 def _quoted_string_literal_value(value_text: str | None) -> str | None:
@@ -1088,12 +1214,29 @@ def _fmt_column_map(source: str) -> dict[str, str | bool]:
     (still present, unchanged) and other still-present low-level
     primitives, replacing the buggy version's output entirely rather than
     patching it (there's nothing to salvage from an already-cleared dict).
+
+    Codex round-7 findings: (1) call detection now goes through `_ast_
+    fmt_calls` (AST-based) instead of `convergence._fmt_calls` (a
+    source-wide regex misdetecting a comment or docstring mentioning
+    `.fmt_number(...)` as a real call -- same bug class already fixed
+    here for color-mechanics/frame detection); (2) `**`-prefixed tokens
+    are now excluded from `positionals` entirely (mirroring the
+    identical round-6 fix for `_enrich_color_mechanics` -- a
+    `**expansion` can only ever be the LAST token in a call's args per
+    Python syntax, so dropping it never shifts any real positional
+    index), and a genuinely no-op expansion (`**{}`/`**dict()`, via
+    `_is_noop_kwargs_expansion`) no longer counts toward `row_
+    restricted` -- previously `.fmt_number(columns="x", **{})` was
+    treated identically to a genuinely unresolvable row-restricting
+    expansion and lost its formatting credit entirely, despite the
+    empty expansion changing nothing at runtime.
     """
     var_map = convergence._list_var_map(source)
     out: dict[str, str | bool] = {}
-    for name, block in convergence._fmt_calls(source):
+    for name, block in _ast_fmt_calls(source):
         positionals = [
-            p for p in convergence._split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            p for p in convergence._split_top_level_quoted(block)
+            if not re.match(r"[A-Za-z_]\w*\s*=", p) and not p.strip().startswith("**")
         ]
         val = convergence._kwarg_value(block, "columns")
         if val is None:
@@ -1101,7 +1244,10 @@ def _fmt_column_map(source: str) -> dict[str, str | bool]:
         rows_val = convergence._kwarg_value(block, "rows")
         if rows_val is None and len(positionals) > 1:
             rows_val = positionals[1]
-        has_expansion = any(p.strip().startswith("**") for p in convergence._split_top_level_quoted(block))
+        has_expansion = any(
+            p.strip().startswith("**") and not _is_noop_kwargs_expansion(p)
+            for p in convergence._split_top_level_quoted(block)
+        )
         row_restricted = has_expansion or (rows_val is not None and rows_val.strip() != "None")
         if row_restricted:
             if val is None or val.strip() == "None":
@@ -1195,7 +1341,20 @@ def build_fingerprint(py_path: Path) -> dict:
     # its hue-harmonization points. Only override when there's an actual
     # hex to reclassify against the extended table.
     if tier1.get("heading_band_hex"):
-        tier1["heading_band_hue"] = _classify_hue_extended(tier1["heading_band_hex"])
+        # Codex round-7 finding: `_classify_hue_extended` (and convergence.
+        # py's own `_band_shade`, both called below) only recognize HEX
+        # strings -- a CSS-equivalent literal like `column_labels_
+        # background_color="rgb(244, 214, 214)"` (== `#F4D6D6`) previously
+        # failed to classify at all, collapsing BOTH the hue and the shade
+        # to "unknown"/"none" despite rendering an identical, classifiable
+        # color. Same "raw string, not rendered outcome" gap already fixed
+        # for `na_color`/stub-tint -- reuses the same `_normalize_css_
+        # color` normalizer (falling back to the raw text when it's
+        # already a plain hex or genuinely unparseable, so this is a
+        # strict superset of the previous hex-only behavior).
+        normalized_band_hex = _normalize_css_color(tier1["heading_band_hex"]) or tier1["heading_band_hex"]
+        tier1["heading_band_hue"] = _classify_hue_extended(normalized_band_hex)
+        tier1["heading_band_shade"] = convergence._band_shade(normalized_band_hex)
     tier2 = execution_tier.exec_table(py_path)
     return {"tier1": tier1, "tier2": tier2, "source": source, "path": py_path}
 
@@ -1513,6 +1672,72 @@ def _judge_dimension_check(meta: dict, dimension_key: str, name: str, points: in
 # Data-compliance checks (§8, 50 pts)
 # ----------------------------------------------------------------------- #
 
+def _row_multiset_identity(
+    candidate_row_ids: list | None,
+    truth_row_ids: list | None,
+    *,
+    candidate_group_ids: list | None = None,
+    truth_group_ids: list | None = None,
+) -> dict:
+    """Like `execution_tier.row_set_identity`, but falls back to a
+    MULTISET (duplicate-COUNT-preserving) comparison of bare row ids,
+    instead of that function's own bare-SET fallback, specifically when
+    grouping is present on exactly one side and at least one side's row
+    ids contain duplicates.
+
+    Codex round-7 finding: `execution_tier.row_set_identity` only keys by
+    `(group_id, row_id)` when BOTH sides supply group ids (`use_groups =
+    bool(candidate_group_ids) and bool(truth_group_ids)`) -- when only
+    the ground truth is grouped (a candidate that chose NOT to group is
+    itself a legitimate, separately-judged choice per `check_grouping_
+    choice_quality`), it falls back to comparing BARE row-id SETS, which
+    silently drops both the group boundaries AND each row's duplicate
+    CARDINALITY (Python's `set()` collapses repeats). A ground truth with
+    a stub id repeated once per group (e.g. "January" appearing once in
+    each of 6 year-groups) then reads as a single set entry "January" --
+    satisfied by a candidate with just ONE ungrouped "January" row,
+    reporting a false `exact=True` row-identity match despite covering
+    only 1/6th of the required rows.
+
+    `runner/execution_tier.py` is a hard non-goal for this slice, so this
+    wraps it rather than editing it: delegate straight through for every
+    case that function already gets right (either side `None`, both-
+    grouped, both-ungrouped, or grouped-on-exactly-one-side but with no
+    actual duplicate row ids to lose), and only take over the comparison
+    directly -- via `Counter` multisets, ignoring group labels on the
+    grouped side too since only one side has them to compare against --
+    for the narrow case its own set-based fallback mishandles.
+    """
+    if candidate_row_ids is None or truth_row_ids is None:
+        return execution_tier.row_set_identity(
+            candidate_row_ids, truth_row_ids,
+            candidate_group_ids=candidate_group_ids, truth_group_ids=truth_group_ids,
+        )
+    use_groups = bool(candidate_group_ids) and bool(truth_group_ids)
+    asymmetric_grouping = bool(candidate_group_ids) != bool(truth_group_ids)
+    cand_norm = [execution_tier.normalize_id(r) for r in candidate_row_ids]
+    truth_norm = [execution_tier.normalize_id(r) for r in truth_row_ids]
+    has_duplicates = len(cand_norm) != len(set(cand_norm)) or len(truth_norm) != len(set(truth_norm))
+    if use_groups or not (asymmetric_grouping and has_duplicates):
+        return execution_tier.row_set_identity(
+            candidate_row_ids, truth_row_ids,
+            candidate_group_ids=candidate_group_ids, truth_group_ids=truth_group_ids,
+        )
+    cand_counts, truth_counts = Counter(cand_norm), Counter(truth_norm)
+    matched = sum((cand_counts & truth_counts).values())
+    cand_total, truth_total = sum(cand_counts.values()), sum(truth_counts.values())
+    precision = (matched / cand_total) if cand_total else (1.0 if not truth_total else 0.0)
+    recall = (matched / truth_total) if truth_total else (1.0 if not cand_total else 0.0)
+    return {
+        "matched": matched,
+        "candidate_only": sorted((cand_counts - truth_counts).elements()),
+        "truth_only": sorted((truth_counts - cand_counts).elements()),
+        "precision": precision,
+        "recall": recall,
+        "exact": cand_counts == truth_counts,
+    }
+
+
 def check_row_selection_identity(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Row/entity selection identity"
     truth_ids = truth["tier2"].get("row_ids") if truth["tier2"].get("ok") else None
@@ -1534,7 +1759,7 @@ def check_row_selection_identity(cand: dict, truth: dict, meta: dict) -> CheckRe
         relabeled = _relabel_candidate_groups(cand_ids, cand_group_ids, truth_ids, truth_group_ids)
         if relabeled is not None:
             cand_group_ids = relabeled
-    result = execution_tier.row_set_identity(
+    result = _row_multiset_identity(
         cand_ids, truth_ids,
         candidate_group_ids=cand_group_ids,
         truth_group_ids=truth_group_ids,
@@ -2120,8 +2345,35 @@ def check_column_set(cand: dict, truth: dict, meta: dict) -> CheckResult:
 
 def check_grouping_existence(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Grouping existence"
-    ok = bool(cand["tier1"].get("grouping_present")) == bool(truth["tier1"].get("grouping_present"))
-    return CheckResult(name, 3, 3 if ok else 0, ok, f"candidate grouping_present={cand['tier1'].get('grouping_present')}, truth={truth['tier1'].get('grouping_present')}")
+    # Codex round-7 finding ("conceptually important"): this unconditionally
+    # required cand.grouping_present == truth.grouping_present even when
+    # grouping is genuinely DISCRETIONARY -- directly contradicting check_
+    # grouping_choice_quality (per .planning/10-hybrid-comparator.md §3 and
+    # judge_rubric.py), which is deliberately gated to apply ONLY when the
+    # ground truth's own rendering uses row grouping AND REQUIRED_
+    # INSTRUCTIONS has no "grouping" key (i.e. grouping was the ground-
+    # truth author's editorial choice, not a mandated instruction) -- see
+    # check_grouping_choice_quality's own docstring and judge_rubric.py's
+    # applicability rule. A candidate the judge correctly rates as making
+    # a sound, well-reasoned choice NOT to group still lost these 3
+    # mechanical points here purely for differing from the ground truth's
+    # own discretionary choice. Mirror grouping_choice_quality's exact
+    # gate: N/A here in precisely the same discretionary situation, and
+    # keep this a strict presence check only when REQUIRED_INSTRUCTIONS
+    # explicitly demands (or forbids) grouping, or when the ground truth
+    # itself doesn't group at all (no discretionary "should we group"
+    # question is being tested in that case either).
+    truth_groups = bool(truth["tier1"].get("grouping_present"))
+    grouping_is_mandated = "grouping" in meta["REQUIRED_INSTRUCTIONS"]
+    if truth_groups and not grouping_is_mandated:
+        return _na(
+            name,
+            "grouping is a discretionary editorial choice here (ground truth groups, but "
+            "REQUIRED_INSTRUCTIONS has no 'grouping' key) -- judged separately by "
+            "grouping_choice_quality, not scored as a strict presence match",
+        )
+    ok = bool(cand["tier1"].get("grouping_present")) == truth_groups
+    return CheckResult(name, 3, 3 if ok else 0, ok, f"candidate grouping_present={cand['tier1'].get('grouping_present')}, truth={truth_groups}")
 
 
 def check_spanner_existence(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -2665,11 +2917,26 @@ def check_band_hue_harmonization(cand: dict, truth: dict, meta: dict) -> CheckRe
 
 
 def _mechanics_entry_for_column(mechanics: list[dict], fp: dict, column: str) -> dict | None:
-    """The `color_mechanics` entry (if any) that targets `column`."""
+    """The `color_mechanics` entry that targets `column`, selecting the
+    LAST such entry in true source order when multiple `data_color()`/
+    `heatmap()` calls target the same column (an override pattern) --
+    great_tables applies each call's styling in call order, so the LAST
+    call targeting a column is what actually determines its final
+    rendered mechanics, not the first.
+
+    Codex round-7 finding: this previously returned the FIRST matching
+    entry, so an early `data_color(reverse=True)` call followed by a
+    later `data_color(reverse=False)` override on the SAME column (still
+    one measure, still within the <=2-measure ceiling) let a candidate
+    satisfy `check_color_mechanics`'s reverse-orientation check against
+    the first call's value while the table actually renders with the
+    opposite orientation from the later, silently-overriding call.
+    """
+    match = None
     for entry in mechanics:
         if column in _mechanics_columns(entry, fp):
-            return entry
-    return None
+            match = entry
+    return match
 
 
 def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
