@@ -382,6 +382,118 @@ def _frame_present(source: str) -> bool:
     return False
 
 
+def _has_visible_tab_style_border(source: str, side_pattern: str) -> bool:
+    """Like `convergence._has_active_tab_style_border`, but ALSO rejects an
+    effectively-transparent border COLOR.
+
+    Codex round-3 finding: `convergence._has_active_tab_style_border`
+    (shared by its own `_hlines_active`/`_vlines_active`) already checks a
+    disabling `style="none"/"hidden"` and a zero-length `weight`, but never
+    checks whether `color=` is itself invisible -- a `tab_style(style=
+    style.borders(sides="top", color="transparent"), ...)` call satisfied
+    that function's own "is a border present" test despite rendering no
+    visible line at all. Same class of bug as round 2's `_frame_present`
+    fix; reuses this file's own `_is_effectively_transparent`.
+    """
+    for block in convergence._call_arg_blocks(source, "tab_style"):
+        style_val = convergence._kwarg_value(block, "style")
+        if style_val is None:
+            positionals = [
+                p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            style_val = positionals[0] if positionals else None
+        if style_val is None:
+            continue
+        for bm in re.finditer(r"style\s*\.\s*borders\s*\(", style_val):
+            open_idx = bm.end() - 1
+            close_idx = convergence._scan_balanced_paren(style_val, open_idx)
+            if close_idx is None:
+                continue
+            borders_block = style_val[open_idx + 1:close_idx]
+            border_style_val = convergence._kwarg_value(borders_block, "style")
+            if border_style_val is not None:
+                unquoted = convergence._unquote(border_style_val)
+                if unquoted and unquoted.strip().lower() in ("none", "hidden", ""):
+                    continue
+            weight_val = convergence._kwarg_value(borders_block, "weight")
+            if weight_val is not None:
+                unquoted_weight = convergence._unquote(weight_val)
+                if unquoted_weight and convergence._is_zero_length(unquoted_weight):
+                    continue
+            color_val = convergence._kwarg_value(borders_block, "color")
+            if color_val is not None:
+                unquoted_color = convergence._unquote(color_val)
+                if unquoted_color and _is_effectively_transparent(unquoted_color.strip()):
+                    continue
+            sides_val = convergence._kwarg_value(borders_block, "sides")
+            if sides_val is None:
+                positionals = [
+                    p for p in convergence._split_top_level(borders_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+                ]
+                sides_val = positionals[0] if positionals else None
+            if sides_val and re.search(rf"['\"](?:{side_pattern})['\"]", sides_val):
+                return True
+    return False
+
+
+def _hairlines_present(source: str) -> bool:
+    """Like `convergence._hlines_active`, but ALSO validates that a
+    `table_body_hlines_color=` (when set) is genuinely visible, not merely
+    a string that isn't the literal `"none"`/`"hidden"` -- e.g.
+    `table_body_hlines_color="transparent"` satisfied convergence.py's own
+    regex despite rendering no visible line at all. Codex round-3 finding,
+    same class of bug as round 2's `_frame_present` fix. The disabling
+    checks (an explicit `style="none"`, or a zero-length `width`) are
+    unchanged from `convergence._hlines_active`'s own documented
+    semantics; only the "is this actually visible" side gains the color
+    check, and the `tab_style` fallback mechanism now goes through
+    `_has_visible_tab_style_border` instead of convergence.py's own
+    (color-blind) `_has_active_tab_style_border`.
+    """
+    def _last(attr: str) -> str | None:
+        matches = re.findall(rf"table_body_hlines_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
+        return matches[-1] if matches else None
+
+    style = _last("style")
+    width = _last("width")
+    color = _last("color")
+    disabled = (style is not None and style.strip().lower() in ("none", "hidden", "")) or (
+        width is not None and convergence._is_zero_length(width)
+    )
+    if not disabled:
+        if style is not None and style.strip().lower() not in ("none", "hidden", ""):
+            return True
+        if width is not None and width.strip().lower() not in ("none", "hidden", ""):
+            return True
+        if color is not None and color.strip().lower() not in ("none", "hidden", "") and not _is_effectively_transparent(color.strip()):
+            return True
+    return _has_visible_tab_style_border(source, "top|bottom")
+
+
+def _dividers_present(source: str) -> bool:
+    """Like `convergence._vlines_active`, but ALSO validates a zero-length
+    width and an effectively-transparent color for the
+    `table_body_vlines_*`/`column_labels_vlines_*` `tab_options` mechanism
+    -- convergence.py's own regex only ever checked each matched value
+    against a small literal set (`"none"`/`"hidden"`/`""`), missing e.g.
+    `width="0px"` or a transparent color entirely. Codex round-3 finding,
+    same class of bug as round 2's `_frame_present` fix.
+    """
+    for m in re.finditer(
+        r"(?:table_body|column_labels)_vlines_(style|width|color)\s*=\s*['\"]([^'\"]+)['\"]",
+        source,
+    ):
+        kind, val = m.group(1), m.group(2).strip()
+        if val.lower() in ("none", "hidden", ""):
+            continue
+        if kind == "width" and convergence._is_zero_length(val):
+            continue
+        if kind == "color" and _is_effectively_transparent(val):
+            continue
+        return True
+    return _has_visible_tab_style_border(source, "left|right")
+
+
 def _render_call_present(source: str) -> bool:
     """True if some `gtsave`/`finalize` call plausibly produced the
     harness's mandated `table.png` artifact. Ported verbatim from the
@@ -466,6 +578,27 @@ def _tab_header_kwarg_present(source: str, kwarg: str) -> bool:
 _DATA_COLOR_DEFAULTS_EXT = {**convergence._DATA_COLOR_DEFAULTS, "reverse": "False"}
 
 
+def _is_noop_kwargs_expansion(token: str) -> bool:
+    """True if `token` (a `**`-prefixed positional split from a call's
+    argument list) is a LITERAL empty-dict/no-arg-call expansion --
+    `**{}` or `**dict()` -- which is a genuine no-op at runtime (no kwargs
+    are actually added by it), not a real, unresolvable kwargs expansion.
+
+    Codex round-3 finding: `.data_color(columns="x", **{})` was previously
+    treated identically to a genuinely unresolvable expansion (a variable,
+    a non-empty dict built elsewhere) -- scoring every one of that entry's
+    na_color/truncate/autocolor_text mechanics as a failure even though an
+    empty `**{}` changes nothing and the documented defaults apply exactly
+    as if it were omitted entirely. This deliberately does NOT attempt
+    general kwargs-expansion resolution -- a non-empty dict literal, a
+    dict-returning variable, etc. all still fall through to the existing
+    "unresolvable" treatment, unchanged; only the specific, provably-empty
+    literal forms are special-cased.
+    """
+    body = token.strip()[2:].strip()  # strip the leading "**"
+    return body in ("{}", "dict()")
+
+
 def _kwarg_or_default_positional(block: str, name: str, positionals: list[str], index: int) -> str | None:
     """Like `convergence._kwarg_or_default(block, name)`, but ALSO falls
     back to `positionals[index]` when the keyword isn't found -- the
@@ -475,7 +608,10 @@ def _kwarg_or_default_positional(block: str, name: str, positionals: list[str], 
     10], "red", None, False, False, True)` call sets `na_color`/
     `autocolor_text`/`truncate` purely positionally).
     """
-    if any(p.strip().startswith("**") for p in convergence._split_top_level_quoted(block)):
+    if any(
+        p.strip().startswith("**") and not _is_noop_kwargs_expansion(p)
+        for p in convergence._split_top_level_quoted(block)
+    ):
         return None
     val = convergence._kwarg_value(block, name)
     if val is None and len(positionals) > index:
@@ -486,21 +622,9 @@ def _kwarg_or_default_positional(block: str, name: str, positionals: list[str], 
     return v
 
 
-def _line_start_offsets(source: str) -> list[int]:
-    """Cumulative starting character offset of each line in `source`
-    (1-indexed access via `line_starts[lineno - 1]`) -- converts an AST
-    node's `(lineno, col_offset)` into a flat string index. Shared by
-    `_ast_call_blocks` below.
-    """
-    starts = [0]
-    for line in source.splitlines(keepends=True):
-        starts.append(starts[-1] + len(line))
-    return starts
-
-
-def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: bool) -> list[tuple[int, str]]:
-    """`(start_offset, args_block_text)` for every GENUINE `ast.Call` node
-    in `tree` naming `func_name` -- `allow_bare=True` also matches a bare
+def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: bool) -> list[tuple[tuple[int, int], str]]:
+    """`(sort_key, args_block_text)` for every GENUINE `ast.Call` node in
+    `tree` naming `func_name` -- `allow_bare=True` also matches a bare
     call (`heatmap(...)`), `False` requires an attribute/method call
     (`.data_color(...)`) only, mirroring `data_color`'s own convention
     elsewhere in this file (never called bare). `args_block_text` is
@@ -522,35 +646,92 @@ def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: 
     place -- a string literal's contents are never call nodes and a
     comment is invisible to the parser entirely, so this can't be fooled
     by either, without needing to specifically special-case either one.
+
+    Codex round-3 finding: `node.col_offset`/`end_col_offset` are UTF-8
+    BYTE offsets per the AST spec, NOT character offsets into a Python
+    `str` -- the previous version of this function indexed `source`
+    (character-indexed) directly with these byte offsets via manual
+    line-start arithmetic, which silently misaligns as soon as any
+    non-ASCII text appears earlier on the SAME line (e.g. `GT(df).
+    tab_header(title="Café").data_color(...)`): `source.find("(",
+    name_end)` could land on the wrong paren or return -1, silently
+    dropping the real call from every color-mechanics check.
+    `ast.get_source_segment()` is offset-aware -- it encodes each relevant
+    line to UTF-8 bytes before slicing by these byte offsets, then decodes
+    back to a real character-indexed string -- so this now asks it
+    directly for each Call node's own exact text instead of manually
+    walking byte offsets into `source` itself.
+
+    A `Call` node's own span covers its ENTIRE receiver chain, not just
+    `funcname(args)` -- for `GT(df).tab_header(...).data_color(cols)`, the
+    `.data_color(...)` Call node's segment is the WHOLE chain text starting
+    at `GT(df)`, so naively taking the FIRST `"("` in that segment would
+    wrongly land on `GT(df)`'s own paren, not `.data_color`'s. Since
+    `node.func` (the `Attribute`/`Name` being called) starts at the exact
+    same position as `node` itself, `ast.get_source_segment(source,
+    node.func)` is guaranteed to be a text PREFIX of `node`'s own segment
+    -- stripping that prefix (a plain string operation, not an offset
+    calculation) leaves exactly `"(args...)"`, however many lines the
+    receiver chain or the call's own arguments span.
+
+    The sort key is `(lineno, col_offset)` -- true SOURCE ORDER
+    (interleaving `data_color`/`heatmap` calls correctly) is all this
+    needs, and a (line, byte-offset) pair sorts identically to a (line,
+    char-offset) pair on the same line (both increase monotonically
+    together), so there's no need to convert to a character offset just
+    to preserve ordering.
     """
-    line_starts = _line_start_offsets(source)
-
-    def _offset(lineno: int, col: int) -> int:
-        return line_starts[lineno - 1] + col
-
-    out: list[tuple[int, str]] = []
+    out: list[tuple[tuple[int, int], str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
         if isinstance(func, ast.Attribute) and func.attr == func_name:
-            name_node = func
+            pass
         elif allow_bare and isinstance(func, ast.Name) and func.id == func_name:
-            name_node = func
+            pass
         else:
             continue
-        if name_node.end_lineno is None or name_node.end_col_offset is None:
+        full_segment = ast.get_source_segment(source, node)
+        func_segment = ast.get_source_segment(source, func)
+        if full_segment is None or func_segment is None or not full_segment.startswith(func_segment):
             continue
-        name_end = _offset(name_node.end_lineno, name_node.end_col_offset)
-        open_idx = source.find("(", name_end)
-        if open_idx == -1:
+        rest = full_segment[len(func_segment):]
+        if not (rest.startswith("(") and rest.endswith(")")):
             continue
-        close_idx = convergence._scan_balanced_paren(source, open_idx)
-        if close_idx is None:
-            continue
-        block = convergence._strip_line_comments(source[open_idx + 1:close_idx])
-        out.append((open_idx, block))
+        block = convergence._strip_line_comments(rest[1:-1])
+        out.append(((node.lineno, node.col_offset), block))
     return out
+
+
+def _quoted_string_literal_value(value_text: str | None) -> str | None:
+    """The unquoted value ONLY if `value_text` is an actual quoted string
+    literal (e.g. `"sequential"`) -- `None` for anything else, including a
+    bare identifier/variable reference whose NAME happens to textually
+    match a value this file specifically checks for (e.g. `kind=kind` or
+    `heatmap(..., hue=navy_var, ...)` -- a variable, not the literal
+    string `"sequential"`/`"navy"`). `convergence._unquote` alone can't
+    distinguish these: it happily returns an identifier's own name
+    unchanged when there's no quote to strip, which then gets trusted as
+    if it were a real value by any caller that compares it directly.
+
+    Codex round-3 finding: `heatmap(gt, cols, kind=kind, ...)` (kind
+    passed via a variable) had its raw source text ("kind", the variable
+    name) stored and then compared as if it were a literal value,
+    contradicting this file's own stated benefit-of-the-doubt convention
+    for dynamic expressions elsewhere. Applied to both `kind` and the
+    heatmap helper's `hue` (-> `palette`) extraction just below -- the
+    identical risk applies to both (round 2's own band-harmonization fix
+    now trusts a helper `palette` value directly whenever it matches a
+    recognized Dark-Academia family name, which makes an unverified bare
+    identifier there just as exploitable as `kind`).
+    """
+    if value_text is None:
+        return None
+    v = value_text.strip()
+    if len(v) >= 2 and v[0] in "'\"" and v[-1] == v[0]:
+        return convergence._unquote(v)
+    return None
 
 
 def _palette_of_block_positional(block: str, positionals: list[str]) -> str:
@@ -649,7 +830,7 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
     except SyntaxError:
         return []
     var_map = convergence._list_var_map(source)
-    entries: list[tuple[int, dict]] = []
+    entries: list[tuple[tuple[int, int], dict]] = []
     for pos, block in _ast_call_blocks(source, tree, "data_color", allow_bare=False):
         # `data_color(columns, rows, palette, domain, ...)` -- shared once so
         # `rows`/`columns`/`domain` positional fallbacks (slots 1/0/3) all
@@ -692,9 +873,9 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
             resolved_heatmap_columns = convergence._resolve_columns_list(heatmap_cols_val, var_map)
         entries.append((pos, {
             "columns": resolved_heatmap_columns,
-            "palette": convergence._unquote(convergence._kwarg_value(block, "hue")) or "default",
+            "palette": _quoted_string_literal_value(convergence._kwarg_value(block, "hue")) or "default",
             "domain": convergence._kwarg_value(block, "domain"),
-            "kind": convergence._unquote(convergence._kwarg_value(block, "kind")),
+            "kind": _quoted_string_literal_value(convergence._kwarg_value(block, "kind")),
             "na_color": "#808080",
             "truncate": "False",
             "autocolor_text": "True",
@@ -743,6 +924,13 @@ def build_fingerprint(py_path: Path) -> dict:
     # value is visible (nonzero width, non-"none" style, non-transparent
     # color) -- see `_frame_present`'s docstring.
     tier1["frame_present"] = _frame_present(source)
+    # Codex round-3 finding: convergence.py's own `hairlines_present`/
+    # `dividers_present` don't validate that a `color=` value is actually
+    # visible (a transparent color satisfies their regexes), and the
+    # `vlines` mechanism also never checked for a zero-length width --
+    # see `_hairlines_present`/`_dividers_present`'s docstrings.
+    tier1["hairlines_present"] = _hairlines_present(source)
+    tier1["dividers_present"] = _dividers_present(source)
     # Codex round-1 finding: convergence.py's own `title_present`/
     # `caption_present` (subtitle) only recognize the keyword form and
     # `any()` across every `tab_header(...)` call instead of just the last
@@ -848,6 +1036,34 @@ def _mechanics_columns(entry: dict, fp: dict) -> list[str]:
     tier2 = fp["tier2"]
     visible = _visible_columns(fp) - {tier2.get("stub_column"), tier2.get("group_column")}
     return sorted(visible)
+
+
+def _distinct_colored_measures(mechanics: list[dict], fp: dict) -> list[tuple]:
+    """Deduplicated `(palette, domain, columns)` keys for `mechanics` --
+    the same conceptual measure applied via multiple calls that share a
+    palette, domain, AND target the same columns collapses to one entry;
+    a DIFFERENT set of target columns means a genuinely different measure
+    even when its palette and domain happen to coincide.
+
+    Codex round-3 finding: every caller of this dedup previously keyed
+    purely on `(palette, domain)`, which collapsed 3 GENUINELY DIFFERENT
+    measures (different target columns, matching palette+domain purely by
+    coincidence) into 1 -- silently dodging the ≤2-measure ceiling and
+    under-reporting the hue-collision/band-harmonization checks. `columns`
+    here is the RESOLVED column tuple (via `_mechanics_columns`, the same
+    resolution every other check already uses), not the raw, possibly-
+    `None` `entry["columns"]` sentinel -- two entries whose `columns=None`
+    sentinel resolves to the SAME actual visible-column set still
+    correctly collapse to one measure. Sorted for a deterministic
+    iteration order (mirrors round-2's hue-collision fix, which stopped
+    trusting Python's hash-randomized set order for this same kind of
+    dedup).
+    """
+    keys = {
+        (m.get("palette"), m.get("domain"), tuple(_mechanics_columns(m, fp)))
+        for m in mechanics
+    }
+    return sorted(keys, key=lambda k: (k[0] or "", k[1] or "", k[2]))
 
 
 def _n_rows(fp: dict) -> int | None:
@@ -1111,12 +1327,15 @@ def _truth_requires_color(meta: dict) -> bool:
 def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Colored-measure selection (≤2 ceiling + right measure(s))"
     cand_mechanics = cand["tier1"].get("color_mechanics", [])
-    # Count DISTINCT (palette, domain) pairs as "measures", not raw
-    # .data_color()/heatmap() CALLS -- the same conceptual measure applied
-    # via multiple calls that share a palette+domain (e.g. one call per
-    # facet of the same shared scale) is one measure, not N, and must not
-    # be rejected as exceeding the ≤2 ceiling.
-    n_measures = len({(m.get("palette"), m.get("domain")) for m in cand_mechanics})
+    # Count DISTINCT (palette, domain, columns) triples as "measures", not
+    # raw .data_color()/heatmap() CALLS -- the same conceptual measure
+    # applied via multiple calls that share a palette+domain AND target
+    # the same columns is one measure, not N, and must not be rejected as
+    # exceeding the ≤2 ceiling. Columns are part of the key (Codex round-3
+    # finding) so 3 GENUINELY DIFFERENT measures that merely happen to
+    # share a palette+domain, but target different columns, correctly
+    # count as 3, not 1.
+    n_measures = len(_distinct_colored_measures(cand_mechanics, cand))
     ceiling_ok = n_measures <= 2
     ceiling_pts = 2 if ceiling_ok else 0
     canonical_colored = meta["CANONICAL_MEASURES"].get("colored", [])
@@ -1509,14 +1728,36 @@ def check_column_set(cand: dict, truth: dict, meta: dict) -> CheckResult:
         return _na(name, "ground truth failed to execute; visible column set unknown")
     if not cand_cols:
         return CheckResult(name, 4, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
-    union = cand_cols | truth_cols
-    jaccard = len(cand_cols & truth_cols) / len(union) if union else 1.0
+    # Codex round-3 finding: a raw-NAME Jaccard double-penalized a
+    # renamed-but-value-equivalent column (same class of bug round 2 fixed
+    # in check_fmt_semantic_type) -- a candidate showing the ground
+    # truth's `hp` values under the name `horsepower` had `hp` counted as
+    # missing AND `horsepower` counted as an extra candidate-only column,
+    # even though the measure IS actually shown. For every truth column
+    # not already present by name, look for a value-matched candidate
+    # column (via `execution_tier.match_measure_by_value`, the same
+    # value-based matching used throughout this file) and relabel it to
+    # the candidate's own name before computing set overlap -- a renamed
+    # match then correctly reads as present in both sets, without
+    # inflating the union with the truth column's original name (which
+    # nothing on the candidate side actually corresponds to anymore).
+    renamed_truth_to_cand: dict[str, str] = {}
+    if cand["tier2"].get("ok") and truth["tier2"].get("ok"):
+        for tc in truth_cols - cand_cols:
+            matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], tc)
+            if matched_col is not None and matched_col in cand_cols:
+                renamed_truth_to_cand[tc] = matched_col
+    normalized_truth_cols = {renamed_truth_to_cand.get(tc, tc) for tc in truth_cols}
+    union = cand_cols | normalized_truth_cols
+    jaccard = len(cand_cols & normalized_truth_cols) / len(union) if union else 1.0
     pts = _round_points(jaccard, 4)
-    return CheckResult(
-        name, 4, pts, cand_cols == truth_cols,
-        f"visible-column overlap {jaccard:.2f} (candidate-only={sorted(cand_cols - truth_cols)}, "
-        f"missing={sorted(truth_cols - cand_cols)})",
+    detail = (
+        f"visible-column overlap {jaccard:.2f} (candidate-only={sorted(cand_cols - normalized_truth_cols)}, "
+        f"missing={sorted(normalized_truth_cols - cand_cols)})"
     )
+    if renamed_truth_to_cand:
+        detail += f"; value-matched renamed columns: {renamed_truth_to_cand}"
+    return CheckResult(name, 4, pts, cand_cols == normalized_truth_cols, detail)
 
 
 def check_grouping_existence(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -1540,11 +1781,15 @@ def check_stub_existence(cand: dict, truth: dict, meta: dict) -> CheckResult:
 def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "No same-family hue collision across 2 measures"
     mechanics = cand["tier1"].get("color_mechanics", [])
-    # Same distinct-(palette, domain) dedup as check_colored_measure_
-    # selection's ceiling count -- the same conceptual measure applied via
-    # multiple calls that share a palette+domain is one measure, not two,
-    # and its (necessarily identical) palette against itself must not read
-    # as "two measures colliding on the same hue".
+    # Same distinct-(palette, domain, columns) dedup as check_colored_
+    # measure_selection's ceiling count -- the same conceptual measure
+    # applied via multiple calls that share a palette+domain AND target
+    # the same columns is one measure, not two, and its (necessarily
+    # identical) palette against itself must not read as "two measures
+    # colliding on the same hue". Columns are part of the key (Codex
+    # round-3 finding) so 3 genuinely different measures that merely
+    # coincide on palette+domain, but target different columns, are
+    # correctly treated as 3 separate measures here too.
     #
     # Codex round-2 finding: casting to a `set` then slicing `[:2]` made
     # this check depend on `PYTHONHASHSEED` (Python's string-hash
@@ -1554,13 +1799,10 @@ def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # both the oxblood family, but a `[:2]` slice could land on Blues/Reds
     # instead and miss it entirely). Sorted for determinism, and every
     # PAIR is checked, not just the first two.
-    distinct_measures = sorted(
-        {(m.get("palette"), m.get("domain")) for m in mechanics},
-        key=lambda t: (t[0] or "", t[1] or ""),
-    )
+    distinct_measures = _distinct_colored_measures(mechanics, cand)
     if len(distinct_measures) < 2:
         return _na(name, "fewer than 2 distinct colored measures; no collision possible")
-    palettes = [p for p, _ in distinct_measures]
+    palettes = [p for p, _domain, _cols in distinct_measures]
     # Normalize through the SAME sequential-palette -> DA-family mapping
     # check_band_hue_harmonization already uses -- `Reds` and `Oranges`
     # are different palette NAMES but the same oxblood family, so an
@@ -1581,6 +1823,47 @@ def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     if colliding_pairs:
         detail += f"; colliding pair(s) sharing a hue family: {colliding_pairs}"
     return CheckResult(name, 1, 0 if collision else 1, not collision, detail)
+
+
+def _group_summary_rows_by_label(summary_rows: list[dict]) -> dict[Any, list[dict]]:
+    """`{label -> [rows with that label, in order]}` -- a plain LIST per
+    label (not a single row), so a label that's shared by multiple rows
+    (including the common case where EVERY summary row is unlabeled,
+    i.e. `label=None` for all of them) doesn't silently lose every row
+    but the last one.
+    """
+    grouped: dict[Any, list[dict]] = {}
+    for row in summary_rows:
+        grouped.setdefault(row.get("label"), []).append(row)
+    return grouped
+
+
+def _matched_summary_row(
+    cand_summary: list[dict], cand_by_label: dict[Any, list[dict]], truth_row: dict, index: int,
+) -> dict | None:
+    """The candidate summary row that corresponds to `truth_row` (the
+    `index`-th truth summary row) -- by label when the label is a real,
+    UNIQUE identifier on the candidate side, falling back to POSITION
+    otherwise.
+
+    Codex round-3 finding: the previous `{row.get("label"): row for row in
+    cand_summary}` dict comprehension silently kept only the LAST candidate
+    row for any label shared by multiple rows -- including the common case
+    where every summary row is unlabeled (`label=None` for all of them),
+    which made every truth row after the first compare against that same
+    single (usually wrong) candidate row instead of its actual positional
+    counterpart, and could fail an otherwise-correct candidate's value and
+    formatting checks. Falls back to `cand_summary[index]` (plain
+    POSITIONAL alignment, matching this file's existing fallback
+    convention) whenever the truth label is `None` or doesn't map to
+    EXACTLY ONE candidate row.
+    """
+    label = truth_row.get("label")
+    if label is not None:
+        candidates = cand_by_label.get(label, [])
+        if len(candidates) == 1:
+            return candidates[0]
+    return cand_summary[index] if index < len(cand_summary) else None
 
 
 def check_summary_row_existence(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -1607,15 +1890,14 @@ def check_summary_row_existence(cand: dict, truth: dict, meta: dict) -> CheckRes
     # otherwise a candidate reproducing one value from the first summary
     # row while omitting its other aggregates (and every later summary
     # row entirely) previously still earned full credit here. Truth rows
-    # are matched to candidate rows by label, falling back to position
-    # when labels don't line up (e.g. one side omits a label).
-    cand_by_label = {r.get("label"): r for r in cand_summary}
+    # are matched to candidate rows by label (see `_matched_summary_row`),
+    # falling back to position when labels don't line up (e.g. one side
+    # omits a label, or a label is shared by multiple rows).
+    cand_by_label = _group_summary_rows_by_label(cand_summary)
     all_ok = True
     compared_cols: list[str] = []
     for i, truth_row in enumerate(truth_summary):
-        cand_row = cand_by_label.get(truth_row.get("label"))
-        if cand_row is None:
-            cand_row = cand_summary[i] if i < len(cand_summary) else None
+        cand_row = _matched_summary_row(cand_summary, cand_by_label, truth_row, i)
         truth_values = truth_row.get("values", {})
         cand_values = cand_row.get("values", {}) if cand_row is not None else {}
         for k, tv in truth_values.items():
@@ -1670,6 +1952,18 @@ DATA_CHECKS: list[CheckFn] = [
 # ----------------------------------------------------------------------- #
 
 def _domain_element_symmetric(lo: str, hi: str, value_range: tuple[float, float] | None = None) -> bool:
+    # Codex round-3 finding: a domain whose two endpoint EXPRESSIONS are
+    # textually identical (e.g. `domain=[limit, limit]`) is a provably
+    # collapsed, zero-width domain regardless of what "limit" evaluates to
+    # at render time -- both ends resolve to the SAME value, which can
+    # never be a valid negative-to-positive symmetric span. This doesn't
+    # attempt general symbolic evaluation (resolving what "limit" actually
+    # equals); it just rejects the identical-text case outright, before
+    # falling through to the general unresolved-benefit-of-the-doubt path
+    # below, which is still correct for two DIFFERENT (and therefore
+    # potentially valid, e.g. `[-m, m]`) unresolvable expressions.
+    if lo.strip() == hi.strip():
+        return False
     try:
         flo, fhi = float(lo), float(hi)
     except ValueError:
@@ -1771,18 +2065,27 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
             # non-numeric literal (e.g. a variable-derived expression that
             # still parses as a bracketed pair, like `[dens_lo, dens_hi]`)
             # keeps the prior benefit-of-the-doubt -- there's nothing
-            # further to verify from static text alone.
-            try:
-                flo, fhi = float(elems[0]), float(elems[1])
-            except ValueError:
-                ok = True
+            # further to verify from static text alone. Codex round-3
+            # finding: two IDENTICAL endpoint expressions (`[limit,
+            # limit]`) are a provably-collapsed, zero-width domain
+            # regardless of resolvability -- same fix as
+            # `_domain_element_symmetric`'s diverging-branch counterpart,
+            # checked before falling through to the general unresolved
+            # benefit-of-the-doubt path.
+            if elems[0].strip() == elems[1].strip():
+                ok = False
             else:
-                value_range = _actual_value_range(cand, _mechanics_columns(entry, cand))
-                if value_range is None:
+                try:
+                    flo, fhi = float(elems[0]), float(elems[1])
+                except ValueError:
                     ok = True
                 else:
-                    actual_lo, actual_hi = value_range
-                    ok = flo < fhi and flo <= actual_lo and fhi >= actual_hi
+                    value_range = _actual_value_range(cand, _mechanics_columns(entry, cand))
+                    if value_range is None:
+                        ok = True
+                    else:
+                        actual_lo, actual_hi = value_range
+                        ok = flo < fhi and flo <= actual_lo and fhi >= actual_hi
         correct += 1 if ok else 0
         if not ok:
             notes.append(f"measure {i} ({entry.get('columns')}): domain '{dom}' doesn't match a {shape} shape")
@@ -1876,17 +2179,17 @@ def check_band_hue_harmonization(cand: dict, truth: dict, meta: dict) -> CheckRe
     shade_ok = actual_shade == expected_shade
     shade_pts = 2 if shade_ok else 0
     # Hue harmonization is only strictly checkable when there's exactly one
-    # DISTINCT colored measure overall (same (palette, domain) dedup
-    # check_colored_measure_selection/check_hue_collision use) AND that one
-    # measure uses a recognized sequential palette -- a diverging-only
-    # table, "no color", or MULTIPLE measures (even if only one of them is
-    # a recognized-sequential name -- e.g. one sequential + one diverging)
-    # all mean there's no longer a single, unambiguous color story to
-    # harmonize the band to. Counting only recognized-sequential entries
-    # (the previous approach) wrongly entered strict mode for a valid
-    # 2-measure table where the second measure just happened to be
-    # diverging (and thus excluded from that count).
-    distinct_measures = list({(e.get("palette"), e.get("domain")) for e in t1.get("color_mechanics", [])})
+    # DISTINCT colored measure overall (same (palette, domain, columns)
+    # dedup check_colored_measure_selection/check_hue_collision use) AND
+    # that one measure uses a recognized sequential palette -- a
+    # diverging-only table, "no color", or MULTIPLE measures (even if only
+    # one of them is a recognized-sequential name -- e.g. one sequential +
+    # one diverging) all mean there's no longer a single, unambiguous
+    # color story to harmonize the band to. Counting only recognized-
+    # sequential entries (an earlier approach) wrongly entered strict mode
+    # for a valid 2-measure table where the second measure just happened
+    # to be diverging (and thus excluded from that count).
+    distinct_measures = _distinct_colored_measures(t1.get("color_mechanics", []), cand)
     sole_palette = (distinct_measures[0][0] or "").lower() if len(distinct_measures) == 1 else None
     expected_family = None
     if has_color and sole_palette is not None:
@@ -2015,11 +2318,12 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     # row doesn't have silently dropped that column from the requirement, so
     # a candidate could leave it raw/unformatted and still score full
     # credit. Now iterates every truth summary row, same label-matching
-    # (falling back to position) `check_summary_row_existence` already uses,
-    # accumulating per (row, column) pairs rather than per distinct column
-    # name -- a column present in multiple rows must be checked in EACH row
-    # it's expected in, not just once overall.
-    cand_by_label = {r.get("label"): r for r in cand_summary}
+    # (see `_matched_summary_row`, falling back to position)
+    # `check_summary_row_existence` already uses, accumulating per (row,
+    # column) pairs rather than per distinct column name -- a column
+    # present in multiple rows must be checked in EACH row it's expected
+    # in, not just once overall.
+    cand_by_label = _group_summary_rows_by_label(cand_summary)
     required_pairs = 0
     covered_pairs = 0
     distinct_cols: set[str] = set()
@@ -2029,9 +2333,7 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
         ]
         if not row_numeric_cols:
             continue
-        cand_row = cand_by_label.get(truth_row.get("label"))
-        if cand_row is None:
-            cand_row = cand_summary[i] if i < len(cand_summary) else None
+        cand_row = _matched_summary_row(cand_summary, cand_by_label, truth_row, i)
         cand_values = cand_row.get("values", {}) if cand_row is not None else {}
         for c in row_numeric_cols:
             distinct_cols.add(c)
