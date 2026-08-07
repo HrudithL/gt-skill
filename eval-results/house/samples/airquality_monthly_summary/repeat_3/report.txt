@@ -1,0 +1,36 @@
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080527_house_6prompts/prompts/airquality_monthly_summary/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/airquality_monthly_summary.py
+
+TOTAL: 69/104 (66.3%)
+  Data-compliance:        30/48
+  Formatting-compliance:  39/56
+
+[PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/3 canonical measures have a value-matching candidate column; unmatched: ['avg_temp', 'avg_ozone', 'avg_wind']
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/2 canonical colored measures covered by a candidate color call
+[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
+[PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- visible-column overlap 0.00 (candidate-only=['Month_Name', 'Ozone', 'Temp', 'Wind'], missing=['avg_ozone', 'avg_temp', 'avg_wind', 'month'])
+[PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping; grouping is not a discretionary editorial choice being tested here.
+[PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
+[PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
+[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 4/5 -- The candidate labels 'Temperature (°F)', 'Wind Speed (mph)', and 'Ozone (ppb)' correctly name their underlying concepts. However, the temperature column uses 'Temperature' instead of 'Avg. Temperature' or similar, which is less explicit about averaging than the ground truth's 'Avg. Temperature (°F)', potentially creating minor ambiguity about whether these are daily or aggregated values.
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
+[FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=MISSING (Step 5a, always required); dividers=OK
+[PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=5, fully_filled=False -> expected striping=False, actual=False
+[PASS] [MECHANICAL] Stub tint + grey-budget correctness: 5/5 -- stub=True, striped=False -> expected tint=True, actual=True
+[FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=light actual=unknown; expected hue family 'oxblood' for palette 'reds', got 'oxblood'
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
+[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/3 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['avg_temp', 'avg_wind', 'avg_ozone']
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
+[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- 0/1 canonical hero-uncolored measures are bolded
+[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
+[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'Air Quality Monthly Summary' is accurate but generic and lacks the specific geographic/temporal framing of the ground truth's 'Monthly Air Quality in New York, 1973', which immediately orients the reader to the dataset's scope and era.
+[PASS] [JUDGE] Subtitle quality: 3/3 -- judge score 5/5 -- The candidate's subtitle 'Average temperature, wind speed, and ozone levels by month' clearly and concisely adds clarifying context about what is measured and how it is grouped, without redundancy with the title—matching the ground truth's subtitle in function.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (Month → Temperature → Wind Speed → Ozone) is identical to and equally sensible as the ground truth's order, placing the identifying column first and arranging measures in a logical sequence.
+[FAIL] [JUDGE] Color theme/palette taste: 1/3 -- judge score 2/5 -- The candidate uses a red-to-dark-red diverging palette for temperature coloring, which creates visual clash and is less harmonious than the ground truth's blue-to-dark-blue sequential palette for temperature and coral/warm tones for ozone. The red palette also carries connotations of danger/heat that, while thematically present, dominate the table's aesthetic less gracefully than the blue-coral harmony of the ground truth.
+[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 1/5 -- The candidate's caption 'Source: provided dataset.' is minimal and adds no substantive information beyond a vague data source. The ground truth's caption explicitly addresses the 'missing' and 'recorded value' context—explaining that 37 of 153 days lack ozone readings and how averages were computed—which are critical to understanding the data's reliability.
