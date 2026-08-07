@@ -523,13 +523,28 @@ def _striping_present(source: str) -> bool:
     same class of bug as `frame_present`/`hairlines_present`/
     `dividers_present`). `opt_row_striping(row_striping: bool = True)`
     (verified against the installed `great_tables` signature) has no
-    color parameter at all -- calling it always means "stripe with
-    great_tables' own default, visible color" -- so that signal and the
-    `stripe(...)`/`row_striping_include_table_body=True` signals are kept
-    as unconditional presence checks, unchanged.
+    color parameter -- calling it with a truthy/omitted `row_striping`
+    always means "stripe with great_tables' own default, visible color."
+
+    Codex round-5 finding: this originally treated ANY `opt_row_striping(`
+    call as striping present, without reading its own `row_striping=`
+    argument -- `opt_row_striping(row_striping=False)` (a valid, if
+    unusual, EXPLICIT opt-out) was still counted as striping being
+    present. Now inspects that argument's actual value.
     """
-    if re.search(r"opt_row_striping\s*\(", source):
-        return True
+    for block in convergence._call_arg_blocks(source, "opt_row_striping"):
+        val = convergence._kwarg_value(block, "row_striping")
+        if val is None:
+            positionals = [
+                p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            val = positionals[0] if positionals else None
+        if val is None:
+            return True  # omitted -- defaults to True per the installed signature
+        unquoted = convergence._unquote(val)
+        if unquoted and unquoted.strip() == "False":
+            continue  # explicitly disabled -- not evidence of striping from THIS call
+        return True  # explicit True, or an unresolvable expression -- benefit of the doubt
     if re.search(r"row_striping_include_table_body\s*=\s*True", source):
         return True
     if convergence._bare_call_blocks(source, "stripe"):
@@ -742,7 +757,14 @@ def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: 
         func_segment = ast.get_source_segment(source, func)
         if full_segment is None or func_segment is None or not full_segment.startswith(func_segment):
             continue
-        rest = full_segment[len(func_segment):]
+        # Codex round-5 finding: legal Python allows whitespace between a
+        # callable and its opening paren (`gt.data_color (columns=...)`)
+        # -- `rest` then started with a SPACE, not "(", and this call was
+        # silently dropped from detection entirely. Strip leading
+        # whitespace before checking/extracting the argument block (the
+        # Call node's own span still ends exactly at the closing paren
+        # with nothing trailing, so only the leading side needs this).
+        rest = full_segment[len(func_segment):].lstrip()
         if not (rest.startswith("(") and rest.endswith(")")):
             continue
         block = convergence._strip_line_comments(rest[1:-1])
@@ -834,6 +856,19 @@ def _is_unresolvable_columns_selector(cols_val: str) -> bool:
     return bool(re.match(r"^cs\s*\.\s*\w+\s*\(", cols_val.strip()))
 
 
+# A distinct sentinel for "columns targeted by this call are UNKNOWN/
+# unresolvable from static text" (e.g. `columns=cs.starts_with("rate_")`)
+# -- deliberately NOT the same value as `None`, which is Tier 1's existing
+# sentinel for "omitted/explicit `columns=None`, i.e. targets EVERY
+# column" (`_mechanics_columns` expands `None` against the full visible
+# schema). Codex round-5 finding: round 4 used `None` for BOTH cases,
+# which made `_mechanics_columns` misread a genuinely-unresolvable
+# selector as "colors everything" -- the opposite of the intended
+# benefit-of-the-doubt ("we don't know, so credit/blame nothing specific
+# to it") treatment.
+_UNRESOLVED_COLUMNS = object()
+
+
 def _enrich_color_mechanics(source: str) -> list[dict]:
     """One dict per colored-measure call (`data_color`/`heatmap`), in TRUE
     source order, carrying `columns`/`na_color`/`truncate`/`autocolor_text`
@@ -892,8 +927,10 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
         cols_val = convergence._kwarg_value(block, "columns")
         if cols_val is None:
             cols_val = positionals[0] if positionals else None
-        if cols_val is None or cols_val.strip() == "None" or _is_unresolvable_columns_selector(cols_val):
-            resolved_columns = None
+        if cols_val is None or cols_val.strip() == "None":
+            resolved_columns = None  # omitted/explicit None -- targets EVERY column
+        elif _is_unresolvable_columns_selector(cols_val):
+            resolved_columns = _UNRESOLVED_COLUMNS  # unknown -- NOT the same as "every column"
         else:
             resolved_columns = convergence._resolve_columns_list(cols_val, var_map)
         domain_val = convergence._kwarg_value(block, "domain")
@@ -924,7 +961,7 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
     for pos, block in _ast_call_blocks(source, tree, "heatmap", allow_bare=True):
         heatmap_cols_val = convergence._heatmap_columns_raw(block)
         if heatmap_cols_val is not None and _is_unresolvable_columns_selector(heatmap_cols_val):
-            resolved_heatmap_columns: list[str] | None = None
+            resolved_heatmap_columns = _UNRESOLVED_COLUMNS  # unknown -- NOT "every column"
         else:
             resolved_heatmap_columns = convergence._resolve_columns_list(heatmap_cols_val, var_map)
         hue_raw = convergence._kwarg_value(block, "hue")
@@ -942,6 +979,66 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
         }))
     entries.sort(key=lambda e: e[0])
     return [d for _, d in entries]
+
+
+def _fmt_column_map(source: str) -> dict[str, str | bool]:
+    """Best-effort `{source column -> the EFFECTIVE fmt_* name}`, with a
+    special `convergence._ALL_COLUMNS` sentinel key for "every column not
+    otherwise listed gets THIS formatter."
+
+    Codex round-5 finding: the version of `_fmt_column_map` merged to
+    `gtc/root` clears its whole map (`out.clear()`) whenever a LATER
+    `fmt_*(...)` call omits `columns=` (meaning "apply to every column"),
+    discarding the "every column now gets this formatter" fact entirely
+    instead of recording it -- despite that function's OWN docstring (and
+    its callers, `check_fmt_semantic_type`/`check_summary_row_formatting`,
+    which already do `fmt_map.get(col, fmt_map.get(convergence.
+    _ALL_COLUMNS))`) documenting exactly this `_ALL_COLUMNS` sentinel as
+    the intended behavior. A table using a single unqualified
+    `.fmt_number()` (or similar) for every column scored as "no formatting
+    applied at all" for every semantic-typed column. `runner/convergence.py`
+    is a hard non-goal for this slice (same pattern as this file's Tier-1
+    compatibility shim from the vendoring commit), so this is a straight,
+    verbatim port of the CORRECT implementation from the closed
+    `gtc/comparator` branch (verified via `git show gtc/comparator:
+    runner/convergence.py`) -- built only from `convergence._fmt_calls`
+    (still present, unchanged) and other still-present low-level
+    primitives, replacing the buggy version's output entirely rather than
+    patching it (there's nothing to salvage from an already-cleared dict).
+    """
+    var_map = convergence._list_var_map(source)
+    out: dict[str, str | bool] = {}
+    for name, block in convergence._fmt_calls(source):
+        positionals = [
+            p for p in convergence._split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+        ]
+        val = convergence._kwarg_value(block, "columns")
+        if val is None:
+            val = positionals[0] if positionals else None
+        rows_val = convergence._kwarg_value(block, "rows")
+        if rows_val is None and len(positionals) > 1:
+            rows_val = positionals[1]
+        has_expansion = any(p.strip().startswith("**") for p in convergence._split_top_level_quoted(block))
+        row_restricted = has_expansion or (rows_val is not None and rows_val.strip() != "None")
+        if row_restricted:
+            if val is None or val.strip() == "None":
+                out.clear()
+            else:
+                for col in convergence._resolve_columns_list(val, var_map):
+                    if out.get(col, out.get(convergence._ALL_COLUMNS)) != name:
+                        # `False` explicitly excludes JUST this column from
+                        # the `_ALL_COLUMNS` fallback, rather than dropping
+                        # the sentinel entirely and losing formatting
+                        # credit for every OTHER, unaffected column too.
+                        out[col] = False
+            continue
+        if val is None or val.strip() == "None":
+            out.clear()
+            out[convergence._ALL_COLUMNS] = name
+            continue
+        for col in convergence._resolve_columns_list(val, var_map):
+            out[col] = name
+    return out
 
 
 def build_fingerprint(py_path: Path) -> dict:
@@ -994,6 +1091,10 @@ def build_fingerprint(py_path: Path) -> dict:
     # own `striping_present` is a bare `option=` NAME search that never
     # reads the value -- see `_striping_present`'s docstring.
     tier1["striping_present"] = _striping_present(source)
+    # Codex round-5 finding: convergence.py's own `_fmt_column_map` clears
+    # its whole map instead of preserving an `_ALL_COLUMNS` sentinel when a
+    # formatter call omits `columns=` -- see `_fmt_column_map`'s docstring.
+    tier1["fmt_column_map"] = _fmt_column_map(source)
     # Codex round-1 finding: convergence.py's own `title_present`/
     # `caption_present` (subtitle) only recognize the keyword form and
     # `any()` across every `tab_header(...)` call instead of just the last
@@ -1092,8 +1193,19 @@ def _mechanics_columns(entry: dict, fp: dict) -> list[str]:
     time, when both tiers are available together. Without this, an
     all-columns `data_color(...)` call reported an empty column list,
     making the candidate look like it colored nothing at all.
+
+    `entry["columns"] is _UNRESOLVED_COLUMNS` is a DIFFERENT sentinel --
+    an unresolvable column-selector expression (`cs.starts_with(...)`),
+    genuinely UNKNOWN rather than "every column." Codex round-5 finding:
+    round 4 conflated this with the `None` ("every column") sentinel,
+    so an unresolvable selector was misread as coloring the entire table.
+    Returns an empty list for it instead -- benefit of the doubt means
+    "credit/blame nothing specific to this entry," not "assume the most
+    generous possible interpretation."
     """
     cols = entry.get("columns")
+    if cols is _UNRESOLVED_COLUMNS:
+        return []
     if cols is not None:
         return cols
     tier2 = fp["tier2"]
@@ -1997,45 +2109,54 @@ def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     return CheckResult(name, 1, 0 if collision else 1, not collision, detail)
 
 
-def _group_summary_rows_by_label(summary_rows: list[dict]) -> dict[Any, list[dict]]:
-    """`{label -> [rows with that label, in order]}` -- a plain LIST per
-    label (not a single row), so a label that's shared by multiple rows
-    (including the common case where EVERY summary row is unlabeled,
-    i.e. `label=None` for all of them) doesn't silently lose every row
-    but the last one.
+def _match_summary_rows(cand_summary: list[dict], truth_summary: list[dict]) -> list[dict | None]:
+    """One-to-one alignment: `result[i]` is the CANDIDATE row matched to
+    `truth_summary[i]`, or `None` if no distinct candidate row remains
+    available for it. Each candidate row is consumed by AT MOST ONE truth
+    row -- by label when it's a real, UNIQUE, still-UNUSED match on both
+    sides, falling back to position (also tracked as consumed) otherwise.
+
+    Codex round-3 finding (partially fixed): the original per-truth-row
+    lookup used a plain `{label: row}` dict, so multiple candidate rows
+    sharing a label silently kept only the LAST one.
+
+    Codex round-5 finding (the remaining gap): round 3's fix only
+    dedup-tracked the CANDIDATE side. If the ground TRUTH ALSO has
+    multiple rows sharing a label (e.g. two rows both labeled "Total")
+    and the candidate has only ONE, checking "is there exactly one
+    candidate row with this label" independently for each truth row let
+    BOTH truth rows match that SAME single candidate row -- a candidate
+    silently missing one of two required summary rows went undetected,
+    since the one it does have satisfied the label lookup for both truth
+    comparisons. This tracks which CANDIDATE ROW INDICES have already
+    been consumed by an earlier truth row (whether matched by label or by
+    position) so a second truth row can no longer reuse one, correctly
+    leaving it unmatched (`None`) when the candidate doesn't actually have
+    a second row to offer.
     """
-    grouped: dict[Any, list[dict]] = {}
-    for row in summary_rows:
-        grouped.setdefault(row.get("label"), []).append(row)
-    return grouped
+    cand_by_label: dict[Any, list[int]] = {}
+    for i, row in enumerate(cand_summary):
+        cand_by_label.setdefault(row.get("label"), []).append(i)
 
-
-def _matched_summary_row(
-    cand_summary: list[dict], cand_by_label: dict[Any, list[dict]], truth_row: dict, index: int,
-) -> dict | None:
-    """The candidate summary row that corresponds to `truth_row` (the
-    `index`-th truth summary row) -- by label when the label is a real,
-    UNIQUE identifier on the candidate side, falling back to POSITION
-    otherwise.
-
-    Codex round-3 finding: the previous `{row.get("label"): row for row in
-    cand_summary}` dict comprehension silently kept only the LAST candidate
-    row for any label shared by multiple rows -- including the common case
-    where every summary row is unlabeled (`label=None` for all of them),
-    which made every truth row after the first compare against that same
-    single (usually wrong) candidate row instead of its actual positional
-    counterpart, and could fail an otherwise-correct candidate's value and
-    formatting checks. Falls back to `cand_summary[index]` (plain
-    POSITIONAL alignment, matching this file's existing fallback
-    convention) whenever the truth label is `None` or doesn't map to
-    EXACTLY ONE candidate row.
-    """
-    label = truth_row.get("label")
-    if label is not None:
-        candidates = cand_by_label.get(label, [])
-        if len(candidates) == 1:
-            return candidates[0]
-    return cand_summary[index] if index < len(cand_summary) else None
+    used_indices: set[int] = set()
+    result: list[dict | None] = []
+    for i, truth_row in enumerate(truth_summary):
+        label = truth_row.get("label")
+        matched_idx: int | None = None
+        if label is not None:
+            available = [j for j in cand_by_label.get(label, []) if j not in used_indices]
+            if len(available) == 1:
+                matched_idx = available[0]
+            # 0 or 2+ still-available same-label candidates -- genuinely
+            # ambiguous (or exhausted); fall through to positional below.
+        if matched_idx is None and i < len(cand_summary) and i not in used_indices:
+            matched_idx = i
+        if matched_idx is not None:
+            used_indices.add(matched_idx)
+            result.append(cand_summary[matched_idx])
+        else:
+            result.append(None)
+    return result
 
 
 def check_summary_row_existence(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -2062,15 +2183,16 @@ def check_summary_row_existence(cand: dict, truth: dict, meta: dict) -> CheckRes
     # otherwise a candidate reproducing one value from the first summary
     # row while omitting its other aggregates (and every later summary
     # row entirely) previously still earned full credit here. Truth rows
-    # are matched to candidate rows by label (see `_matched_summary_row`),
-    # falling back to position when labels don't line up (e.g. one side
-    # omits a label, or a label is shared by multiple rows).
-    cand_by_label = _group_summary_rows_by_label(cand_summary)
+    # are matched to candidate rows one-to-one on BOTH sides (see
+    # `_match_summary_rows`), falling back to position when labels don't
+    # line up (e.g. one side omits a label, or a label is shared by
+    # multiple rows on either side).
+    matches = _match_summary_rows(cand_summary, truth_summary)
     all_ok = True
     compared_cols: list[str] = []
     truth_tier2_ok = truth_tier2.get("ok", True)  # summary_rows already implies a usable truth tier2
     for i, truth_row in enumerate(truth_summary):
-        cand_row = _matched_summary_row(cand_summary, cand_by_label, truth_row, i)
+        cand_row = matches[i]
         truth_values = truth_row.get("values", {})
         cand_values = cand_row.get("values", {}) if cand_row is not None else {}
         for k, tv in truth_values.items():
@@ -2286,7 +2408,22 @@ def check_frame_hairlines_dividers(cand: dict, truth: dict, meta: dict) -> Check
     t1 = cand["tier1"]
     frame_ok = bool(t1.get("frame_present"))
     hairlines_ok = bool(t1.get("hairlines_present"))
-    dividers_expected = bool(t1.get("spanner_present"))
+    # Round-5 proactive sweep finding (same "expected gated on the
+    # CANDIDATE's own state, not what the ground truth requires" shape as
+    # check_stub_tint's round-5 fix, and round-4 #10's striping-gate fix
+    # before that): gating purely on the CANDIDATE's own `spanner_present`
+    # let a candidate that omits BOTH required spanners AND their dividers
+    # look self-consistent (no spanners -> no dividers "expected" -> a
+    # trivial match) and dodge this 2-point sub-check entirely, on top of
+    # the separate penalty `check_spanner_existence` already applies for
+    # the missing spanners themselves. ALSO checking the ground truth's own
+    # spanner state (via `or`) closes that gap -- a required-but-omitted
+    # spanner+divider pair now correctly reads as "dividers expected, none
+    # present" -- while still not penalizing a candidate that VOLUNTARILY
+    # adds its own spanners (and correctly matching dividers) the ground
+    # truth didn't require: candidate-side `spanner_present=True` alone
+    # still sets `dividers_expected=True` in that case, same as before.
+    dividers_expected = bool(t1.get("spanner_present")) or bool(truth["tier1"].get("spanner_present"))
     dividers_ok = bool(t1.get("dividers_present")) == dividers_expected
     pts = (2 if frame_ok else 0) + (2 if hairlines_ok else 0) + (2 if dividers_ok else 0)
     dividers_detail = (
@@ -2360,6 +2497,18 @@ def check_stub_tint(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Stub tint + grey-budget correctness"
     t1 = cand["tier1"]
     stub = bool(t1.get("stub_present"))
+    # Codex round-5 finding: `expected_on` was derived purely from the
+    # CANDIDATE's own stub presence -- if the candidate simply omitted a
+    # stub the ground truth requires, `stub=False` made `expected_on=
+    # False` trivially match `actual_on=False` (no stub tint is possible
+    # without a stub at all), earning full 5/5 credit for a table that
+    # dodged the stub requirement entirely, on TOP of the separate
+    # (smaller) penalty `check_stub_existence` already applies. Gate on
+    # whether the GROUND TRUTH actually requires a stub first: a required-
+    # but-missing stub is a graded failure HERE too, not a free pass.
+    truth_requires_stub = bool(truth["tier1"].get("stub_present"))
+    if truth_requires_stub and not stub:
+        return CheckResult(name, 5, 0, False, "ground truth requires a stub but candidate has none; stub tint unverifiable")
     striped = bool(t1.get("striping_present"))
     expected_on = stub and not striped
     actual_on = bool(t1.get("stub_tint_present"))
@@ -2517,13 +2666,13 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     # subtotals) whose LATER row introduces a numeric aggregate the first
     # row doesn't have silently dropped that column from the requirement, so
     # a candidate could leave it raw/unformatted and still score full
-    # credit. Now iterates every truth summary row, same label-matching
-    # (see `_matched_summary_row`, falling back to position)
+    # credit. Now iterates every truth summary row, same one-to-one
+    # matching (see `_match_summary_rows`, falling back to position)
     # `check_summary_row_existence` already uses, accumulating per (row,
     # column) pairs rather than per distinct column name -- a column
     # present in multiple rows must be checked in EACH row it's expected
     # in, not just once overall.
-    cand_by_label = _group_summary_rows_by_label(cand_summary)
+    matches = _match_summary_rows(cand_summary, truth_summary)
     required_pairs = 0
     covered_pairs = 0
     distinct_cols: set[str] = set()
@@ -2535,7 +2684,7 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
         ]
         if not row_numeric_cols:
             continue
-        cand_row = _matched_summary_row(cand_summary, cand_by_label, truth_row, i)
+        cand_row = matches[i]
         cand_values = cand_row.get("values", {}) if cand_row is not None else {}
         for c in row_numeric_cols:
             distinct_cols.add(c)
@@ -2604,21 +2753,38 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # by_value` -- the same value-based matching `check_colored_measure_
     # selection`/`check_hero_column_formatting` already use elsewhere in
     # this file, rather than assuming the candidate preserved the name.
+    #
+    # Round-5 proactive sweep finding (same "expected/applicable gated on
+    # the CANDIDATE's own state" shape as check_stub_tint/check_frame_
+    # hairlines_dividers's round-5 fixes): the denominator here was every
+    # semantic-typed column the candidate happened to still have VISIBLE
+    # -- so a candidate that HID every semantic-typed column (via `cols_
+    # hide(...)`) shrank `applicable` to empty and the whole 4-point check
+    # went N/A instead of failing those hidden/missing columns. The
+    # denominator is now EVERY semantic-typed column the ground truth
+    # declares, always (once SEMANTIC_TYPES and both tier2s are usable,
+    # already checked above) -- a hidden or genuinely-unmatched column now
+    # counts as a required-but-uncovered column, not an excused one.
     visible = _visible_columns(cand)
-    applicable: dict[str, str] = {}  # ground-truth source column -> resolved candidate column
-    for c in semantic_types:
-        matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], c)
-        if matched_col is not None and matched_col in visible:
-            applicable[c] = matched_col
-    if not applicable:
-        return _na(name, "none of the ground truth's semantic-typed columns have a value-matching visible candidate column")
     fmt_map = cand["tier1"].get("fmt_column_map", {})
-    ok_count = sum(
-        1 for c, matched_col in applicable.items()
-        if fmt_map.get(matched_col, fmt_map.get(convergence._ALL_COLUMNS)) in _SEMANTIC_TO_FMT.get(semantic_types[c], set())
-    )
-    all_ok = ok_count == len(applicable)
-    return CheckResult(name, 4, _round_points(ok_count / len(applicable), 4), all_ok, f"{ok_count}/{len(applicable)} columns formatted per their semantic type")
+    ok_count = 0
+    uncovered: list[str] = []
+    for c, sem_type in semantic_types.items():
+        matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], c)
+        if (
+            matched_col is not None
+            and matched_col in visible
+            and fmt_map.get(matched_col, fmt_map.get(convergence._ALL_COLUMNS)) in _SEMANTIC_TO_FMT.get(sem_type, set())
+        ):
+            ok_count += 1
+        else:
+            uncovered.append(c)
+    total = len(semantic_types)
+    all_ok = ok_count == total
+    detail = f"{ok_count}/{total} columns formatted per their semantic type"
+    if uncovered:
+        detail += f"; not covered (missing, hidden, or wrong format): {uncovered}"
+    return CheckResult(name, 4, _round_points(ok_count / total, 4), all_ok, detail)
 
 
 def check_title_subtitle_caption_source(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -3038,12 +3204,30 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
 
     candidate_png = candidate_path.with_suffix(".png")
     truth_png = ground_truth_path.with_suffix(".png")
-    if _judge_png_is_stale(candidate_png, candidate_path):
+    if not cand["tier2"].get("ok"):
+        # Codex round-5 finding: gate the judge call on the candidate's OWN
+        # Tier-2 execution having actually succeeded, as a HARD
+        # precondition -- more fundamental than the mtime staleness check
+        # below. Whatever PNG happens to sit next to a candidate `.py`
+        # that fails to even EXECUTE cannot be trusted to reflect that
+        # source at all (it could be leftover from any prior, unrelated
+        # version), regardless of how recently it was written. This is
+        # checked BEFORE the mtime check on purpose: a fresh-looking PNG
+        # next to a currently-broken script is just as untrustworthy as a
+        # stale one.
+        reason = f"judge unavailable: candidate failed Tier-2 execution ({cand['tier2'].get('error')}); its PNG (if any) can't be trusted to reflect this source"
+        meta["_judge_result"] = {
+            key: judge_module.JudgeDimension(applicable=False, score=None, rationale=reason)
+            for key in judge_module.DIMENSION_KEYS
+        }
+    elif _judge_png_is_stale(candidate_png, candidate_path):
         # Codex round-4 finding: see `_judge_png_is_stale`'s docstring --
         # degrade exactly like `judge()`'s own documented "unavailable"
         # contract (all 7 keys, applicable=False, rationale prefixed with
         # the literal "judge unavailable: " string) rather than scoring a
-        # PNG that predates the source it's supposed to represent.
+        # PNG that predates the source it's supposed to represent. This is
+        # the SECONDARY signal, for the case where execution succeeds but
+        # an older PNG might still be sitting there from a prior run.
         reason = f"judge unavailable: candidate PNG is older than its source .py ({candidate_png} predates {candidate_path})"
         meta["_judge_result"] = {
             key: judge_module.JudgeDimension(applicable=False, score=None, rationale=reason)
