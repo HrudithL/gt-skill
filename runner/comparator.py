@@ -689,7 +689,7 @@ def _frame_present(source: str) -> bool:
     # second, effective call turning it back off. Only the LAST call's
     # own value is consulted now, mirroring the same fix already applied
     # to `_striping_present`/`_option_line_present`.
-    outline_blocks = convergence._call_arg_blocks(source, "opt_table_outline")
+    outline_blocks = _ast_call_arg_blocks(source, "opt_table_outline")
     if outline_blocks:
         style_val = convergence._kwarg_value(outline_blocks[-1], "style")
         disabled = False
@@ -927,7 +927,7 @@ def _striping_present(source: str) -> bool:
     body`, `stripe(...)`) rather than returning `False` outright, since
     striping could still genuinely be present via one of those.
     """
-    blocks = convergence._call_arg_blocks(source, "opt_row_striping")
+    blocks = _ast_call_arg_blocks(source, "opt_row_striping")
     if blocks:
         block = blocks[-1]
         val = convergence._kwarg_value(block, "row_striping")
@@ -1192,6 +1192,32 @@ def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: 
         block = convergence._strip_line_comments(rest[1:-1])
         out.append(((node.lineno, node.col_offset), block))
     return out
+
+
+def _ast_call_arg_blocks(source: str, func_name: str, *, allow_bare: bool = False) -> list[str]:
+    """AST-based replacement for `convergence._call_arg_blocks` -- same
+    `list[str]` shape (one entry per genuine call's argument block text,
+    in true source order), built from `_ast_call_blocks` instead of a
+    source-wide regex, so it's a drop-in replacement at call sites that
+    don't need the position info `_ast_call_blocks` itself returns.
+
+    Codex round-11 finding: `convergence._call_arg_blocks` (off-limits --
+    see this file's Tier-1 compatibility-shim section) is a source-wide
+    regex with no comment/string stripping at all -- the same recurring
+    bug class already fixed for color-mechanics/frame/fmt_*/stub_tint/
+    tab_options detection: `# .opt_row_striping()` in a comment, or a
+    docstring mentioning the same text, is misdetected as a real call.
+    Used for `opt_row_striping` (the flagged case) and, proactively, for
+    `opt_table_outline` right next to it in `_frame_present` -- the
+    identical vulnerability on the identical kind of call, not separately
+    flagged but the same fix.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    blocks = sorted(_ast_call_blocks(source, tree, func_name, allow_bare), key=lambda b: b[0])
+    return [block for _, block in blocks]
 
 
 def _ast_fmt_calls(source: str) -> list[tuple[str, str]]:
@@ -1634,10 +1660,28 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
     return [d for _, d in entries]
 
 
-def _fmt_column_map(source: str) -> dict[str, str | bool]:
+def _fmt_column_map(source: str, visible_columns: set[str] | None = None) -> dict[str, str | bool]:
     """Best-effort `{source column -> the EFFECTIVE fmt_* name}`, with a
     special `convergence._ALL_COLUMNS` sentinel key for "every column not
     otherwise listed gets THIS formatter."
+
+    Codex round-11 finding: a `columns=cs.starts_with(...)`-style
+    selector (see `_PendingColumnSelector`/`_parse_cs_selector`/`_cs_
+    selector_matches`, built in round 10 for color-mechanics resolution)
+    previously went straight to `convergence._resolve_columns_list`,
+    which returns `[]` for ANY selector expression -- so a `fmt_percent(
+    columns=cs.starts_with("density_"))` call's target columns were
+    silently invisible to this map entirely, the exact same round-10
+    color-mechanics bug, now fixed for formatter calls too. `visible_
+    columns` (Tier-2's real column list; `build_fingerprint` now computes
+    Tier 2 BEFORE calling this, specifically so it's available here) lets
+    a SIMPLE, single selector resolve directly at call time instead of
+    deferring the way `_mechanics_columns` has to -- this function's
+    return shape is a plain `{column: formatter}` dict, not a lazily-
+    resolved entry list, so there's no later resolution point to defer
+    to. A compound/dynamic/unrecognized selector (or a caller that
+    doesn't pass `visible_columns` at all) still resolves to no columns,
+    unchanged from before.
 
     Codex round-5 finding: the version of `_fmt_column_map` merged to
     `gtc/root` clears its whole map (`out.clear()`) whenever a LATER
@@ -1677,6 +1721,15 @@ def _fmt_column_map(source: str) -> dict[str, str | bool]:
     """
     var_map = convergence._list_var_map(source)
     out: dict[str, str | bool] = {}
+
+    def _resolve_cols(val: str) -> list[str]:
+        if visible_columns is not None and _is_unresolvable_columns_selector(val):
+            parsed = _parse_cs_selector(val)
+            if parsed is not None:
+                kind, pattern = parsed
+                return sorted(c for c in visible_columns if _cs_selector_matches(kind, pattern, c))
+        return convergence._resolve_columns_list(val, var_map)
+
     for name, block in _ast_fmt_calls(source):
         positionals = [
             p for p in convergence._split_top_level_quoted(block)
@@ -1697,7 +1750,7 @@ def _fmt_column_map(source: str) -> dict[str, str | bool]:
             if val is None or val.strip() == "None":
                 out.clear()
             else:
-                for col in convergence._resolve_columns_list(val, var_map):
+                for col in _resolve_cols(val):
                     if out.get(col, out.get(convergence._ALL_COLUMNS)) != name:
                         # `False` explicitly excludes JUST this column from
                         # the `_ALL_COLUMNS` fallback, rather than dropping
@@ -1709,9 +1762,114 @@ def _fmt_column_map(source: str) -> dict[str, str | bool]:
             out.clear()
             out[convergence._ALL_COLUMNS] = name
             continue
-        for col in convergence._resolve_columns_list(val, var_map):
+        for col in _resolve_cols(val):
             out[col] = name
     return out
+
+
+def _fmt_percent_scale_values_map(source: str, visible_columns: set[str] | None) -> dict[str, str]:
+    """`{column-or-_ALL_COLUMNS -> the resolved LITERAL `scale_values=`
+    text}` for every `.fmt_percent(...)` call, using the same column-
+    resolution (positional/`_ALL_COLUMNS` sentinel/`cs.*` selector) as
+    `_fmt_column_map`, but tracking `scale_values` instead of the
+    formatter name -- the one kwarg that changes what the RENDERED VALUE
+    actually looks like for `fmt_percent` specifically (great_tables
+    multiplies by 100 when `scale_values=True`, its own default, and does
+    NOT when `False`). A LATER call overrides an earlier one for the same
+    column, same "last call wins" convention used throughout this file.
+    Only a genuine `"True"`/`"False"` literal is ever recorded; an
+    omitted or unresolvable value simply adds no entry, leaving the
+    caller's own default/benefit-of-the-doubt handling in charge.
+
+    Codex round-11 finding: a candidate using `fmt_percent(columns=...,
+    scale_values=False)` on genuinely FRACTIONAL ratio data (e.g. 0.05 to
+    0.95) renders values 100x too small (`"0.05%"` instead of `"5%"`) --
+    a real, meaningful data-fidelity bug -- but still earned full
+    semantic-formatting credit, since `_fmt_column_map`/`check_fmt_
+    semantic_type` only ever checked the METHOD NAME (`fmt_percent`),
+    never this kwarg. See `_fmt_covers_semantic_type`'s own docstring for
+    how this map's output is actually validated against the matched
+    column's real data shape.
+    """
+    var_map = convergence._list_var_map(source)
+
+    def _resolve_cols(val: str) -> list[str]:
+        if visible_columns is not None and _is_unresolvable_columns_selector(val):
+            parsed = _parse_cs_selector(val)
+            if parsed is not None:
+                kind, pattern = parsed
+                return sorted(c for c in visible_columns if _cs_selector_matches(kind, pattern, c))
+        return convergence._resolve_columns_list(val, var_map)
+
+    out: dict[str, str] = {}
+    for name, block in _ast_fmt_calls(source):
+        if name != "fmt_percent":
+            continue
+        positionals = [
+            p for p in convergence._split_top_level_quoted(block)
+            if not re.match(r"[A-Za-z_]\w*\s*=", p) and not p.strip().startswith("**")
+        ]
+        val = convergence._kwarg_value(block, "columns")
+        if val is None:
+            val = positionals[0] if positionals else None
+        scale_val = convergence._kwarg_value(block, "scale_values")
+        scale_literal = convergence._unquote(scale_val).strip() if scale_val else None
+        if scale_literal not in ("True", "False"):
+            continue  # omitted, or a non-literal expression -- nothing to record
+        if val is None or val.strip() == "None":
+            out[convergence._ALL_COLUMNS] = scale_literal
+            continue
+        for col in _resolve_cols(val):
+            out[col] = scale_literal
+    return out
+
+
+def _scale_shape_from_values(vals: list[float]) -> str | None:
+    """Classify a set of numeric values as `"fractional"` (max absolute
+    value comfortably `<= 1.5` -- e.g. 0.05-0.95, a ratio that NEEDS
+    `fmt_percent`'s default `scale_values=True` to render as a real
+    percentage) or `"percentage_scale"` (max absolute value comfortably
+    `> 10` -- e.g. 5-95, a value that ALREADY IS the percentage number
+    and needs `scale_values=False`). Returns `None` -- genuinely
+    ambiguous, or no usable values at all -- for anything in between or
+    unresolvable, same benefit-of-the-doubt convention as every other
+    "can't verify from what's available" case in this file. The gap
+    between the two thresholds is deliberate: a value like `3` could
+    plausibly be either a growth ratio slightly over 1 or a small
+    percentage, so it's left unclassified rather than guessed.
+    """
+    if not vals:
+        return None
+    max_abs = max(abs(v) for v in vals)
+    if max_abs <= 1.5:
+        return "fractional"
+    if max_abs > 10:
+        return "percentage_scale"
+    return None
+
+
+def _values_scale_shape(tier2: dict, column: str) -> str | None:
+    """`_scale_shape_from_values` over every usable numeric value in
+    `tier2`'s `column` (a whole body column)."""
+    vals: list[float] = []
+    for v in tier2.get("columns", {}).get(column, []) or []:
+        if v is None:
+            continue
+        try:
+            vals.append(float(v))
+        except (TypeError, ValueError):
+            continue
+    return _scale_shape_from_values(vals)
+
+
+def _value_scale_shape(v: Any) -> str | None:
+    """`_scale_shape_from_values` for a single scalar value (a summary-row
+    aggregate, not a whole column)."""
+    try:
+        fv = float(v)
+    except (TypeError, ValueError):
+        return None
+    return _scale_shape_from_values([fv])
 
 
 def build_fingerprint(py_path: Path) -> dict:
@@ -1741,9 +1899,20 @@ def build_fingerprint(py_path: Path) -> dict:
     convergence.py` is a hard non-goal for this slice either way, so the
     fix lives here instead, built only from primitives convergence.py
     already exposes.
+
+    Codex round-11 finding: Tier 2 is now computed BEFORE the Tier-1 shim
+    block below (it used to run last) specifically so `_fmt_column_map`
+    can resolve a `cs.starts_with(...)`-style selector's `columns=`
+    against the REAL visible-column list, the same way `_mechanics_
+    columns` already does for color calls (round 10) -- see `_fmt_
+    column_map`'s own docstring. Nothing else in the shim block below
+    depends on Tier 2, so this reordering is a pure "compute it earlier"
+    change with no other behavioral effect.
     """
     source = py_path.read_text()
     tier1 = convergence.parse_design_choices(source)
+    tier2 = execution_tier.exec_table(py_path)
+    visible_columns = set(tier2.get("columns", {}).keys()) - set(tier2.get("hidden_columns") or [])
     tier1["color_mechanics"] = _enrich_color_mechanics(source)
     tier1["stub_tint_present"] = _stub_tint_present(source)
     tier1["render_call_present"] = _render_call_present(source)
@@ -1767,7 +1936,13 @@ def build_fingerprint(py_path: Path) -> dict:
     # Codex round-5 finding: convergence.py's own `_fmt_column_map` clears
     # its whole map instead of preserving an `_ALL_COLUMNS` sentinel when a
     # formatter call omits `columns=` -- see `_fmt_column_map`'s docstring.
-    tier1["fmt_column_map"] = _fmt_column_map(source)
+    tier1["fmt_column_map"] = _fmt_column_map(source, visible_columns)
+    # Codex round-11 finding: see `_fmt_percent_scale_values_map`'s own
+    # docstring -- `fmt_percent`'s `scale_values` kwarg is tracked
+    # separately from the formatter-name map above so `check_fmt_
+    # semantic_type`/`check_summary_row_formatting` can validate it
+    # against the matched column's actual data shape.
+    tier1["fmt_percent_scale_values_map"] = _fmt_percent_scale_values_map(source, visible_columns)
     # Codex round-1 finding: convergence.py's own `title_present`/
     # `caption_present` (subtitle) only recognize the keyword form and
     # `any()` across every `tab_header(...)` call instead of just the last
@@ -1811,7 +1986,6 @@ def build_fingerprint(py_path: Path) -> dict:
         normalized_band_hex = _normalize_css_color(tier1["heading_band_hex"]) or tier1["heading_band_hex"]
         tier1["heading_band_hue"] = _classify_hue_extended(normalized_band_hex)
         tier1["heading_band_shade"] = convergence._band_shade(normalized_band_hex)
-    tier2 = execution_tier.exec_table(py_path)
     return {"tier1": tier1, "tier2": tier2, "source": source, "path": py_path}
 
 
@@ -2565,14 +2739,13 @@ def _hungarian_group_assignment(
     cleanly) without weakening the "group labels are free-wording, only
     the partition matters" philosophy established since round 1.
 
-    `ambiguous` is `True` when, even after this tie-breaker, some REAL
-    truth group's best combined score is still shared by 2+ REAL
-    candidate groups (a per-row tie-check -- e.g. a candidate using
-    entirely the wrong 6 years, where no candidate year's label matches
-    any truth year's numerically, leaves every truth year tied across
-    every candidate year at the exact same combined score). Callers use
-    this to avoid confidently claiming an exact/one-to-one match that's
-    actually built on an arbitrary pick.
+    `ambiguous` is `True` when another complete one-to-one assignment
+    achieves the exact same OPTIMAL TOTAL combined score as the one found
+    (see `_assignment_is_ambiguous`'s own docstring for why this is
+    checked via global-total pairwise swaps, not a per-row local-tie
+    check). Callers use this to avoid confidently claiming an exact/
+    one-to-one match that's actually built on an arbitrary pick among
+    multiple, equally-good global assignments.
     """
     truth_keys = sorted(truth_groups, key=str)
     cand_keys = sorted(cand_groups, key=str)
@@ -2585,16 +2758,60 @@ def _hungarian_group_assignment(
             combined_matrix[i][j] = overlap_matrix[i][j] * 1000 + _group_label_similarity(tg, cg)
     cost = [[-combined_matrix[i][j] for j in range(n)] for i in range(n)]  # minimize cost == maximize combined
     assignment = _hungarian_min_cost(cost)
-    ambiguous = False
-    for i in range(len(truth_keys)):
-        row = combined_matrix[i][: len(cand_keys)]
-        if not row:
-            continue
-        best = max(row)
-        if sum(1 for v in row if v == best) > 1:
-            ambiguous = True
-            break
+    ambiguous = _assignment_is_ambiguous(combined_matrix, assignment, len(truth_keys), len(cand_keys))
     return truth_keys, cand_keys, overlap_matrix, assignment, ambiguous
+
+
+def _assignment_is_ambiguous(
+    combined_matrix: list[list[float]], assignment: list[int], n_truth: int, n_cand: int,
+) -> bool:
+    """True if some ALTERNATE complete one-to-one assignment (over the
+    REAL truth/candidate rows -- a truth row mapped to a dummy/padding
+    column, `>= n_cand`, is excluded) achieves the exact same OPTIMAL
+    TOTAL combined score as `assignment` -- checked via every PAIRWISE
+    SWAP of two assigned pairs (swap `(i1, j1)`/`(i2, j2)` to `(i1, j2)`/
+    `(i2, j1)` and compare the resulting total).
+
+    Codex round-11 finding: round 10's original `ambiguous` check flagged
+    ANY truth row whose own best combined score was tied across 2+
+    candidate columns -- a LOCAL, per-row test that doesn't actually mean
+    the GLOBAL optimum is non-unique. Concrete counter-example: overlap
+    `[[12, 1], [1, 1]]` -- row 1 locally ties between its two columns
+    (both score 1), but the global optimum (row0->col0 + row1->col1 = 13)
+    strictly beats the only alternative (row0->col1 + row1->col0 = 2), so
+    it's NOT actually ambiguous; the old per-row check incorrectly
+    flagged it anyway, rejecting a legitimately relabeled candidate.
+
+    A pairwise swap directly answers the right question -- "does an
+    alternate COMPLETE assignment tie the total" -- without needing full
+    alternate-perfect-matching enumeration (which would require building
+    the zero-reduced-cost bipartite subgraph from the Hungarian
+    algorithm's own dual potentials and checking it for more than one
+    perfect matching -- real complexity this file's scope doesn't need).
+    This is a bounded, sufficient approximation: it's guaranteed to catch
+    the actual real-world threat this check exists for (a UNIFORMLY tied
+    submatrix -- e.g. every year-group sharing identical month content,
+    where swapping ANY two groups trivially preserves the total, since
+    the whole relevant submatrix is constant) while correctly clearing a
+    single locally-tied cell whose surrounding context still pins down a
+    unique global optimum, as in the counter-example above. It does not
+    attempt to detect ambiguity reachable ONLY via a longer alternating
+    cycle (3+ rows) with no tied pairwise swap -- not a shape this
+    corpus's group counts (a handful of groups per table) are expected to
+    produce, and a full cycle search would be genuine scope creep here.
+    """
+    assigned_real = [(i, assignment[i]) for i in range(n_truth) if assignment[i] < n_cand]
+    if len(assigned_real) < 2:
+        return False
+    total = sum(combined_matrix[i][j] for i, j in assigned_real)
+    for a in range(len(assigned_real)):
+        i1, j1 = assigned_real[a]
+        for b in range(a + 1, len(assigned_real)):
+            i2, j2 = assigned_real[b]
+            swapped_total = total - combined_matrix[i1][j1] - combined_matrix[i2][j2] + combined_matrix[i1][j2] + combined_matrix[i2][j1]
+            if math.isclose(swapped_total, total, rel_tol=1e-9, abs_tol=1e-9):
+                return True
+    return False
 
 
 def _group_partition_match(
@@ -3299,6 +3516,29 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
             # guaranteed symmetric around zero for diverging data (nor
             # consistently shared across facets) -- a real domain-
             # computation gap, not benefit-of-the-doubt territory.
+            #
+            # Codex round-11 finding: that's too broad -- for a SEQUENTIAL
+            # (non-diverging) SINGLE column with genuinely varying data,
+            # great_tables' auto-inferred domain IS exactly `[min, max]`
+            # of that column's own real values: legitimately full-range
+            # and data-driven, with no cross-column facet-consistency
+            # concern to fail at all (that concern is specifically about
+            # a domain meant to be SHARED/comparable across MULTIPLE
+            # columns colored together, which auto-inference doesn't
+            # guarantee -- it doesn't apply when there's only one column).
+            # A diverging shape still needs an explicit domain (auto-
+            # inference isn't guaranteed symmetric around zero), a
+            # multi-column literal call still needs one too (auto-
+            # inference isn't guaranteed consistent across columns), and
+            # a CONSTANT single column (`value_range[0] == value_range[1]`
+            # -- auto-inference would degenerate to a zero-width domain)
+            # still doesn't qualify either.
+            cols = _mechanics_columns(entry, cand)
+            if shape == "sequential" and len(cols) == 1:
+                value_range = _actual_value_range(cand, cols)
+                if value_range is not None and value_range[0] < value_range[1]:
+                    correct += 1
+                    continue
             notes.append(f"measure {i} ({entry.get('columns')}): literal data_color omits domain= (not guaranteed {shape}-correct)")
             continue
         # Split on the TOP-LEVEL comma only (via the shared paren-depth-aware
@@ -3692,6 +3932,7 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     if not cand_summary:
         return CheckResult(name, 4, 0, False, "ground truth has a grand-summary row but candidate has none")
     fmt_map = cand["tier1"].get("fmt_column_map", {})
+    scale_map = cand["tier1"].get("fmt_percent_scale_values_map", {})
     # Required numeric columns come from the GROUND TRUTH's summary rows, not
     # the candidate's -- otherwise a candidate that replaces a required
     # numeric aggregate with text/empty (or omits it) makes the required set
@@ -3755,8 +3996,15 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
                 # aggregate (e.g. a monthly average) silently rounds away
                 # real fractional data -- only accept it when the actual
                 # summary value is genuinely a whole number.
+                #
+                # Codex round-11 finding: also validate a "percent"
+                # aggregate's `scale_values` against this single summary
+                # value's own scale -- see `_fmt_covers_semantic_type`'s
+                # docstring.
                 if _fmt_covers_semantic_type(
-                    semantic_type, effective_fmt, all_integral=_is_integral_value(cand_values.get(matched_col))
+                    semantic_type, effective_fmt, all_integral=_is_integral_value(cand_values.get(matched_col)),
+                    scale_shape=_value_scale_shape(cand_values.get(matched_col)),
+                    scale_values=scale_map.get(matched_col, scale_map.get(convergence._ALL_COLUMNS)),
                 ):
                     covered_pairs += 1
             else:
@@ -3809,7 +4057,14 @@ def _column_values_are_integral(tier2: dict, column: str) -> bool:
     return True
 
 
-def _fmt_covers_semantic_type(sem_type: str, effective_fmt: Any, *, all_integral: bool) -> bool:
+def _fmt_covers_semantic_type(
+    sem_type: str,
+    effective_fmt: Any,
+    *,
+    all_integral: bool,
+    scale_shape: str | None = None,
+    scale_values: str | None = None,
+) -> bool:
     """True if `effective_fmt` is an honest, accepted formatter for
     `sem_type`.
 
@@ -3822,11 +4077,35 @@ def _fmt_covers_semantic_type(sem_type: str, effective_fmt: Any, *, all_integral
     for a `"number"`-typed column when the actual matched value(s) are
     genuinely integral; every other accepted (formatter, semantic type)
     pairing is unaffected.
+
+    Codex round-11 finding: for `"percent"`, only the METHOD NAME
+    (`fmt_percent`) was ever checked -- but `fmt_percent`'s `scale_values`
+    kwarg controls whether great_tables multiplies the raw value by 100
+    before appending "%" (`scale_values=True`, its own default -- correct
+    for genuinely FRACTIONAL data, e.g. `0.05` meaning 5%) or renders it
+    AS-IS (`scale_values=False` -- correct only when the value ALREADY IS
+    the percentage number, e.g. `5` meaning 5%). Getting this backwards
+    is a real, meaningful data-fidelity bug (values render 100x too small
+    or too large), not a cosmetic one. `scale_shape` (see `_scale_shape_
+    from_values`/`_values_scale_shape`/`_value_scale_shape`) classifies
+    the matched column/value's ACTUAL numeric shape; `scale_values` is
+    the resolved literal `scale_values=` text from `_fmt_percent_scale_
+    values_map` (`None` when omitted or unresolvable, which correctly
+    defaults to great_tables' own `True`). This only ever COSTS credit
+    when both signals are confidently known and they actively DISAGREE --
+    an ambiguous data shape or an unresolvable `scale_values` expression
+    keeps the benefit of the doubt, same as everywhere else in this file.
     """
     if effective_fmt not in _SEMANTIC_TO_FMT.get(sem_type, set()):
         return False
     if sem_type == "number" and effective_fmt == "fmt_integer" and not all_integral:
         return False
+    if sem_type == "percent" and effective_fmt == "fmt_percent":
+        effective_scale_values = scale_values if scale_values is not None else "True"
+        if scale_shape == "fractional" and effective_scale_values == "False":
+            return False
+        if scale_shape == "percentage_scale" and effective_scale_values == "True":
+            return False
     return True
 
 
@@ -3862,6 +4141,7 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # counts as a required-but-uncovered column, not an excused one.
     visible = _visible_columns(cand)
     fmt_map = cand["tier1"].get("fmt_column_map", {})
+    scale_map = cand["tier1"].get("fmt_percent_scale_values_map", {})
     ok_count = 0
     uncovered: list[str] = []
     for c, sem_type in semantic_types.items():
@@ -3871,7 +4151,9 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
             matched_col is not None
             and matched_col in visible
             and _fmt_covers_semantic_type(
-                sem_type, effective_fmt, all_integral=_column_values_are_integral(cand["tier2"], matched_col)
+                sem_type, effective_fmt, all_integral=_column_values_are_integral(cand["tier2"], matched_col),
+                scale_shape=_values_scale_shape(cand["tier2"], matched_col),
+                scale_values=scale_map.get(matched_col, scale_map.get(convergence._ALL_COLUMNS)),
             )
         ):
             ok_count += 1
@@ -4326,10 +4608,30 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
     7 dimensions together"), and its single combined result is stashed in
     ``meta["_judge_result"]`` before any check function runs, so every
     judge-backed check (see ``_judge_dimension_check``) reads from the same
-    call rather than each triggering its own. Candidate/ground-truth PNGs
-    are derived by the same convention this repo already uses elsewhere:
-    each `.py` has a checked-in or freshly-rendered `.png` twin alongside
-    it. If either PNG doesn't exist, or the model call itself fails,
+    call rather than each triggering its own.
+
+    The ground-truth PNG is derived by the convention this repo already
+    uses elsewhere: its `.py` has a checked-in `.png` twin alongside it,
+    same stem. The CANDIDATE PNG is NOT derived that way -- it's always
+    the harness's own mandated artifact filename, `table.png`, sitting
+    next to the candidate script, regardless of what the candidate script
+    itself happens to be named.
+
+    Codex round-11 finding: this used to derive `candidate_png` via
+    `candidate_path.with_suffix(".png")` -- the candidate SCRIPT's own
+    filename stem -- so a candidate invoked as `/tmp/submission.py` that
+    correctly writes `/tmp/table.png` (exactly as required) had the judge
+    looking for `/tmp/submission.png` instead: either degrading all 7
+    judge-backed checks to unavailable for a perfectly correct candidate,
+    or worse, silently judging a stale, unrelated PNG that happened to
+    already exist at that wrong path. `candidate_path.parent /
+    "table.png"` matches the actual mandated-artifact contract (see
+    `check_render_mechanics`/`_targets_table_png`, which already enforce
+    this same "must be named table.png" requirement mechanically)
+    instead of assuming a same-stem naming convention that was never
+    actually part of the contract for candidates.
+
+    If either PNG doesn't exist, or the model call itself fails,
     ``judge()`` degrades to its own "unavailable" result (see that
     function's docstring) -- this never raises and never blocks the
     deterministic checks from running.
@@ -4338,35 +4640,45 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
     truth = build_fingerprint(ground_truth_path)
     meta = load_ground_truth_metadata(ground_truth_path)
 
-    candidate_png = candidate_path.with_suffix(".png")
+    candidate_png = candidate_path.parent / "table.png"
     truth_png = ground_truth_path.with_suffix(".png")
+    # Codex round-5 finding: gate the judge call on the candidate's OWN
+    # Tier-2 execution having actually succeeded, as a HARD precondition --
+    # more fundamental than the mtime staleness check below. Whatever PNG
+    # happens to sit next to a candidate `.py` that fails to even EXECUTE
+    # cannot be trusted to reflect that source at all (it could be
+    # leftover from any prior, unrelated version), regardless of how
+    # recently it was written. This is checked BEFORE the mtime check on
+    # purpose: a fresh-looking PNG next to a currently-broken script is
+    # just as untrustworthy as a stale one.
+    #
+    # Codex round-11 finding: this whole execution/freshness gate was only
+    # ever applied to the CANDIDATE side -- but a ground truth's `.py` can
+    # ALSO change without its checked-in `.png` being regenerated (or, in
+    # principle, fail to execute), in which case the deterministic checks
+    # already reflect the UPDATED truth source while a stale/untrustworthy
+    # truth PNG would still get sent to the judge. Mirrors the identical
+    # two-step gate (execution first, then mtime staleness) on `truth`/
+    # `truth_png` too.
     if not cand["tier2"].get("ok"):
-        # Codex round-5 finding: gate the judge call on the candidate's OWN
-        # Tier-2 execution having actually succeeded, as a HARD
-        # precondition -- more fundamental than the mtime staleness check
-        # below. Whatever PNG happens to sit next to a candidate `.py`
-        # that fails to even EXECUTE cannot be trusted to reflect that
-        # source at all (it could be leftover from any prior, unrelated
-        # version), regardless of how recently it was written. This is
-        # checked BEFORE the mtime check on purpose: a fresh-looking PNG
-        # next to a currently-broken script is just as untrustworthy as a
-        # stale one.
-        reason = f"judge unavailable: candidate failed Tier-2 execution ({cand['tier2'].get('error')}); its PNG (if any) can't be trusted to reflect this source"
-        meta["_judge_result"] = {
-            key: judge_module.JudgeDimension(applicable=False, score=None, rationale=reason)
-            for key in judge_module.DIMENSION_KEYS
-        }
+        judge_unavailable_reason = f"judge unavailable: candidate failed Tier-2 execution ({cand['tier2'].get('error')}); its PNG (if any) can't be trusted to reflect this source"
+    elif not truth["tier2"].get("ok"):
+        judge_unavailable_reason = f"judge unavailable: ground truth failed Tier-2 execution ({truth['tier2'].get('error')}); its PNG (if any) can't be trusted to reflect this source"
     elif _judge_png_is_stale(candidate_png, candidate_path):
         # Codex round-4 finding: see `_judge_png_is_stale`'s docstring --
         # degrade exactly like `judge()`'s own documented "unavailable"
         # contract (all 7 keys, applicable=False, rationale prefixed with
         # the literal "judge unavailable: " string) rather than scoring a
-        # PNG that predates the source it's supposed to represent. This is
-        # the SECONDARY signal, for the case where execution succeeds but
-        # an older PNG might still be sitting there from a prior run.
-        reason = f"judge unavailable: candidate PNG is older than its source .py ({candidate_png} predates {candidate_path})"
+        # PNG that predates the source it's supposed to represent.
+        judge_unavailable_reason = f"judge unavailable: candidate PNG is older than its source .py ({candidate_png} predates {candidate_path})"
+    elif _judge_png_is_stale(truth_png, ground_truth_path):
+        judge_unavailable_reason = f"judge unavailable: ground-truth PNG is older than its source .py ({truth_png} predates {ground_truth_path})"
+    else:
+        judge_unavailable_reason = None
+
+    if judge_unavailable_reason is not None:
         meta["_judge_result"] = {
-            key: judge_module.JudgeDimension(applicable=False, score=None, rationale=reason)
+            key: judge_module.JudgeDimension(applicable=False, score=None, rationale=judge_unavailable_reason)
             for key in judge_module.DIMENSION_KEYS
         }
     else:
