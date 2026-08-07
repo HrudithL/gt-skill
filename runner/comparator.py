@@ -31,6 +31,7 @@ from __future__ import annotations
 import ast
 import math
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -129,9 +130,33 @@ _ALLOWED_TINT_HEXES = {h.upper() for hexes in _EXTENDED_FAMILY_HEXES.values() fo
 
 # A whole-string literal (optionally string-prefixed, `b`/`r`/`u`/`f` in any
 # combination/case) -- single or triple quoted. Ported from the closed
-# branch unchanged; used only to tell "a literal path string" from "a
-# variable/expression" when checking a render call's target path.
-_STRING_LITERAL_RE = re.compile(r"^[bBrRuUfF]{0,2}('''|\"\"\"|'|\")(.*)\1$", re.S)
+# branch, with an added capturing group around the prefix (see
+# `_is_static_string_literal` just below) so an `f`-prefixed string can be
+# told apart from a plain one; used only to tell "a literal path string"
+# from "a variable/expression" when checking a render call's target path.
+_STRING_LITERAL_RE = re.compile(r"^([bBrRuUfF]{0,2})('''|\"\"\"|'|\")(.*)\2$", re.S)
+
+
+def _is_static_string_literal(value_text: str) -> bool:
+    """True if `value_text` is a plain string literal whose rendered text is
+    STATICALLY known -- i.e. NOT an f-string with a real `{...}` placeholder.
+
+    Codex round-1 finding: `_STRING_LITERAL_RE` alone accepts an f-string
+    like `f"{stem}.png"` as "a string literal" (the `f` prefix is in its
+    allowed prefix set), so `_blocks_target_table_png` below classified a
+    genuinely dynamic, interpolated path as a resolved literal and then
+    correctly rejected it as not equal to `"table.png"` -- denying the
+    benefit of the doubt this function's OWN docstring says a non-literal
+    path should get. A bare `f"table.png"` with no `{}` at all (a harmless,
+    no-op `f`-prefix) is still statically resolvable and stays literal.
+    """
+    m = _STRING_LITERAL_RE.match(value_text.strip())
+    if not m:
+        return False
+    prefix, _quote, body = m.group(1), m.group(2), m.group(3)
+    if "f" in prefix.lower() and re.search(r"(?<!\{)\{(?!\{)", body):
+        return False
+    return True
 
 
 def _is_effectively_transparent(color: str) -> bool:
@@ -234,7 +259,7 @@ def _blocks_target_table_png(blocks: list[str], path_kwarg: str, path_index: int
             path_val = positionals[path_index] if len(positionals) > path_index else None
         if path_val is None:
             continue
-        if not _STRING_LITERAL_RE.match(path_val.strip()):
+        if not _is_static_string_literal(path_val.strip()):
             return True  # non-literal -- can't prove it's the wrong target
         if convergence._targets_table_png(path_val):
             return True
@@ -250,6 +275,46 @@ def _render_call_present(source: str) -> bool:
     if _blocks_target_table_png(convergence._call_arg_blocks(source, "gtsave"), "file", 0):
         return True
     return _blocks_target_table_png(convergence._bare_call_blocks(source, "finalize"), "path", 1)
+
+
+def _tab_header_kwarg_present(source: str, kwarg: str) -> bool:
+    """True if the LAST `tab_header(...)` call in `source` sets `kwarg`
+    (`"title"` or `"subtitle"`) -- via either the keyword form or the
+    documented positional form (`tab_header("Title", "Subtitle")`, where
+    title is positional arg 0 and subtitle is arg 1).
+
+    Codex round-1 finding: `convergence.parse_design_choices`'s own
+    `title_present`/`caption_present` fields (the latter is convergence.py's
+    name for "subtitle is present") have two bugs: (a) they only ever
+    recognize the `title=`/`subtitle=` keyword form via a bare regex search,
+    so a positional `tab_header("Title", "Subtitle")` call reads as
+    completely absent; and (b) they `any()` across EVERY `tab_header(...)`
+    call in the source, rather than using only the LAST one -- but
+    great_tables REPLACES the whole header per call rather than merging
+    fields across calls, so an earlier call's subtitle can wrongly "count"
+    even after a later call replaces the header without one (or vice
+    versa). `convergence._tab_header_text` (used elsewhere in this file for
+    `title_text`/`subtitle_text`) already gets both of these right for TEXT
+    EXTRACTION, but returns `None` for a genuinely present-but-DYNAMIC value
+    (a variable, an unresolved f-string) -- which must still count as
+    "present" for THIS existence check, so this checks for the argument's
+    presence (keyword or positional slot occupied), not its resolved text,
+    reusing `convergence._TAB_HEADER_POSITIONAL_INDEX` (still present) for
+    the positional-slot mapping.
+    """
+    blocks = convergence._call_arg_blocks(source, "tab_header")
+    if not blocks:
+        return False
+    block = blocks[-1]
+    if convergence._kwarg_value(block, kwarg) is not None:
+        return True
+    idx = convergence._TAB_HEADER_POSITIONAL_INDEX.get(kwarg)
+    if idx is None:
+        return False
+    positionals = [
+        p for p in convergence._split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+    ]
+    return idx < len(positionals)
 
 
 # convergence.py's own `_DATA_COLOR_DEFAULTS` covers na_color/truncate/
@@ -281,6 +346,100 @@ def _kwarg_or_default_positional(block: str, name: str, positionals: list[str], 
     return v
 
 
+def _strip_docstrings(source: str) -> str:
+    """Blank out every module/class/function DOCSTRING's text in `source`
+    (replacing every non-newline character in its span with a space, so
+    every other character's line/column position is preserved exactly --
+    nothing downstream that relies on relative source order shifts).
+
+    Codex round-1 finding: `convergence._strip_line_comments` (already
+    applied below) only strips `#`-comments, not string content -- a
+    docstring that mentions a literal `.data_color(...)`/`heatmap(...)`
+    example (e.g. explaining a pattern, or what NOT to do) was scanned as a
+    REAL call by the regex-based extraction below, corrupting the colored-
+    measure count and every check that depends on it (palette, domain,
+    striping, hue-collision, band-harmonization). This repo's own checked-in
+    `sp500_monthly_performance.py` ground truth avoids literally spelling
+    `.data_color(` in its docstring specifically to dodge this bug -- a
+    workaround for it, not a fix.
+
+    Uses the AST (not a regex) to find genuine docstring nodes precisely:
+    only the first statement of a module/class/function body, when it's a
+    bare string-literal expression -- Python's own definition of a
+    docstring. An ordinary string ARGUMENT (e.g. a triple-quoted title=
+    value) is never in that position, so it's never touched, only real
+    docstrings are. Falls back to returning `source` unchanged if it isn't
+    parseable (e.g. a broken candidate) -- the regex-based extraction below
+    already tolerates that source verbatim, same as before this fix.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return source
+    doc_nodes: list[ast.Constant] = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            body = getattr(node, "body", None) or []
+            if body and isinstance(body[0], ast.Expr):
+                val = body[0].value
+                if isinstance(val, ast.Constant) and isinstance(val.value, str):
+                    doc_nodes.append(val)
+    if not doc_nodes:
+        return source
+    line_starts = [0]
+    for line in source.splitlines(keepends=True):
+        line_starts.append(line_starts[-1] + len(line))
+
+    def _offset(lineno: int, col: int) -> int:
+        return line_starts[lineno - 1] + col
+
+    chars = list(source)
+    for node in doc_nodes:
+        if node.end_lineno is None or node.end_col_offset is None:
+            continue
+        start = _offset(node.lineno, node.col_offset)
+        end = _offset(node.end_lineno, node.end_col_offset)
+        for i in range(start, min(end, len(chars))):
+            if chars[i] != "\n":
+                chars[i] = " "
+    return "".join(chars)
+
+
+def _palette_of_block_positional(block: str, positionals: list[str]) -> str:
+    """Like `convergence._palette_of_block(block)`, but ALSO falls back to
+    positional slot 2 (`data_color(columns, rows, palette, domain, ...)`)
+    when no `palette=` keyword is present.
+
+    Codex round-1 finding: `convergence._palette_of_block` only recognizes
+    the keyword form, so a valid positional call like `data_color(cols,
+    None, "RdYlGn", domain)` reads as `"default"` -- which can make the
+    sequential/diverging shape check treat a genuinely diverging palette as
+    unknown (benefit-of-the-doubt, silently passing a real mismatch), and
+    can collapse two DIFFERENT positionally-specified palettes sharing a
+    domain into what looks like the same `(palette, domain)` measure for
+    the ≤2-ceiling count. Mirrors the positional handling every other
+    argument in `_enrich_color_mechanics` already gets.
+    """
+    literal = convergence._palette_of_block(block)
+    if literal != "default":
+        return literal
+    if convergence._kwarg_value(block, "palette") is not None:
+        # An explicit `palette=<list literal>` -- convergence.py's own
+        # "custom" classification for a list, not a missing arg -- must
+        # not be overridden by falling through to the positional slot.
+        return literal
+    if len(positionals) > 2:
+        pos_val = positionals[2].strip()
+        if pos_val and pos_val != "None":
+            m = re.match(r"^\[[^\]]*\]$", pos_val)
+            if m:
+                return "custom"
+            unquoted = convergence._unquote(pos_val)
+            if unquoted and unquoted != pos_val:  # was actually quoted
+                return unquoted
+    return literal
+
+
 def _enrich_color_mechanics(source: str) -> list[dict]:
     """One dict per colored-measure call (`data_color`/`heatmap`), in TRUE
     source order, carrying `columns`/`na_color`/`truncate`/`autocolor_text`
@@ -306,6 +465,7 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
     only convergence.py's still-present, already-exposed low-level parsing
     primitives -- no change to convergence.py itself.
     """
+    source = _strip_docstrings(source)
     source = convergence._strip_line_comments(source)
     var_map = convergence._list_var_map(source)
     entries: list[tuple[int, dict]] = []
@@ -333,7 +493,7 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
             domain_val = positionals[3]
         entries.append((pos, {
             "columns": resolved_columns,
-            "palette": convergence._palette_of_block(block),
+            "palette": _palette_of_block_positional(block, positionals),
             "domain": domain_val,
             # data_color(columns, rows, palette, domain, na_color, alpha,
             # reverse, autocolor_text, truncate) -- positional slots 4/6/7/8.
@@ -364,9 +524,10 @@ def build_fingerprint(py_path: Path) -> dict:
     truth — both are built identically, per the spec's "computed the same
     way" instruction).
 
-    Overrides/adds four Tier-1 fields (`color_mechanics`, `stub_tint_present`,
-    `render_call_present`, `heading_band_hue`) via the compatibility shim
-    just above, immediately after `convergence.parse_design_choices()` runs.
+    Overrides/adds Tier-1 fields (`color_mechanics`, `stub_tint_present`,
+    `render_call_present`, `heading_band_hue` when a hex exists,
+    `title_present`, `caption_present`) via the compatibility shim just
+    above, immediately after `convergence.parse_design_choices()` runs.
     Why: the 23 unchanged checks vendored from the closed `gtc/comparator`
     branch (see this module's docstring) were written and 14-round
     Codex-reviewed against THAT branch's own `runner/convergence.py`, which
@@ -378,16 +539,37 @@ def build_fingerprint(py_path: Path) -> dict:
     comparison silently mis-scored `check_colored_measure_selection`/
     `check_hue_collision`/`check_domain_computation`/`check_stub_tint`/
     `check_render_mechanics`/`check_band_hue_harmonization` without this
-    shim). Modifying `runner/convergence.py` itself is a hard non-goal for
-    this slice, so the shim lives entirely here instead, built only from
-    primitives convergence.py already exposes.
+    shim). `title_present`/`caption_present` were separately found (Codex
+    round-1) to have their own, unrelated bugs (keyword-only, all-calls-not-
+    last-call) even though they aren't part of the vendoring-skew story --
+    fixed here for the same "keep the compatibility shim" reason: `runner/
+    convergence.py` is a hard non-goal for this slice either way, so the
+    fix lives here instead, built only from primitives convergence.py
+    already exposes.
     """
     source = py_path.read_text()
     tier1 = convergence.parse_design_choices(source)
     tier1["color_mechanics"] = _enrich_color_mechanics(source)
     tier1["stub_tint_present"] = _stub_tint_present(source)
     tier1["render_call_present"] = _render_call_present(source)
-    tier1["heading_band_hue"] = _classify_hue_extended(tier1.get("heading_band_hex"))
+    # Codex round-1 finding: convergence.py's own `title_present`/
+    # `caption_present` (subtitle) only recognize the keyword form and
+    # `any()` across every `tab_header(...)` call instead of just the last
+    # one -- see `_tab_header_kwarg_present`'s docstring.
+    tier1["title_present"] = _tab_header_kwarg_present(source, "title")
+    tier1["caption_present"] = _tab_header_kwarg_present(source, "subtitle")
+    # Codex round-1 finding: only reclassify when an explicit band HEX
+    # exists. `convergence.parse_design_choices` also derives
+    # `heading_band_hue` from the runtime `band(gt, shade=..., hue=...)`
+    # HELPER when no literal hex is present (`heading_band_hex` is `None`
+    # in that case) -- that helper-derived hue is already correct (parsed
+    # directly from the helper's own `hue=` argument, not classified from a
+    # color), and unconditionally re-deriving it from a `None` hex here
+    # collapsed it to `"unknown"`, wrongly costing a helper-based candidate
+    # its hue-harmonization points. Only override when there's an actual
+    # hex to reclassify against the extended table.
+    if tier1.get("heading_band_hex"):
+        tier1["heading_band_hue"] = _classify_hue_extended(tier1["heading_band_hex"])
     tier2 = execution_tier.exec_table(py_path)
     return {"tier1": tier1, "tier2": tier2, "source": source, "path": py_path}
 
@@ -810,6 +992,122 @@ def check_sequential_vs_diverging(cand: dict, truth: dict, meta: dict) -> CheckR
     return CheckResult(name, 5, pts, correct == total, detail)
 
 
+# `_MATCH_THRESHOLD` still exists on `execution_tier` (reused directly
+# below); `_MIN_COVERAGE` does not -- it's local to the closed branch's own
+# `group_partition_match`, ported here alongside it.
+_MIN_COVERAGE = 0.5
+
+
+def _group_row_multisets(row_ids: list, group_ids: list) -> dict[Any, Counter]:
+    """``{group_id -> Counter[normalized_row_id]}`` -- each group's row-id
+    CONTENT, as a multiset (a repeated row id, e.g. "January" appearing
+    once per year in a year-grouped table, counts each occurrence rather
+    than collapsing to one). Ported verbatim from the closed
+    `gtc/comparator` branch's `runner/execution_tier.py` (see
+    `_group_partition_match`'s docstring for why this lives here).
+    """
+    out: dict[Any, Counter] = {}
+    for rid, gid in zip(row_ids, group_ids):
+        out.setdefault(gid, Counter())[execution_tier.normalize_id(rid)] += 1
+    return out
+
+
+def _group_overlap(a: Counter, b: Counter) -> int:
+    """Multiset-intersection size between two row-id counters. Ported
+    verbatim from the closed branch."""
+    return sum(min(n, b.get(rid, 0)) for rid, n in a.items())
+
+
+def _group_partition_match(
+    candidate_row_ids: list | None,
+    candidate_group_ids: list | None,
+    truth_row_ids: list | None,
+    truth_group_ids: list | None,
+) -> dict:
+    """Whether the candidate groups rows into the SAME partition as the
+    ground truth, by VALUE (row co-membership) -- not by group label text.
+
+    Returns ``{"comparable": bool, "match": bool, "shared_rows": int}``.
+    ``comparable=False`` when either side has no grouping at all, or there
+    are zero rows shared by identity between the two sides.
+
+    Codex round-1 finding: `check_explicit_instructions`'s `"grouping"`
+    branch below calls `execution_tier.group_partition_match(...)`, which
+    does not exist in the version of `runner/execution_tier.py` merged to
+    `gtc/root` (only in the closed branch's own, differently-scoped
+    version) -- so any ground truth that ever sets
+    `REQUIRED_INSTRUCTIONS["grouping"]` to a truthy value raised
+    `AttributeError` and crashed `compare()` entirely instead of degrading.
+    `runner/execution_tier.py` is a hard non-goal for this slice (same as
+    `runner/convergence.py`), so this is a straight, self-contained port of
+    the closed branch's own `group_partition_match` -- verified via `git
+    show gtc/comparator:runner/execution_tier.py` -- built only from
+    `execution_tier.normalize_id`/`execution_tier._MATCH_THRESHOLD` (both
+    still present) plus the two small helpers just above.
+
+    This is how an explicit "grouped by <concept>" prompt instruction is
+    verified: not by checking the candidate's group column LABEL (a
+    candidate could call it anything), but by checking that whichever rows
+    the ground truth places together in one group, the candidate ALSO
+    places together in one group (and vice versa) -- matching by VALUE,
+    the same principle used everywhere else in this module. Tolerates
+    disagreement on a handful of rows (`execution_tier._MATCH_THRESHOLD`)
+    rather than requiring every shared row to agree perfectly.
+    """
+    if not candidate_group_ids or not truth_group_ids:
+        return {"comparable": False, "match": False, "shared_rows": 0}
+    cand_groups = _group_row_multisets(candidate_row_ids or [], candidate_group_ids)
+    truth_groups = _group_row_multisets(truth_row_ids or [], truth_group_ids)
+    if not cand_groups or not truth_groups:
+        return {"comparable": False, "match": False, "shared_rows": 0}
+    all_cand: Counter = Counter()
+    for c in cand_groups.values():
+        all_cand.update(c)
+    all_truth: Counter = Counter()
+    for c in truth_groups.values():
+        all_truth.update(c)
+    shared_rows = _group_overlap(all_cand, all_truth)
+    if not shared_rows:
+        return {"comparable": False, "match": False, "shared_rows": 0}
+    # A coverage floor: without it, a candidate retaining just ONE row per
+    # truth group (each assigned its own distinct, arbitrary label) makes
+    # every designation trivially one-to-one, reporting a "match" despite
+    # providing no real evidence of correct WITHIN-group co-membership.
+    total_truth_rows = len(truth_row_ids or [])
+    if total_truth_rows and shared_rows / total_truth_rows < _MIN_COVERAGE:
+        return {"comparable": False, "match": False, "shared_rows": shared_rows}
+    # For each TRUTH group, whichever candidate group its row CONTENT
+    # overlaps with most decides that truth group's designated counterpart.
+    # An exact-text id match (e.g. both sides literally use "2015" as the
+    # group label) is used directly rather than voting by content, which
+    # can be genuinely ambiguous (e.g. every year-group shares the same 12
+    # month labels). Sorted iteration on both axes keeps a tied maximum
+    # deterministic.
+    cand_by_normalized_id = {execution_tier.normalize_id(cg): cg for cg in cand_groups}
+    designated: dict[Any, tuple[Any, int]] = {}
+    for tg in sorted(truth_groups, key=str):
+        truth_rows = truth_groups[tg]
+        exact_cg = cand_by_normalized_id.get(execution_tier.normalize_id(tg))
+        if exact_cg is not None:
+            designated[tg] = (exact_cg, _group_overlap(truth_rows, cand_groups[exact_cg]))
+            continue
+        best_cg, best_overlap = None, 0
+        for cg in sorted(cand_groups, key=str):
+            overlap = _group_overlap(truth_rows, cand_groups[cg])
+            if overlap > best_overlap:
+                best_cg, best_overlap = cg, overlap
+        if best_cg is not None:
+            designated[tg] = (best_cg, best_overlap)
+    # A valid partition match additionally requires the mapping to be
+    # one-to-one -- two DIFFERENT truth groups must not designate the SAME
+    # candidate group (that would mean the candidate merged two real groups
+    # into one).
+    one_to_one = len({cg for cg, _ in designated.values()}) == len(designated)
+    agree = sum(overlap for _cg, overlap in designated.values())
+    match = one_to_one and agree / shared_rows >= execution_tier._MATCH_THRESHOLD
+    return {"comparable": True, "match": match, "shared_rows": shared_rows}
+
+
 def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Explicit prompt-instruction compliance"
     required = meta["REQUIRED_INSTRUCTIONS"]
@@ -835,7 +1133,7 @@ def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckRes
                 # not merely grouped by something) -- not by comparing
                 # group-label text, which a candidate could phrase however
                 # it likes or apply to an unrelated column.
-                result = execution_tier.group_partition_match(
+                result = _group_partition_match(
                     cand["tier2"].get("row_ids"), cand["tier2"].get("row_group_ids"),
                     truth["tier2"].get("row_ids"), truth["tier2"].get("row_group_ids"),
                 )
@@ -1221,7 +1519,16 @@ def check_striping_gate(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Striping gate correctness"
     n = _n_rows(cand)
     if n is None:
-        return _na(name, "candidate failed to execute; row count unknown")
+        # Codex round-1 finding: `_n_rows()` returns `None` exactly when
+        # the candidate's Tier-2 execution failed (see its own
+        # docstring/impl) -- there's no OTHER way to reach this branch, so
+        # this is never a genuine "not applicable" case. Treating it as
+        # N/A (0/0, excluded from the denominator) let a candidate that
+        # crashes outright dodge this 5-point penalty entirely, sometimes
+        # scoring a HIGHER percentage than one that runs but stripes
+        # incorrectly. A hard, graded 0/5 failure reserves N/A for
+        # genuine inapplicability elsewhere in this file.
+        return CheckResult(name, 5, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
     t1 = cand["tier1"]
     mechanics = t1.get("color_mechanics", [])
     # Structural columns (the stub, the group column) can never be colored
@@ -1374,30 +1681,52 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     if not cand_summary:
         return CheckResult(name, 4, 0, False, "ground truth has a grand-summary row but candidate has none")
     fmt_map = cand["tier1"].get("fmt_column_map", {})
-    # Required numeric columns come from the GROUND TRUTH's summary row, not
+    # Required numeric columns come from the GROUND TRUTH's summary rows, not
     # the candidate's -- otherwise a candidate that replaces a required
-    # numeric aggregate with text/empty (or omits it) makes `numeric_cols`
+    # numeric aggregate with text/empty (or omits it) makes the required set
     # come back empty from ITS OWN data, scoring this 4-point check N/A
     # (no penalty) for the very removal it's meant to catch, while the
     # separate existence/correctness check only costs 1 point for the same
     # thing.
-    numeric_cols = [
-        k for k, v in truth_summary[0].get("values", {}).items()
-        if isinstance(v, (int, float))
-    ]
-    if not numeric_cols:
-        return _na(name, "grand-summary row has no numeric values to check")
-    cand_values = cand_summary[0].get("values", {})
-    covered = [
-        c for c in numeric_cols
-        if isinstance(cand_values.get(c), (int, float)) and fmt_map.get(c, fmt_map.get(convergence._ALL_COLUMNS))
-    ]
-    pts = _round_points(len(covered) / len(numeric_cols), 4)
+    #
+    # Codex round-1 finding: this previously only looked at `truth_summary[0]`
+    # -- a ground truth with MULTIPLE grand-summary rows (e.g. per-group
+    # subtotals) whose LATER row introduces a numeric aggregate the first
+    # row doesn't have silently dropped that column from the requirement, so
+    # a candidate could leave it raw/unformatted and still score full
+    # credit. Now iterates every truth summary row, same label-matching
+    # (falling back to position) `check_summary_row_existence` already uses,
+    # accumulating per (row, column) pairs rather than per distinct column
+    # name -- a column present in multiple rows must be checked in EACH row
+    # it's expected in, not just once overall.
+    cand_by_label = {r.get("label"): r for r in cand_summary}
+    required_pairs = 0
+    covered_pairs = 0
+    distinct_cols: set[str] = set()
+    for i, truth_row in enumerate(truth_summary):
+        row_numeric_cols = [
+            k for k, v in truth_row.get("values", {}).items() if isinstance(v, (int, float))
+        ]
+        if not row_numeric_cols:
+            continue
+        cand_row = cand_by_label.get(truth_row.get("label"))
+        if cand_row is None:
+            cand_row = cand_summary[i] if i < len(cand_summary) else None
+        cand_values = cand_row.get("values", {}) if cand_row is not None else {}
+        for c in row_numeric_cols:
+            distinct_cols.add(c)
+            required_pairs += 1
+            if isinstance(cand_values.get(c), (int, float)) and fmt_map.get(c, fmt_map.get(convergence._ALL_COLUMNS)):
+                covered_pairs += 1
+    if required_pairs == 0:
+        return _na(name, "grand-summary row(s) have no numeric values to check")
+    pts = _round_points(covered_pairs / required_pairs, 4)
     detail = (
-        f"{len(covered)}/{len(numeric_cols)} numeric summary columns are covered by a fmt_* call "
-        "(great_tables does not auto-apply body formatting to grand_summary_rows -- Defect C)"
+        f"{covered_pairs}/{required_pairs} numeric summary-row/column pairs across "
+        f"{len(truth_summary)} ground-truth summary row(s) ({sorted(distinct_cols)}) are covered by a "
+        "fmt_* call (great_tables does not auto-apply body formatting to grand_summary_rows -- Defect C)"
     )
-    return CheckResult(name, 4, pts, len(covered) == len(numeric_cols), detail)
+    return CheckResult(name, 4, pts, covered_pairs == required_pairs, detail)
 
 
 _SEMANTIC_TO_FMT = {
@@ -1452,10 +1781,18 @@ def check_title_subtitle_caption_source(cand: dict, truth: dict, meta: dict) -> 
     # benefit-of-the-doubt treatment as title_text/subtitle_text above: the
     # call is genuinely present, just not statically readable, so it must
     # not read as "missing" the way an explicit empty-string literal would.
+    # Codex round-1 finding: the code below previously contradicted this
+    # comment -- it required `notes[i] is not None`, docking the point from
+    # a candidate whose caption/source-note call genuinely exists but is a
+    # dynamic expression. `source_note_texts`'s own contract (see
+    # `convergence._source_note_texts`'s docstring) is ONE list entry per
+    # call, always -- so the SLOT existing (`len(notes) >= N`) is what
+    # establishes "the call is present," independent of whether its text
+    # happened to resolve statically.
     notes = cand["tier1"].get("source_note_texts") or []
-    caption_present = len(notes) >= 1 and notes[0] is not None
+    caption_present = len(notes) >= 1
     source_expected = bool(truth["tier1"].get("source_note_texts")) and len(truth["tier1"]["source_note_texts"]) >= 2
-    source_present = len(notes) >= 2 and notes[1] is not None
+    source_present = len(notes) >= 2
     # "present if expected" for both -- neither ever REQUIRES absence when
     # optional (fewer than 5 rows): a compliant short table that
     # voluntarily includes a caption anyway must not lose this point, the
