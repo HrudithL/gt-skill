@@ -213,11 +213,18 @@ def _normalize_css_color(value: str | None) -> str | None:
     package (one was considered and explicitly declined -- a short named-
     color table plus a simple `rgb()`/`rgba()` regex parser covers what
     this repo's own conventions plausibly produce): hex (`#rgb`/
-    `#rrggbb`/`#rrggbbaa`, alpha ignored -- na_color has no separate
-    opacity concept here), `rgb(...)`/`rgba(...)` functional notation, and
+    `#rrggbb`/`#rrggbbaa`), `rgb(...)`/`rgba(...)` functional notation, and
     a tiny named-color table for the specific keyword spellings
     (`gray`/`grey`) most likely to appear for the required neutral
     `#808080`.
+
+    Codex round-4 finding: an `#RRGGBBAA`/`rgba(...)` alpha channel was
+    previously DISCARDED entirely, so a fully (or partially) transparent
+    `na_color="#80808000"` normalized to opaque `"#808080"` and wrongly
+    matched the required color despite rendering invisible, not gray. A
+    non-opaque alpha now makes normalization return `None` (doesn't match
+    ANY expected color) rather than silently rounding it up to fully
+    opaque.
     """
     if value is None:
         return None
@@ -232,11 +239,20 @@ def _normalize_css_color(value: str | None) -> str | None:
     m = re.fullmatch(r"#([0-9A-Fa-f]{6})", v)
     if m:
         return "#" + m.group(1).upper()
-    m = re.fullmatch(r"#([0-9A-Fa-f]{8})", v)  # RRGGBBAA -- alpha ignored
+    m = re.fullmatch(r"#([0-9A-Fa-f]{8})", v)  # RRGGBBAA
     if m:
+        if m.group(1)[6:8].upper() != "FF":  # non-opaque alpha -- don't trust as a solid color
+            return None
         return "#" + m.group(1)[:6].upper()
-    m = re.fullmatch(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)", v, re.I)
+    m = re.fullmatch(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)", v, re.I)
     if m:
+        alpha_text = m.group(4)
+        if alpha_text is not None:
+            try:
+                if float(alpha_text) < 1.0:  # non-opaque -- don't trust as a solid color
+                    return None
+            except ValueError:
+                return None
         try:
             r, g, b = (int(m.group(i)) for i in (1, 2, 3))
         except ValueError:
@@ -492,6 +508,36 @@ def _dividers_present(source: str) -> bool:
             continue
         return True
     return _has_visible_tab_style_border(source, "left|right")
+
+
+def _striping_present(source: str) -> bool:
+    """Like `convergence._striping_present`-equivalent bare token search
+    (inlined in `parse_design_choices`), but ALSO validates that
+    `row_striping_background_color=` (when set) is genuinely visible --
+    convergence.py's own regex is a bare `option=` NAME search that never
+    even reads the value at all, so `row_striping_background_color=
+    "transparent"` satisfied it despite rendering no visible stripe.
+
+    Found during the round-4 proactive sweep for this exact "presence
+    without visibility" pattern (not flagged directly by Codex, but the
+    same class of bug as `frame_present`/`hairlines_present`/
+    `dividers_present`). `opt_row_striping(row_striping: bool = True)`
+    (verified against the installed `great_tables` signature) has no
+    color parameter at all -- calling it always means "stripe with
+    great_tables' own default, visible color" -- so that signal and the
+    `stripe(...)`/`row_striping_include_table_body=True` signals are kept
+    as unconditional presence checks, unchanged.
+    """
+    if re.search(r"opt_row_striping\s*\(", source):
+        return True
+    if re.search(r"row_striping_include_table_body\s*=\s*True", source):
+        return True
+    if convergence._bare_call_blocks(source, "stripe"):
+        return True
+    m = re.search(r"row_striping_background_color\s*=\s*['\"]([^'\"]+)['\"]", source)
+    if m and not _is_effectively_transparent(m.group(1).strip()):
+        return True
+    return False
 
 
 def _render_call_present(source: str) -> bool:
@@ -853,9 +899,19 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
         domain_val = convergence._kwarg_value(block, "domain")
         if domain_val is None and len(positionals) > 3:
             domain_val = positionals[3]
+        palette_val = convergence._kwarg_value(block, "palette")
+        if palette_val is None and len(positionals) > 2:
+            palette_val = positionals[2]
         entries.append((pos, {
             "columns": resolved_columns,
             "palette": _palette_of_block_positional(block, positionals),
+            # Raw, UNCLASSIFIED palette source text (e.g. a literal hex-
+            # list `["#112233", "#445566"]`, not just the generic "custom"
+            # bucket `palette` collapses it to) -- used by check_hue_
+            # collision to tell two DIFFERENT custom gradients apart
+            # instead of treating any two "custom" palettes as an
+            # automatic collision (Codex round-4 finding).
+            "palette_raw": palette_val.strip() if palette_val else None,
             "domain": domain_val,
             # data_color(columns, rows, palette, domain, na_color, alpha,
             # reverse, autocolor_text, truncate) -- positional slots 4/6/7/8.
@@ -871,9 +927,11 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
             resolved_heatmap_columns: list[str] | None = None
         else:
             resolved_heatmap_columns = convergence._resolve_columns_list(heatmap_cols_val, var_map)
+        hue_raw = convergence._kwarg_value(block, "hue")
         entries.append((pos, {
             "columns": resolved_heatmap_columns,
-            "palette": _quoted_string_literal_value(convergence._kwarg_value(block, "hue")) or "default",
+            "palette": _quoted_string_literal_value(hue_raw) or "default",
+            "palette_raw": hue_raw.strip() if hue_raw else None,
             "domain": convergence._kwarg_value(block, "domain"),
             "kind": _quoted_string_literal_value(convergence._kwarg_value(block, "kind")),
             "na_color": "#808080",
@@ -931,6 +989,11 @@ def build_fingerprint(py_path: Path) -> dict:
     # see `_hairlines_present`/`_dividers_present`'s docstrings.
     tier1["hairlines_present"] = _hairlines_present(source)
     tier1["dividers_present"] = _dividers_present(source)
+    # Round-4 proactive sweep finding (same class as the frame/hairlines/
+    # dividers fixes above, not flagged directly by Codex): convergence.py's
+    # own `striping_present` is a bare `option=` NAME search that never
+    # reads the value -- see `_striping_present`'s docstring.
+    tier1["striping_present"] = _striping_present(source)
     # Codex round-1 finding: convergence.py's own `title_present`/
     # `caption_present` (subtitle) only recognize the keyword form and
     # `any()` across every `tab_header(...)` call instead of just the last
@@ -1038,12 +1101,16 @@ def _mechanics_columns(entry: dict, fp: dict) -> list[str]:
     return sorted(visible)
 
 
-def _distinct_colored_measures(mechanics: list[dict], fp: dict) -> list[tuple]:
-    """Deduplicated `(palette, domain, columns)` keys for `mechanics` --
-    the same conceptual measure applied via multiple calls that share a
-    palette, domain, AND target the same columns collapses to one entry;
-    a DIFFERENT set of target columns means a genuinely different measure
-    even when its palette and domain happen to coincide.
+def _distinct_colored_measures(mechanics: list[dict], fp: dict) -> list[dict]:
+    """One REPRESENTATIVE ENTRY per distinct `(palette, domain, columns)`
+    key in `mechanics` -- the same conceptual measure applied via multiple
+    calls that share a palette, domain, AND target the same columns
+    collapses to one entry; a DIFFERENT set of target columns means a
+    genuinely different measure even when its palette and domain happen
+    to coincide. Returns full entry dicts (not just the key tuple) so
+    callers that need more than palette/domain/columns -- e.g. `palette_
+    raw`, for telling two different custom hex-list palettes apart -- can
+    still get at it.
 
     Codex round-3 finding: every caller of this dedup previously keyed
     purely on `(palette, domain)`, which collapsed 3 GENUINELY DIFFERENT
@@ -1059,11 +1126,14 @@ def _distinct_colored_measures(mechanics: list[dict], fp: dict) -> list[tuple]:
     trusting Python's hash-randomized set order for this same kind of
     dedup).
     """
-    keys = {
-        (m.get("palette"), m.get("domain"), tuple(_mechanics_columns(m, fp)))
-        for m in mechanics
-    }
-    return sorted(keys, key=lambda k: (k[0] or "", k[1] or "", k[2]))
+    seen: dict[tuple, dict] = {}
+    for m in mechanics:
+        key = (m.get("palette"), m.get("domain"), tuple(_mechanics_columns(m, fp)))
+        seen.setdefault(key, m)
+    return sorted(
+        seen.values(),
+        key=lambda m: ((m.get("palette") or ""), (m.get("domain") or ""), tuple(_mechanics_columns(m, fp))),
+    )
 
 
 def _n_rows(fp: dict) -> int | None:
@@ -1256,10 +1326,23 @@ def check_row_selection_identity(cand: dict, truth: dict, meta: dict) -> CheckRe
         return _na(name, "ground truth has no stub column; row identity not verifiable")
     if cand_ids is None:
         return CheckResult(name, 10, 0, False, "candidate has no stub column; row selection unverifiable")
+    cand_group_ids = cand["tier2"].get("row_group_ids")
+    truth_group_ids = truth["tier2"].get("row_group_ids")
+    # Codex round-4 finding: execution_tier.row_set_identity compares
+    # (group_id, row_id) tuples LITERALLY, so a candidate that groups the
+    # exact right rows the exact right way but spells its group labels
+    # differently than the ground truth (e.g. "FY2010"/"FY2011" instead of
+    # "2010"/"2011") lost row-identity credit purely from the label
+    # difference -- relabel the candidate's group ids to their value-
+    # matched truth counterpart first (see `_relabel_candidate_groups`).
+    if cand_group_ids and truth_group_ids:
+        relabeled = _relabel_candidate_groups(cand_ids, cand_group_ids, truth_ids, truth_group_ids)
+        if relabeled is not None:
+            cand_group_ids = relabeled
     result = execution_tier.row_set_identity(
         cand_ids, truth_ids,
-        candidate_group_ids=cand["tier2"].get("row_group_ids"),
-        truth_group_ids=truth["tier2"].get("row_group_ids"),
+        candidate_group_ids=cand_group_ids,
+        truth_group_ids=truth_group_ids,
     )
     if result["exact"]:
         return CheckResult(name, 10, 10, True, "candidate's row set exactly matches the ground truth's")
@@ -1351,7 +1434,14 @@ def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> Chec
         # that merely displays the canonical values uncolored (no
         # data_color/heatmap at all) would be credited with "covering" the
         # colored measure just for showing the right numbers.
-        colored_cols = {c for m in cand_mechanics for c in _mechanics_columns(m, cand)}
+        #
+        # Codex round-4 finding: also intersect with the candidate's
+        # VISIBLE columns -- without this, a candidate could color a
+        # HIDDEN duplicate of a measure (via `cols_hide(...)`) while
+        # showing an uncolored visible duplicate with the same values, and
+        # this credited full coverage even though the reader never
+        # actually sees any coloring on the rendered table.
+        colored_cols = {c for m in cand_mechanics for c in _mechanics_columns(m, cand)} & _visible_columns(cand)
         covered = 0
         for m in canonical_colored:
             if _any_colored_column_matches(cand["tier2"], truth["tier2"], colored_cols, m):
@@ -1501,6 +1591,31 @@ def _hungarian_min_cost(cost: list[list[float]]) -> list[int]:
     return assignment
 
 
+def _hungarian_group_assignment(
+    cand_groups: dict[Any, Counter], truth_groups: dict[Any, Counter],
+) -> tuple[list, list, list[list[int]], list[int]]:
+    """Shared setup for `_group_partition_match`/`_relabel_candidate_groups`:
+    sorted truth/candidate group-id lists, their pairwise row-content
+    overlap matrix (square, zero-padded to the larger side -- a truth/
+    candidate group beyond the other side's actual count is a "dummy"
+    with zero overlap, contributing nothing), and the Hungarian-optimal
+    one-to-one assignment (`assignment[i]` is the column index -- into
+    `cand_keys` -- assigned to `truth_keys[i]`; an index `>= len(cand_keys)`
+    means that truth group has no real candidate counterpart in the
+    optimal assignment).
+    """
+    truth_keys = sorted(truth_groups, key=str)
+    cand_keys = sorted(cand_groups, key=str)
+    n = max(len(truth_keys), len(cand_keys))
+    overlap_matrix = [[0] * n for _ in range(n)]
+    for i, tg in enumerate(truth_keys):
+        for j, cg in enumerate(cand_keys):
+            overlap_matrix[i][j] = _group_overlap(truth_groups[tg], cand_groups[cg])
+    cost = [[-overlap_matrix[i][j] for j in range(n)] for i in range(n)]  # minimize cost == maximize overlap
+    assignment = _hungarian_min_cost(cost)
+    return truth_keys, cand_keys, overlap_matrix, assignment
+
+
 def _group_partition_match(
     candidate_row_ids: list | None,
     candidate_group_ids: list | None,
@@ -1572,21 +1687,7 @@ def _group_partition_match(
     # correct relabeling whenever one exists, and still returns SOME valid
     # one-to-one mapping achieving the same optimal total when multiple
     # mappings tie -- exactly the guarantee this check needs.
-    truth_keys = sorted(truth_groups, key=str)
-    cand_keys = sorted(cand_groups, key=str)
-    n = max(len(truth_keys), len(cand_keys))
-    # Square, zero-padded overlap matrix (a truth/candidate group beyond
-    # the other side's actual count is a "dummy" with zero overlap,
-    # contributing nothing -- correctly signalling that a truth group has
-    # no real candidate counterpart, or vice versa, rather than forcing a
-    # spurious match).
-    overlap_matrix = [[0] * n for _ in range(n)]
-    for i, tg in enumerate(truth_keys):
-        for j, cg in enumerate(cand_keys):
-            overlap_matrix[i][j] = _group_overlap(truth_groups[tg], cand_groups[cg])
-    # Minimize cost == maximize overlap.
-    cost = [[-overlap_matrix[i][j] for j in range(n)] for i in range(n)]
-    assignment = _hungarian_min_cost(cost)
+    truth_keys, cand_keys, overlap_matrix, assignment = _hungarian_group_assignment(cand_groups, truth_groups)
     agree = 0
     matched_cand_indices: set[int] = set()
     for i in range(len(truth_keys)):
@@ -1604,6 +1705,47 @@ def _group_partition_match(
     one_to_one = len(matched_cand_indices) == len(truth_keys)
     match = one_to_one and agree / shared_rows >= execution_tier._MATCH_THRESHOLD
     return {"comparable": True, "match": match, "shared_rows": shared_rows}
+
+
+def _relabel_candidate_groups(
+    candidate_row_ids: list, candidate_group_ids: list, truth_row_ids: list, truth_group_ids: list,
+) -> list | None:
+    """Remap each candidate group id to whichever TRUTH group id its row
+    CONTENT overlaps with most (via the same Hungarian-optimal one-to-one
+    assignment `_group_partition_match` uses), so a candidate that groups
+    the exact right rows the exact right way, but spells its group labels
+    differently than the ground truth (e.g. "FY2010"/"FY2011" instead of
+    "2010"/"2011"), doesn't lose row-identity credit purely from the label
+    difference. Returns `None` when there's nothing to relabel against (no
+    shared row content at all between any candidate/truth group pair) --
+    the caller falls back to the candidate's own, unrelabeled group ids in
+    that case.
+
+    Codex round-4 finding: `execution_tier.row_set_identity` compares
+    `(group_id, row_id)` tuples LITERALLY -- necessary so a repeated stub
+    id across groups doesn't dedupe away (see that function's own
+    docstring), but it means a pure group RELABELING (same partition,
+    different label text) was scored as a near-total row-identity
+    failure. `runner/execution_tier.py` is a hard non-goal for this slice,
+    so this relabels the candidate's group ids BEFORE calling it, reusing
+    the exact same Hungarian-assignment machinery `_group_partition_match`
+    (built in round 2 for the analogous "same partition, different
+    labels" problem in `check_explicit_instructions`) rather than
+    inventing new matching logic.
+    """
+    cand_groups = _group_row_multisets(candidate_row_ids, candidate_group_ids)
+    truth_groups = _group_row_multisets(truth_row_ids, truth_group_ids)
+    if not cand_groups or not truth_groups:
+        return None
+    truth_keys, cand_keys, overlap_matrix, assignment = _hungarian_group_assignment(cand_groups, truth_groups)
+    relabel: dict[Any, Any] = {}
+    for i, tg in enumerate(truth_keys):
+        j = assignment[i]
+        if j < len(cand_keys) and overlap_matrix[i][j] > 0:
+            relabel[cand_keys[j]] = tg
+    if not relabel:
+        return None
+    return [relabel.get(gid, gid) for gid in candidate_group_ids]
 
 
 def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -1655,19 +1797,27 @@ def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckRes
             if not cand["tier2"].get("ok") or not truth["tier2"].get("ok"):
                 ok = False
             else:
-                vals = cand["tier2"].get("columns", {}).get(col)
-                if not vals:
+                # Codex round-4 finding: `col` is the TRUTH's own source
+                # column name -- resolving it against the CANDIDATE's
+                # columns by that same name (the previous approach, via
+                # `computed_value_correctness`, which itself only ever
+                # compares same-named columns) failed this required-sort
+                # instruction outright for a candidate that renamed the
+                # column but kept its values and order exactly right (same
+                # class of bug check_fmt_semantic_type/check_column_set
+                # had). `match_measure_by_value`'s value-based search
+                # (name-blind, used throughout this file) both resolves
+                # the renamed column AND verifies its values match the
+                # ground truth's well enough to trust -- a candidate
+                # satisfying "sorted" by replacing the column with an
+                # unrelated monotonic sequence still won't value-match and
+                # so still won't resolve here.
+                matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], col)
+                if matched_col is None:
                     ok = False
                 else:
-                    # Verify the column's VALUES actually match the ground
-                    # truth's (same-named column, default threshold) before
-                    # trusting monotonicity -- otherwise a candidate could
-                    # satisfy "sorted" by replacing the column with a
-                    # constant (every adjacent pair trivially >=/<=) or any
-                    # other unrelated monotonic sequence, without showing
-                    # the requested measure at all.
-                    value_check = execution_tier.computed_value_correctness(cand["tier2"], truth["tier2"], col)
-                    if not value_check["passed"]:
+                    vals = cand["tier2"].get("columns", {}).get(matched_col)
+                    if not vals:
                         ok = False
                     else:
                         def _monotonic(seq: list) -> bool:
@@ -1778,6 +1928,37 @@ def check_stub_existence(cand: dict, truth: dict, meta: dict) -> CheckResult:
     return CheckResult(name, 2, 2 if ok else 0, ok, f"candidate stub_present={cand['tier1'].get('stub_present')}, truth={truth['tier1'].get('stub_present')}")
 
 
+def _palettes_collide(entry_a: dict, entry_b: dict) -> bool:
+    """True if two colored measures' palettes render the SAME hue family.
+
+    For a RECOGNIZED ColorBrewer name on BOTH sides, via the shared
+    sequential-palette -> DA-family mapping `check_band_hue_harmonization`
+    also uses (`Reds`/`Oranges` are different names but the same oxblood
+    family). For anything else -- a diverging palette name, a helper hue
+    that's already a DA family name, "custom" (a literal hex-list), or any
+    other unrecognized string -- only a genuinely IDENTICAL raw palette
+    expression (`palette_raw`, the unclassified source text) counts as a
+    collision.
+
+    Codex round-4 finding: two DIFFERENT custom hex-list palettes (e.g. a
+    blue gradient and a green gradient) both classify to the same generic
+    `"custom"` bucket (`palette`), so comparing THAT classified value
+    flagged them as an automatic collision despite being visually
+    distinct. Real color classification for arbitrary hex lists is
+    explicitly out of scope; falling back to raw-text identity gives two
+    genuinely-different, unclassifiable palettes the benefit of the doubt
+    while still catching a literal copy-paste of the same custom gradient
+    onto two measures.
+    """
+    pa, pb = (entry_a.get("palette") or "").lower(), (entry_b.get("palette") or "").lower()
+    fa, fb = _SEQ_PALETTE_TO_DA_FAMILY.get(pa), _SEQ_PALETTE_TO_DA_FAMILY.get(pb)
+    if fa is not None and fb is not None:
+        return fa == fb
+    ra = (entry_a.get("palette_raw") or "").strip()
+    rb = (entry_b.get("palette_raw") or "").strip()
+    return bool(ra) and ra == rb
+
+
 def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "No same-family hue collision across 2 measures"
     mechanics = cand["tier1"].get("color_mechanics", [])
@@ -1802,21 +1983,12 @@ def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     distinct_measures = _distinct_colored_measures(mechanics, cand)
     if len(distinct_measures) < 2:
         return _na(name, "fewer than 2 distinct colored measures; no collision possible")
-    palettes = [p for p, _domain, _cols in distinct_measures]
-    # Normalize through the SAME sequential-palette -> DA-family mapping
-    # check_band_hue_harmonization already uses -- `Reds` and `Oranges`
-    # are different palette NAMES but the same oxblood family, so an
-    # exact-string comparison let a two-measure candidate use both and
-    # still pass "no same-family collision" despite rendering the same
-    # visual hue for two different measures. A palette not in the mapping
-    # (a diverging palette, or an unrecognized name) falls back to
-    # comparing its own lowercased name, unchanged from before.
-    families = [_SEQ_PALETTE_TO_DA_FAMILY.get((p or "").lower(), (p or "").lower()) for p in palettes]
+    palettes = [m.get("palette") for m in distinct_measures]
     colliding_pairs = [
         (palettes[i], palettes[j])
-        for i in range(len(palettes))
-        for j in range(i + 1, len(palettes))
-        if palettes[i] is not None and palettes[j] is not None and families[i] == families[j]
+        for i in range(len(distinct_measures))
+        for j in range(i + 1, len(distinct_measures))
+        if _palettes_collide(distinct_measures[i], distinct_measures[j])
     ]
     collision = bool(colliding_pairs)
     detail = f"colored-measure palettes: {palettes}"
@@ -1896,13 +2068,24 @@ def check_summary_row_existence(cand: dict, truth: dict, meta: dict) -> CheckRes
     cand_by_label = _group_summary_rows_by_label(cand_summary)
     all_ok = True
     compared_cols: list[str] = []
+    truth_tier2_ok = truth_tier2.get("ok", True)  # summary_rows already implies a usable truth tier2
     for i, truth_row in enumerate(truth_summary):
         cand_row = _matched_summary_row(cand_summary, cand_by_label, truth_row, i)
         truth_values = truth_row.get("values", {})
         cand_values = cand_row.get("values", {}) if cand_row is not None else {}
         for k, tv in truth_values.items():
             compared_cols.append(k)
-            if k not in cand_values or not execution_tier.values_close(cand_values[k], tv):
+            # Codex round-4 finding: `k` is the TRUTH's own aggregate-column
+            # name -- looking it up in `cand_values` by that same name
+            # (same class of bug as the sort-instruction/column-set/
+            # semantic-type checks) scored a renamed-but-value-equivalent
+            # summary aggregate as simply missing. Resolve by value (over
+            # the full BODY row arrays, the same robust matching every
+            # other check uses) whenever the direct name lookup misses.
+            matched_col = k
+            if matched_col not in cand_values and truth_tier2_ok:
+                matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], k)
+            if matched_col is None or matched_col not in cand_values or not execution_tier.values_close(cand_values[matched_col], tv):
                 all_ok = False
     if not compared_cols:
         return CheckResult(name, 1, 0, False, "summary rows share no comparable columns")
@@ -2146,7 +2329,24 @@ def check_striping_gate(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # is that the hero gets bold text specifically AS THE ALTERNATIVE to a
     # third color fill, so it occupies the same "this column carries
     # meaning" role a colored measure would for this gate's purposes.
-    accounted_for: set[str] = set(t1.get("bold_columns") or [])
+    #
+    # Codex round-4 finding (real gaming vector): counting EVERY bold
+    # column here, unrestricted, let a candidate bold every visible
+    # column -- not just the declared hero measure -- to manufacture
+    # "fully filled" and dodge the striping requirement on a long table
+    # entirely. Only bold columns that VALUE-MATCH a declared `CANONICAL_
+    # MEASURES.hero_uncolored` entry count toward this exemption; with no
+    # declared hero measure to verify against, bold text alone no longer
+    # counts (there's nothing to confirm it's a genuine hero column and
+    # not just gaming).
+    hero_measures = meta["CANONICAL_MEASURES"].get("hero_uncolored", [])
+    bold_cols_raw = set(t1.get("bold_columns") or [])
+    accounted_for: set[str] = set()
+    if hero_measures and bold_cols_raw and cand["tier2"].get("ok") and truth["tier2"].get("ok"):
+        for hm in hero_measures:
+            matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], hm)
+            if matched_col is not None and matched_col in bold_cols_raw:
+                accounted_for.add(matched_col)
     for e in mechanics:
         accounted_for |= set(_mechanics_columns(e, cand))
     fully_filled = bool(accounted_for) and bool(visible) and (len(accounted_for & visible) / len(visible) >= 0.8)
@@ -2190,7 +2390,7 @@ def check_band_hue_harmonization(cand: dict, truth: dict, meta: dict) -> CheckRe
     # for a valid 2-measure table where the second measure just happened
     # to be diverging (and thus excluded from that count).
     distinct_measures = _distinct_colored_measures(t1.get("color_mechanics", []), cand)
-    sole_palette = (distinct_measures[0][0] or "").lower() if len(distinct_measures) == 1 else None
+    sole_palette = (distinct_measures[0].get("palette") or "").lower() if len(distinct_measures) == 1 else None
     expected_family = None
     if has_color and sole_palette is not None:
         if sole_palette in _SEQ_PALETTE_TO_DA_FAMILY:
@@ -2327,6 +2527,8 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     required_pairs = 0
     covered_pairs = 0
     distinct_cols: set[str] = set()
+    tier2_ok_for_matching = cand["tier2"].get("ok") and truth["tier2"].get("ok")
+    semantic_types = meta.get("SEMANTIC_TYPES", {}) if meta else {}
     for i, truth_row in enumerate(truth_summary):
         row_numeric_cols = [
             k for k, v in truth_row.get("values", {}).items() if isinstance(v, (int, float))
@@ -2338,7 +2540,32 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
         for c in row_numeric_cols:
             distinct_cols.add(c)
             required_pairs += 1
-            if isinstance(cand_values.get(c), (int, float)) and fmt_map.get(c, fmt_map.get(convergence._ALL_COLUMNS)):
+            # Codex round-4 finding #1 (same class as the sort-instruction/
+            # summary-value fixes above): resolve `c` (a TRUTH column name)
+            # to its value-matched CANDIDATE column when the direct name
+            # lookup misses, instead of only ever checking the same name.
+            matched_col = c
+            if matched_col not in cand_values and tier2_ok_for_matching:
+                matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], c)
+            if matched_col is None or not isinstance(cand_values.get(matched_col), (int, float)):
+                continue
+            effective_fmt = fmt_map.get(matched_col, fmt_map.get(convergence._ALL_COLUMNS))
+            if not effective_fmt:
+                continue
+            # Codex round-4 finding #2: this previously credited coverage
+            # for ANY fmt_* call at all, so a percent column formatted with
+            # fmt_currency (the wrong TYPE entirely) still scored full
+            # credit. When the ground truth declares a SEMANTIC_TYPES entry
+            # for this column, the effective formatter must actually match
+            # it (same mapping check_fmt_semantic_type uses); with no
+            # declared semantic type there's nothing to check the TYPE
+            # against, so "some fmt_* call covers it" remains the
+            # (weaker, but only available) signal.
+            semantic_type = semantic_types.get(c)
+            if semantic_type is not None:
+                if effective_fmt in _SEMANTIC_TO_FMT.get(semantic_type, set()):
+                    covered_pairs += 1
+            else:
                 covered_pairs += 1
     if required_pairs == 0:
         return _na(name, "grand-summary row(s) have no numeric values to check")
@@ -2595,6 +2822,17 @@ def _summary_row_style_is_distinctive(source: str) -> bool:
                 unquoted_w = convergence._unquote(weight_val)
                 if unquoted_w and convergence._is_zero_length(unquoted_w):
                     continue
+            # Codex round-4 finding: this validated style/weight but never
+            # checked whether the border's `color=` was actually visible --
+            # `style.borders(..., color="transparent")` satisfied every
+            # other check here despite rendering no distinguishing border
+            # at all. Same transparency check already used for
+            # `frame_present`/`_has_visible_tab_style_border`.
+            border_color_val = convergence._kwarg_value(borders_block, "color")
+            if border_color_val:
+                unquoted_color = convergence._unquote(border_color_val)
+                if unquoted_color and _is_effectively_transparent(unquoted_color.strip()):
+                    continue
             return True
         for fm in re.finditer(r"style\s*\.\s*fill\s*\(", style_val):
             close_idx = convergence._scan_balanced_paren(style_val, fm.end() - 1)
@@ -2700,6 +2938,50 @@ FORMAT_CHECKS: list[CheckFn] = [
 ]
 
 
+# A checked-out ground-truth `.py`/`.png` pair legitimately produced
+# TOGETHER (e.g. by the same `git checkout`) can still land a few
+# milliseconds apart in mtime purely from filesystem/checkout ordering
+# noise -- empirically observed as ~2ms on this repo's own checked-in
+# corpus, nowhere close to a genuine "the source changed after the PNG was
+# rendered" gap (which in real usage is realistically seconds to hours).
+# This tolerance absorbs that noise without meaningfully weakening the
+# freshness check's actual purpose.
+_JUDGE_PNG_STALE_TOLERANCE_S = 5.0
+
+
+def _judge_png_is_stale(candidate_png: Path, candidate_path: Path) -> bool:
+    """True if `candidate_png` exists but is OLDER than `candidate_path`
+    (its own source `.py`) by more than `_JUDGE_PNG_STALE_TOLERANCE_S` --
+    i.e. a stale render from a since-changed (or now-broken) candidate
+    script, not just filesystem/checkout timing noise between two files
+    that were legitimately produced together.
+
+    Codex round-4 finding: judge-backed checks were scoring whatever PNG
+    happened to sit next to the candidate `.py`, with no check that it was
+    actually produced by the CURRENT source -- an old `table.png` left
+    over from a prior version of the script (since edited, or now failing
+    to render at all) got scored by the judge while every deterministic
+    check read the NEW source, awarding title/label/order/palette points
+    for output the candidate no longer actually produces. Re-rendering to
+    guarantee freshness is explicitly out of scope (this module never
+    renders anything -- see `compare()`'s own docstring); a cheap mtime
+    comparison is a strictly weaker but zero-cost substitute: if the PNG
+    predates its own source file by a meaningful margin, it can't possibly
+    reflect that source's current state, so it's treated as stale/
+    unavailable, same as a missing file. A PNG that doesn't exist at all
+    isn't "stale" by this definition -- `judge()` already handles a
+    missing file as its own degrade case, so this only needs to catch the
+    case where a file DOES exist but is provably outdated. A strict `<`
+    with no tolerance was tried first and immediately false-flagged this
+    repo's own checked-in ground-truth PNGs (a legitimately fresh pair,
+    checked out within ~2ms of each other) as "stale" -- the tolerance
+    fixes that without giving up the check's actual purpose.
+    """
+    if not candidate_png.is_file() or not candidate_path.is_file():
+        return False
+    return candidate_png.stat().st_mtime < candidate_path.stat().st_mtime - _JUDGE_PNG_STALE_TOLERANCE_S
+
+
 # ----------------------------------------------------------------------- #
 # scoring rollup + report
 # ----------------------------------------------------------------------- #
@@ -2756,7 +3038,19 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
 
     candidate_png = candidate_path.with_suffix(".png")
     truth_png = ground_truth_path.with_suffix(".png")
-    meta["_judge_result"] = judge_module.judge(candidate_png, truth_png, prompt_text, meta)
+    if _judge_png_is_stale(candidate_png, candidate_path):
+        # Codex round-4 finding: see `_judge_png_is_stale`'s docstring --
+        # degrade exactly like `judge()`'s own documented "unavailable"
+        # contract (all 7 keys, applicable=False, rationale prefixed with
+        # the literal "judge unavailable: " string) rather than scoring a
+        # PNG that predates the source it's supposed to represent.
+        reason = f"judge unavailable: candidate PNG is older than its source .py ({candidate_png} predates {candidate_path})"
+        meta["_judge_result"] = {
+            key: judge_module.JudgeDimension(applicable=False, score=None, rationale=reason)
+            for key in judge_module.DIMENSION_KEYS
+        }
+    else:
+        meta["_judge_result"] = judge_module.judge(candidate_png, truth_png, prompt_text, meta)
 
     data_results = [fn(cand, truth, meta) for fn in DATA_CHECKS]
     format_results = [fn(cand, truth, meta) for fn in FORMAT_CHECKS]
