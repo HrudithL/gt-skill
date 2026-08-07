@@ -186,6 +186,67 @@ def _is_effectively_transparent(color: str) -> bool:
     return False
 
 
+# Minimal CSS named-color -> hex table, scoped to exactly what
+# `_normalize_css_color` below needs to recognize (not a general
+# CSS-color-parsing library -- see that function's docstring for why no
+# pip dependency was added for this bounded need).
+_CSS_NAMED_COLORS = {
+    "gray": "#808080",
+    "grey": "#808080",
+    "white": "#FFFFFF",
+    "black": "#000000",
+}
+
+
+def _normalize_css_color(value: str | None) -> str | None:
+    """Best-effort normalization of a CSS color literal to a canonical
+    `#RRGGBB` (uppercase) string, or `None` if it can't be parsed as a
+    color at all (a variable, a genuinely unrecognized value).
+
+    Codex round-2 finding: `check_color_mechanics` compared `na_color` as a
+    raw string against the literal `"#808080"`, so CSS-equivalent
+    spellings of that exact color (`na_color="gray"`,
+    `na_color="rgb(128, 128, 128)"`) were rejected even though they render
+    IDENTICALLY -- inconsistent with this file's outcome-based scoring
+    philosophy everywhere else. This is a small, self-contained
+    normalizer for that bounded need, NOT a general CSS-color-parsing
+    package (one was considered and explicitly declined -- a short named-
+    color table plus a simple `rgb()`/`rgba()` regex parser covers what
+    this repo's own conventions plausibly produce): hex (`#rgb`/
+    `#rrggbb`/`#rrggbbaa`, alpha ignored -- na_color has no separate
+    opacity concept here), `rgb(...)`/`rgba(...)` functional notation, and
+    a tiny named-color table for the specific keyword spellings
+    (`gray`/`grey`) most likely to appear for the required neutral
+    `#808080`.
+    """
+    if value is None:
+        return None
+    v = value.strip()
+    low = v.lower()
+    if low in _CSS_NAMED_COLORS:
+        return _CSS_NAMED_COLORS[low]
+    m = re.fullmatch(r"#([0-9A-Fa-f]{3})", v)
+    if m:
+        h = m.group(1)
+        return "#" + "".join(ch * 2 for ch in h).upper()
+    m = re.fullmatch(r"#([0-9A-Fa-f]{6})", v)
+    if m:
+        return "#" + m.group(1).upper()
+    m = re.fullmatch(r"#([0-9A-Fa-f]{8})", v)  # RRGGBBAA -- alpha ignored
+    if m:
+        return "#" + m.group(1)[:6].upper()
+    m = re.fullmatch(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)", v, re.I)
+    if m:
+        try:
+            r, g, b = (int(m.group(i)) for i in (1, 2, 3))
+        except ValueError:
+            return None
+        if not all(0 <= x <= 255 for x in (r, g, b)):
+            return None
+        return "#{:02X}{:02X}{:02X}".format(r, g, b)
+    return None
+
+
 def _stub_tint_present(source: str) -> bool:
     """True if a VISIBLE stub tint is applied, by EITHER accepted mechanism.
 
@@ -266,6 +327,61 @@ def _blocks_target_table_png(blocks: list[str], path_kwarg: str, path_index: int
     return False
 
 
+def _frame_present(source: str) -> bool:
+    """True if a candidate's table FRAME is genuinely VISIBLE -- not merely
+    whether a frame-related option/call NAME appears in the source.
+
+    Codex round-2 finding: `convergence.parse_design_choices`'s own
+    `frame_present` (out of scope to modify) is a bare token search --
+    `table_border_left_width="0px"`, `table_border_left_style="none"`, or
+    a transparent `table_border_left_color=` all satisfy that regex
+    despite rendering NO visible frame at all, so a candidate stating
+    these disabling values still got full credit for "has a frame."
+
+    Checks each accepted mechanism's ACTUAL resolved value instead:
+    - `opt_table_outline(...)`: present unless explicitly disabled via a
+      `style="none"`/`"hidden"` kwarg (its only disabling kwarg).
+    - `.tab_options(table_border_<side>_...)`: a side counts as framed
+      only if its own style/width/color (whichever are set) are all
+      non-disabling -- style not "none"/"hidden", width not a zero
+      length, color not effectively transparent. Reuses `_is_zero_length`/
+      `_is_effectively_transparent`, the same visibility tests
+      `_stub_tint_present` already applies elsewhere in this file.
+    - `frame(...)`/`finalize(...)` (the scripted skill's helpers): kept as
+      an unconditional True when called, same as convergence.py's own
+      bare-token behavior -- neither helper exposes a disabling kwarg.
+    """
+    if re.search(r"\b(?:frame|finalize)\s*\(", source):
+        return True
+    for block in convergence._call_arg_blocks(source, "opt_table_outline"):
+        style_val = convergence._kwarg_value(block, "style")
+        if style_val is not None:
+            unquoted = convergence._unquote(style_val)
+            if unquoted and unquoted.strip().lower() in ("none", "hidden"):
+                continue
+        return True
+    for side in ("left", "right"):
+        style_m = re.search(rf"table_border_{side}_style\s*=\s*([^\s,)]+)", source)
+        width_m = re.search(rf"table_border_{side}_width\s*=\s*([^\s,)]+)", source)
+        color_m = re.search(rf"table_border_{side}_color\s*=\s*([^\s,)]+)", source)
+        if not (style_m or width_m or color_m):
+            continue
+        if style_m:
+            s = convergence._unquote(style_m.group(1))
+            if s and s.strip().lower() in ("none", "hidden"):
+                continue
+        if width_m:
+            w = convergence._unquote(width_m.group(1))
+            if w and convergence._is_zero_length(w):
+                continue
+        if color_m:
+            col = convergence._unquote(color_m.group(1))
+            if col and _is_effectively_transparent(col.strip()):
+                continue
+        return True
+    return False
+
+
 def _render_call_present(source: str) -> bool:
     """True if some `gtsave`/`finalize` call plausibly produced the
     harness's mandated `table.png` artifact. Ported verbatim from the
@@ -301,20 +417,44 @@ def _tab_header_kwarg_present(source: str, kwarg: str) -> bool:
     presence (keyword or positional slot occupied), not its resolved text,
     reusing `convergence._TAB_HEADER_POSITIONAL_INDEX` (still present) for
     the positional-slot mapping.
+
+    Codex round-2 finding: this originally returned `True` merely because
+    the argument SLOT was occupied at all, even by a statically-explicit
+    `title=None` or `title=""` (or the positional equivalent) -- neither
+    of which renders any title text, so this awarded the presence point
+    for a header that doesn't actually have one. `_value_present` below
+    keeps the benefit of the doubt for a genuinely UNRESOLVABLE expression
+    (a variable, an f-string with interpolation) -- there's nothing further
+    to verify from static text alone -- but a value that resolves to
+    exactly `None` or `""` is provably absent, not merely un-checkable.
     """
+
+    def _value_present(val: str | None) -> bool:
+        if val is None:
+            return False
+        if val.strip() == "None":
+            return False
+        literal = convergence._extract_text_literal(val)
+        if literal == "":
+            return False
+        return True
+
     blocks = convergence._call_arg_blocks(source, "tab_header")
     if not blocks:
         return False
     block = blocks[-1]
-    if convergence._kwarg_value(block, kwarg) is not None:
-        return True
+    kw_val = convergence._kwarg_value(block, kwarg)
+    if kw_val is not None:
+        return _value_present(kw_val)
     idx = convergence._TAB_HEADER_POSITIONAL_INDEX.get(kwarg)
     if idx is None:
         return False
     positionals = [
         p for p in convergence._split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
     ]
-    return idx < len(positionals)
+    if idx >= len(positionals):
+        return False
+    return _value_present(positionals[idx])
 
 
 # convergence.py's own `_DATA_COLOR_DEFAULTS` covers na_color/truncate/
@@ -346,63 +486,71 @@ def _kwarg_or_default_positional(block: str, name: str, positionals: list[str], 
     return v
 
 
-def _strip_docstrings(source: str) -> str:
-    """Blank out every module/class/function DOCSTRING's text in `source`
-    (replacing every non-newline character in its span with a space, so
-    every other character's line/column position is preserved exactly --
-    nothing downstream that relies on relative source order shifts).
-
-    Codex round-1 finding: `convergence._strip_line_comments` (already
-    applied below) only strips `#`-comments, not string content -- a
-    docstring that mentions a literal `.data_color(...)`/`heatmap(...)`
-    example (e.g. explaining a pattern, or what NOT to do) was scanned as a
-    REAL call by the regex-based extraction below, corrupting the colored-
-    measure count and every check that depends on it (palette, domain,
-    striping, hue-collision, band-harmonization). This repo's own checked-in
-    `sp500_monthly_performance.py` ground truth avoids literally spelling
-    `.data_color(` in its docstring specifically to dodge this bug -- a
-    workaround for it, not a fix.
-
-    Uses the AST (not a regex) to find genuine docstring nodes precisely:
-    only the first statement of a module/class/function body, when it's a
-    bare string-literal expression -- Python's own definition of a
-    docstring. An ordinary string ARGUMENT (e.g. a triple-quoted title=
-    value) is never in that position, so it's never touched, only real
-    docstrings are. Falls back to returning `source` unchanged if it isn't
-    parseable (e.g. a broken candidate) -- the regex-based extraction below
-    already tolerates that source verbatim, same as before this fix.
+def _line_start_offsets(source: str) -> list[int]:
+    """Cumulative starting character offset of each line in `source`
+    (1-indexed access via `line_starts[lineno - 1]`) -- converts an AST
+    node's `(lineno, col_offset)` into a flat string index. Shared by
+    `_ast_call_blocks` below.
     """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return source
-    doc_nodes: list[ast.Constant] = []
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
-            body = getattr(node, "body", None) or []
-            if body and isinstance(body[0], ast.Expr):
-                val = body[0].value
-                if isinstance(val, ast.Constant) and isinstance(val.value, str):
-                    doc_nodes.append(val)
-    if not doc_nodes:
-        return source
-    line_starts = [0]
+    starts = [0]
     for line in source.splitlines(keepends=True):
-        line_starts.append(line_starts[-1] + len(line))
+        starts.append(starts[-1] + len(line))
+    return starts
+
+
+def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: bool) -> list[tuple[int, str]]:
+    """`(start_offset, args_block_text)` for every GENUINE `ast.Call` node
+    in `tree` naming `func_name` -- `allow_bare=True` also matches a bare
+    call (`heatmap(...)`), `False` requires an attribute/method call
+    (`.data_color(...)`) only, mirroring `data_color`'s own convention
+    elsewhere in this file (never called bare). `args_block_text` is
+    comment-stripped (an inline `#` comment inside a multi-line call's
+    argument list must not corrupt the block text every downstream
+    kwarg-parsing helper reads), matching what the old regex-based
+    `convergence._call_arg_blocks_pos`/`_bare_call_blocks_pos` returned for
+    a genuine call -- this function only changes HOW call sites are
+    located, not the shape of what's returned for each one.
+
+    Codex round-2 finding: round-1 fixed docstrings specifically (blanking
+    their text before the regex scan), but an ORDINARY string argument --
+    e.g. `tab_source_note(source_note="Built with .data_color(...)")` --
+    still contains call-shaped text and got misdetected as a real call,
+    corrupting the colored-measure count and every check that depends on
+    it. Chasing more and more string-shaped exclusions via regex/
+    preprocessing is an open-ended, always-catchable-up-with game; walking
+    the AST instead only ever visits REAL `ast.Call` nodes in the first
+    place -- a string literal's contents are never call nodes and a
+    comment is invisible to the parser entirely, so this can't be fooled
+    by either, without needing to specifically special-case either one.
+    """
+    line_starts = _line_start_offsets(source)
 
     def _offset(lineno: int, col: int) -> int:
         return line_starts[lineno - 1] + col
 
-    chars = list(source)
-    for node in doc_nodes:
-        if node.end_lineno is None or node.end_col_offset is None:
+    out: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
             continue
-        start = _offset(node.lineno, node.col_offset)
-        end = _offset(node.end_lineno, node.end_col_offset)
-        for i in range(start, min(end, len(chars))):
-            if chars[i] != "\n":
-                chars[i] = " "
-    return "".join(chars)
+        func = node.func
+        if isinstance(func, ast.Attribute) and func.attr == func_name:
+            name_node = func
+        elif allow_bare and isinstance(func, ast.Name) and func.id == func_name:
+            name_node = func
+        else:
+            continue
+        if name_node.end_lineno is None or name_node.end_col_offset is None:
+            continue
+        name_end = _offset(name_node.end_lineno, name_node.end_col_offset)
+        open_idx = source.find("(", name_end)
+        if open_idx == -1:
+            continue
+        close_idx = convergence._scan_balanced_paren(source, open_idx)
+        if close_idx is None:
+            continue
+        block = convergence._strip_line_comments(source[open_idx + 1:close_idx])
+        out.append((open_idx, block))
+    return out
 
 
 def _palette_of_block_positional(block: str, positionals: list[str]) -> str:
@@ -440,6 +588,25 @@ def _palette_of_block_positional(block: str, positionals: list[str]) -> str:
     return literal
 
 
+def _is_unresolvable_columns_selector(cols_val: str) -> bool:
+    """True if `cols_val`'s text is a column-SELECTOR expression
+    (`cs.starts_with(...)` and friends) that `convergence._resolve_columns_
+    list` can't expand from static source text alone (it would need the
+    real render-time schema).
+
+    Codex round-2 finding: `convergence._resolve_columns_list` returns `[]`
+    for this case -- but it ALSO returns `[]` for a genuinely-empty
+    explicit columns list, and those two are not the same thing: one means
+    "unknowable from source text," the other means "explicitly targets
+    nothing." Conflating them silently excluded a selector's real (and
+    very possibly non-empty) target columns from every colored-measure
+    check that iterates them (identity, signedness, domain, striping
+    coverage). Mirrors the exact selector-expression pattern `_resolve_
+    columns_list` itself already recognizes as unresolvable.
+    """
+    return bool(re.match(r"^cs\s*\.\s*\w+\s*\(", cols_val.strip()))
+
+
 def _enrich_color_mechanics(source: str) -> list[dict]:
     """One dict per colored-measure call (`data_color`/`heatmap`), in TRUE
     source order, carrying `columns`/`na_color`/`truncate`/`autocolor_text`
@@ -449,7 +616,7 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
     `check_band_hue_harmonization`, and `check_color_mechanics` below all
     depend on and were 14-round Codex-reviewed against.
 
-    This is a straight port of the closed `gtc/comparator` branch's OWN
+    This is a port of the closed `gtc/comparator` branch's OWN
     `convergence._color_mechanics()` (verified via `git show gtc/comparator:
     runner/convergence.py`), relocated here rather than into
     `runner/convergence.py` itself (a hard non-goal for this slice): the
@@ -464,12 +631,26 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
     `tier1["color_mechanics"]` with this function's output entirely, using
     only convergence.py's still-present, already-exposed low-level parsing
     primitives -- no change to convergence.py itself.
+
+    Call sites are located via the AST (`_ast_call_blocks`), not a
+    source-wide regex scan (Codex round-1 found a docstring mentioning
+    `.data_color(...)` got misdetected as a real call; round-2 found an
+    ORDINARY string argument, e.g. a source-note explaining "Built with
+    `.data_color(...)`", has the exact same problem -- an AST `ast.Call`
+    node is never text sitting inside a string literal or a comment, so
+    this can't be fooled by either without chasing more string patterns).
+    An unparseable candidate (invalid syntax) returns no entries at all --
+    strictly more honest than a regex scan that would still pattern-match
+    broken text; every check that reads this list already degrades
+    gracefully for a candidate with zero colored measures.
     """
-    source = _strip_docstrings(source)
-    source = convergence._strip_line_comments(source)
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
     var_map = convergence._list_var_map(source)
     entries: list[tuple[int, dict]] = []
-    for pos, block in convergence._call_arg_blocks_pos(source, "data_color"):
+    for pos, block in _ast_call_blocks(source, tree, "data_color", allow_bare=False):
         # `data_color(columns, rows, palette, domain, ...)` -- shared once so
         # `rows`/`columns`/`domain` positional fallbacks (slots 1/0/3) all
         # line up against the SAME split.
@@ -484,7 +665,7 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
         cols_val = convergence._kwarg_value(block, "columns")
         if cols_val is None:
             cols_val = positionals[0] if positionals else None
-        if cols_val is None or cols_val.strip() == "None":
+        if cols_val is None or cols_val.strip() == "None" or _is_unresolvable_columns_selector(cols_val):
             resolved_columns = None
         else:
             resolved_columns = convergence._resolve_columns_list(cols_val, var_map)
@@ -503,9 +684,14 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
             "autocolor_text": _kwarg_or_default_positional(block, "autocolor_text", positionals, 7),
             "via_helper": False,
         }))
-    for pos, block in convergence._bare_call_blocks_pos(source, "heatmap"):
+    for pos, block in _ast_call_blocks(source, tree, "heatmap", allow_bare=True):
+        heatmap_cols_val = convergence._heatmap_columns_raw(block)
+        if heatmap_cols_val is not None and _is_unresolvable_columns_selector(heatmap_cols_val):
+            resolved_heatmap_columns: list[str] | None = None
+        else:
+            resolved_heatmap_columns = convergence._resolve_columns_list(heatmap_cols_val, var_map)
         entries.append((pos, {
-            "columns": convergence._resolve_columns_list(convergence._heatmap_columns_raw(block), var_map),
+            "columns": resolved_heatmap_columns,
             "palette": convergence._unquote(convergence._kwarg_value(block, "hue")) or "default",
             "domain": convergence._kwarg_value(block, "domain"),
             "kind": convergence._unquote(convergence._kwarg_value(block, "kind")),
@@ -552,6 +738,11 @@ def build_fingerprint(py_path: Path) -> dict:
     tier1["color_mechanics"] = _enrich_color_mechanics(source)
     tier1["stub_tint_present"] = _stub_tint_present(source)
     tier1["render_call_present"] = _render_call_present(source)
+    # Codex round-2 finding: convergence.py's own `frame_present` is a bare
+    # token search that doesn't check whether the border option's actual
+    # value is visible (nonzero width, non-"none" style, non-transparent
+    # color) -- see `_frame_present`'s docstring.
+    tier1["frame_present"] = _frame_present(source)
     # Codex round-1 finding: convergence.py's own `title_present`/
     # `caption_present` (subtitle) only recognize the keyword form and
     # `any()` across every `tab_header(...)` call instead of just the last
@@ -1018,6 +1209,79 @@ def _group_overlap(a: Counter, b: Counter) -> int:
     return sum(min(n, b.get(rid, 0)) for rid, n in a.items())
 
 
+def _hungarian_min_cost(cost: list[list[float]]) -> list[int]:
+    """Solve the assignment problem on a SQUARE `cost` matrix (minimize
+    total cost of a one-to-one row->column assignment) via the classic
+    O(n^3) Hungarian algorithm (primal-dual / shortest-augmenting-path
+    formulation). Returns `assignment` where `assignment[i]` is the column
+    index assigned to row `i`.
+
+    Used by `_group_partition_match` to replace a GREEDY "each truth group
+    independently picks whichever candidate group currently overlaps it
+    most" approach (Codex round-2 finding: that greedy approach reports a
+    false `one_to_one=False` whenever multiple truth groups TIE on overlap
+    with the same candidate group -- e.g. a candidate that simply relabels
+    every group, "2010"/"2011" -> "FY2010"/"FY2011", where every cross-pair
+    overlap ties because every group shares the same 12 month labels; the
+    greedy loop then designates the SAME candidate group for every truth
+    group instead of finding the correct one-to-one relabeling). This
+    computes the GLOBALLY OPTIMAL one-to-one assignment (maximizing total
+    overlap, via minimizing negated overlap as cost) instead, which is
+    guaranteed to find a perfect relabeling whenever one exists -- and,
+    when every candidate is equally good (the fully-tied case), still
+    returns SOME valid one-to-one assignment achieving the same optimal
+    total, which is all correctness here actually requires.
+
+    Standard reference implementation (e.g. the "Hungarian algorithm with
+    potentials" commonly attributed to the e-maxx/competitive-programming
+    literature) -- 1-indexed internally to match that reference exactly,
+    translated to 0-indexed at the boundary.
+    """
+    n = len(cost)
+    INF = float("inf")
+    u = [0.0] * (n + 1)
+    v = [0.0] * (n + 1)
+    p = [0] * (n + 1)  # p[j] = 1-indexed row assigned to column j, 0 = none
+    way = [0] * (n + 1)
+    for i in range(1, n + 1):
+        p[0] = i
+        j0 = 0
+        minv = [INF] * (n + 1)
+        used = [False] * (n + 1)
+        while True:
+            used[j0] = True
+            i0 = p[j0]
+            delta = INF
+            j1 = -1
+            for j in range(1, n + 1):
+                if not used[j]:
+                    cur = cost[i0 - 1][j - 1] - u[i0] - v[j]
+                    if cur < minv[j]:
+                        minv[j] = cur
+                        way[j] = j0
+                    if minv[j] < delta:
+                        delta = minv[j]
+                        j1 = j
+            for j in range(n + 1):
+                if used[j]:
+                    u[p[j]] += delta
+                    v[j] -= delta
+                else:
+                    minv[j] -= delta
+            j0 = j1
+            if p[j0] == 0:
+                break
+        while j0:
+            j1 = way[j0]
+            p[j0] = p[j1]
+            j0 = j1
+    assignment = [0] * n
+    for j in range(1, n + 1):
+        if p[j] != 0:
+            assignment[p[j] - 1] = j - 1
+    return assignment
+
+
 def _group_partition_match(
     candidate_row_ids: list | None,
     candidate_group_ids: list | None,
@@ -1076,34 +1340,49 @@ def _group_partition_match(
     total_truth_rows = len(truth_row_ids or [])
     if total_truth_rows and shared_rows / total_truth_rows < _MIN_COVERAGE:
         return {"comparable": False, "match": False, "shared_rows": shared_rows}
-    # For each TRUTH group, whichever candidate group its row CONTENT
-    # overlaps with most decides that truth group's designated counterpart.
-    # An exact-text id match (e.g. both sides literally use "2015" as the
-    # group label) is used directly rather than voting by content, which
-    # can be genuinely ambiguous (e.g. every year-group shares the same 12
-    # month labels). Sorted iteration on both axes keeps a tied maximum
-    # deterministic.
-    cand_by_normalized_id = {execution_tier.normalize_id(cg): cg for cg in cand_groups}
-    designated: dict[Any, tuple[Any, int]] = {}
-    for tg in sorted(truth_groups, key=str):
-        truth_rows = truth_groups[tg]
-        exact_cg = cand_by_normalized_id.get(execution_tier.normalize_id(tg))
-        if exact_cg is not None:
-            designated[tg] = (exact_cg, _group_overlap(truth_rows, cand_groups[exact_cg]))
-            continue
-        best_cg, best_overlap = None, 0
-        for cg in sorted(cand_groups, key=str):
-            overlap = _group_overlap(truth_rows, cand_groups[cg])
-            if overlap > best_overlap:
-                best_cg, best_overlap = cg, overlap
-        if best_cg is not None:
-            designated[tg] = (best_cg, best_overlap)
+    # Codex round-2 finding: the ORIGINAL greedy version had every truth
+    # group independently pick whichever candidate group overlapped it
+    # most -- correct when overlaps are unambiguous, but wrong under ties
+    # (e.g. a candidate that relabels "2010"/"2011" to "FY2010"/"FY2011":
+    # every group shares the same 12 month labels, so every cross-pair
+    # overlap ties, and the greedy loop designated the SAME candidate
+    # group for every truth group, falsely reporting `one_to_one=False`
+    # for an actually-perfect relabeling). Solving this as a genuine
+    # one-to-one ASSIGNMENT problem (maximize total overlap across a
+    # global one-to-one mapping, via the Hungarian algorithm) finds the
+    # correct relabeling whenever one exists, and still returns SOME valid
+    # one-to-one mapping achieving the same optimal total when multiple
+    # mappings tie -- exactly the guarantee this check needs.
+    truth_keys = sorted(truth_groups, key=str)
+    cand_keys = sorted(cand_groups, key=str)
+    n = max(len(truth_keys), len(cand_keys))
+    # Square, zero-padded overlap matrix (a truth/candidate group beyond
+    # the other side's actual count is a "dummy" with zero overlap,
+    # contributing nothing -- correctly signalling that a truth group has
+    # no real candidate counterpart, or vice versa, rather than forcing a
+    # spurious match).
+    overlap_matrix = [[0] * n for _ in range(n)]
+    for i, tg in enumerate(truth_keys):
+        for j, cg in enumerate(cand_keys):
+            overlap_matrix[i][j] = _group_overlap(truth_groups[tg], cand_groups[cg])
+    # Minimize cost == maximize overlap.
+    cost = [[-overlap_matrix[i][j] for j in range(n)] for i in range(n)]
+    assignment = _hungarian_min_cost(cost)
+    agree = 0
+    matched_cand_indices: set[int] = set()
+    for i in range(len(truth_keys)):
+        j = assignment[i]
+        if j < len(cand_keys):
+            agree += overlap_matrix[i][j]
+            matched_cand_indices.add(j)
     # A valid partition match additionally requires the mapping to be
     # one-to-one -- two DIFFERENT truth groups must not designate the SAME
-    # candidate group (that would mean the candidate merged two real groups
-    # into one).
-    one_to_one = len({cg for cg, _ in designated.values()}) == len(designated)
-    agree = sum(overlap for _cg, overlap in designated.values())
+    # candidate group (that would mean the candidate merged two real
+    # groups into one). The Hungarian assignment is one-to-one BY
+    # CONSTRUCTION (each row index maps to a distinct column index), so
+    # this only fails when a truth group had no real candidate
+    # counterpart to be assigned at all (mapped to a dummy column).
+    one_to_one = len(matched_cand_indices) == len(truth_keys)
     match = one_to_one and agree / shared_rows >= execution_tier._MATCH_THRESHOLD
     return {"comparable": True, "match": match, "shared_rows": shared_rows}
 
@@ -1266,10 +1545,22 @@ def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # multiple calls that share a palette+domain is one measure, not two,
     # and its (necessarily identical) palette against itself must not read
     # as "two measures colliding on the same hue".
-    distinct_measures = list({(m.get("palette"), m.get("domain")) for m in mechanics})
+    #
+    # Codex round-2 finding: casting to a `set` then slicing `[:2]` made
+    # this check depend on `PYTHONHASHSEED` (Python's string-hash
+    # randomization) and, with 3+ distinct measures, could silently pick
+    # TWO non-colliding measures while a real colliding pair among the
+    # others went unchecked (e.g. Reds/Oranges/Blues: Reds and Oranges are
+    # both the oxblood family, but a `[:2]` slice could land on Blues/Reds
+    # instead and miss it entirely). Sorted for determinism, and every
+    # PAIR is checked, not just the first two.
+    distinct_measures = sorted(
+        {(m.get("palette"), m.get("domain")) for m in mechanics},
+        key=lambda t: (t[0] or "", t[1] or ""),
+    )
     if len(distinct_measures) < 2:
         return _na(name, "fewer than 2 distinct colored measures; no collision possible")
-    palettes = [p for p, _ in distinct_measures[:2]]
+    palettes = [p for p, _ in distinct_measures]
     # Normalize through the SAME sequential-palette -> DA-family mapping
     # check_band_hue_harmonization already uses -- `Reds` and `Oranges`
     # are different palette NAMES but the same oxblood family, so an
@@ -1279,8 +1570,17 @@ def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # (a diverging palette, or an unrecognized name) falls back to
     # comparing its own lowercased name, unchanged from before.
     families = [_SEQ_PALETTE_TO_DA_FAMILY.get((p or "").lower(), (p or "").lower()) for p in palettes]
-    collision = palettes[0] is not None and families[0] == families[1]
-    return CheckResult(name, 1, 0 if collision else 1, not collision, f"colored-measure palettes: {palettes}")
+    colliding_pairs = [
+        (palettes[i], palettes[j])
+        for i in range(len(palettes))
+        for j in range(i + 1, len(palettes))
+        if palettes[i] is not None and palettes[j] is not None and families[i] == families[j]
+    ]
+    collision = bool(colliding_pairs)
+    detail = f"colored-measure palettes: {palettes}"
+    if colliding_pairs:
+        detail += f"; colliding pair(s) sharing a hue family: {colliding_pairs}"
+    return CheckResult(name, 1, 0 if collision else 1, not collision, detail)
 
 
 def check_summary_row_existence(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -1588,8 +1888,24 @@ def check_band_hue_harmonization(cand: dict, truth: dict, meta: dict) -> CheckRe
     # diverging (and thus excluded from that count).
     distinct_measures = list({(e.get("palette"), e.get("domain")) for e in t1.get("color_mechanics", [])})
     sole_palette = (distinct_measures[0][0] or "").lower() if len(distinct_measures) == 1 else None
-    if has_color and sole_palette in _SEQ_PALETTE_TO_DA_FAMILY:
-        expected_family = _SEQ_PALETTE_TO_DA_FAMILY[sole_palette]
+    expected_family = None
+    if has_color and sole_palette is not None:
+        if sole_palette in _SEQ_PALETTE_TO_DA_FAMILY:
+            expected_family = _SEQ_PALETTE_TO_DA_FAMILY[sole_palette]
+        elif sole_palette in _EXTENDED_FAMILY_HEXES:
+            # Codex round-2 finding: a `heatmap(..., hue="navy")` HELPER
+            # call stores the HUE FAMILY NAME directly as `palette` (see
+            # `_enrich_color_mechanics`'s heatmap branch: `palette =
+            # hue-kwarg-or-"default"`), not a ColorBrewer palette name --
+            # `_SEQ_PALETTE_TO_DA_FAMILY` only ever mapped ColorBrewer
+            # names (`blues`/`greens`/`reds`/`oranges`), so a helper-based
+            # candidate's provably-wrong band hue got "unverifiable"
+            # benefit of the doubt instead of being scored. When the
+            # stored value is ALREADY a recognized DA family name
+            # (`_EXTENDED_FAMILY_HEXES`'s keys), that IS the expected
+            # family directly.
+            expected_family = sole_palette
+    if expected_family is not None:
         hue_ok = t1.get("heading_band_hue") == expected_family
         hue_detail = f"expected hue family '{expected_family}' for palette '{sole_palette}', got '{t1.get('heading_band_hue')}'"
     else:
@@ -1616,7 +1932,11 @@ def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
             return CheckResult(name, 4, 0, False, "ground truth requires colored measure(s) but candidate has none")
         return _na(name, "candidate has no colored measures")
     n = len(mechanics)
-    na_ok = sum(1 for e in mechanics if e.get("na_color") == "#808080")
+    # Codex round-2 finding: a raw-string comparison rejected CSS-equivalent
+    # spellings of the required color (`"gray"`, `"rgb(128, 128, 128)"`)
+    # that render IDENTICALLY to `"#808080"` -- normalize both sides
+    # through `_normalize_css_color` before comparing.
+    na_ok = sum(1 for e in mechanics if _normalize_css_color(e.get("na_color")) == "#808080")
     trunc_ok = sum(1 for e in mechanics if e.get("truncate") == "False")
     autocolor_ok = sum(1 for e in mechanics if e.get("autocolor_text") == "True")
     # `reverse` has no universal "correct" value the way na_color/truncate/
@@ -1742,21 +2062,31 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
     semantic_types = meta["SEMANTIC_TYPES"]
     if not semantic_types:
         return _na(name, "ground truth declares no SEMANTIC_TYPES to check")
-    if not cand["tier2"].get("ok"):
+    if not cand["tier2"].get("ok") or not truth["tier2"].get("ok"):
         return CheckResult(name, 4, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
-    # Applicability is gated on the candidate's VISIBLE columns, not on
-    # which ones it happened to format -- otherwise a candidate with ZERO
-    # fmt_* calls has an empty fmt_map, `applicable` comes back empty, and
-    # this required semantic-format check scores N/A (no penalty) instead
-    # of failing every visible semantic-typed column that renders raw.
+    # Codex round-2 finding: `SEMANTIC_TYPES`' keys are the GROUND TRUTH's
+    # own SOURCE column names -- matching them against the candidate's
+    # visible columns by same NAME made a renamed-but-correct column
+    # (ground truth `hp` values rendered as candidate `horsepower`)
+    # invisible to this check entirely: `applicable` came back empty and
+    # the whole 4-point check went N/A instead of failing an unformatted
+    # renamed column. Resolves each semantic-typed measure to its VALUE-
+    # matched candidate column instead, via `execution_tier.match_measure_
+    # by_value` -- the same value-based matching `check_colored_measure_
+    # selection`/`check_hero_column_formatting` already use elsewhere in
+    # this file, rather than assuming the candidate preserved the name.
     visible = _visible_columns(cand)
-    applicable = {c: t for c, t in semantic_types.items() if c in visible}
+    applicable: dict[str, str] = {}  # ground-truth source column -> resolved candidate column
+    for c in semantic_types:
+        matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], c)
+        if matched_col is not None and matched_col in visible:
+            applicable[c] = matched_col
     if not applicable:
-        return _na(name, "none of the ground truth's semantic-typed columns are visible in the candidate")
+        return _na(name, "none of the ground truth's semantic-typed columns have a value-matching visible candidate column")
     fmt_map = cand["tier1"].get("fmt_column_map", {})
     ok_count = sum(
-        1 for c, t in applicable.items()
-        if fmt_map.get(c, fmt_map.get(convergence._ALL_COLUMNS)) in _SEMANTIC_TO_FMT.get(t, set())
+        1 for c, matched_col in applicable.items()
+        if fmt_map.get(matched_col, fmt_map.get(convergence._ALL_COLUMNS)) in _SEMANTIC_TO_FMT.get(semantic_types[c], set())
     )
     all_ok = ok_count == len(applicable)
     return CheckResult(name, 4, _round_points(ok_count / len(applicable), 4), all_ok, f"{ok_count}/{len(applicable)} columns formatted per their semantic type")
@@ -1809,18 +2139,35 @@ def check_title_subtitle_caption_source(cand: dict, truth: dict, meta: dict) -> 
 
 def check_hero_column_formatting(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Hero-column formatting when nothing is colored"
-    if cand["tier1"].get("color_mechanics"):
-        return _na(name, "candidate has colored measures; hero-bold rule doesn't apply")
     hero_measures = meta["CANONICAL_MEASURES"].get("hero_uncolored", [])
     if not hero_measures:
         # No canonical hero measure declared to target -- fall back to the
         # original "some column is bold" signal (there's nothing more
-        # specific to check against).
+        # specific to check against). Step 3's rule is bold-hero-text as
+        # the ALTERNATIVE to a third color fill, so with no specific
+        # measure declared, this weaker heuristic only makes sense to
+        # apply when the candidate has no colored measures at all --
+        # unlike the declared-hero-measure branch below, there's nothing
+        # concrete here to check independently of that context.
+        if cand["tier1"].get("color_mechanics"):
+            return _na(name, "candidate has colored measures and no canonical hero-uncolored measure is declared")
         bolded = bool(cand["tier1"].get("bold_columns"))
         return CheckResult(
             name, 2, 2 if bolded else 0, bolded,
             f"bold_columns={cand['tier1'].get('bold_columns')} (no canonical hero measure declared)",
         )
+    # Codex round-2 finding: this whole check previously bailed to N/A
+    # whenever the candidate had ANY colored measure at all -- but all 4
+    # checked-in ground truths that declare `hero_uncolored` measures ALSO
+    # declare and render colored measures (a hero column is precisely the
+    # column that DOESN'T get a third color fill alongside the ≤2 that
+    # do), so that early return made this check N/A for every one of
+    # them, never actually exercised. A ground truth that DECLARES
+    # specific hero_uncolored measures must have them checked directly,
+    # regardless of whether other measures happen to be colored -- this
+    # also catches a candidate that colors the supposed hero column
+    # INSTEAD of bolding it (that measure's value-matched candidate
+    # column then simply won't be in `bold_cols` below).
     if not cand["tier2"].get("ok"):
         return CheckResult(name, 2, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
     # Bolding is only meaningful when it targets the ACTUAL declared hero
@@ -1842,16 +2189,29 @@ def check_hero_column_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
 
 def check_render_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Render mechanics (zoom/expand fit-order rule)"
-    params = cand["tier1"].get("render_params") or {}
-    if not params:
-        # `render_params` is `{}` for two DIFFERENT cases that must not be
-        # scored the same way: no gtsave()/finalize() call at all (the
-        # mandatory table image was never produced -- a hard failure, not
-        # unverifiable) vs. a render call that exists but whose params
-        # aren't statically resolvable (e.g. a **kwargs expansion --
-        # genuinely unverifiable, benefit of the doubt).
-        if not cand["tier1"].get("render_call_present"):
+    t1 = cand["tier1"]
+    params = t1.get("render_params") or {}
+    if not t1.get("render_call_present"):
+        # Codex round-2 finding: this render-target check used to be
+        # confined to the `not params` branch below, so a candidate
+        # calling `gtsave("backup.png", zoom=2.0)` -- a resolvable zoom
+        # kwarg, but the WRONG output filename -- fell through past this
+        # gate entirely and was awarded full zoom/expand credit despite
+        # never producing the harness's required `table.png`. A provably-
+        # wrong (or missing) render target is a hard failure regardless of
+        # what its other params say, so this is checked FIRST,
+        # unconditionally.
+        if not params:
             return CheckResult(name, 2, 0, False, "no gtsave()/finalize() call found -- the required table image was never rendered")
+        return CheckResult(
+            name, 2, 0, False,
+            "gtsave()/finalize() call(s) found, but none targets the required table.png output",
+        )
+    if not params:
+        # `render_params` is `{}` here only for a render call that exists,
+        # DOES target table.png, but whose OTHER params aren't statically
+        # resolvable (e.g. a **kwargs expansion) -- genuinely unverifiable,
+        # benefit of the doubt.
         return _na(name, "render params unresolved (e.g. a **kwargs expansion) -- not verifiable, benefit of the doubt")
     try:
         zoom = float(params.get("zoom", "2.0"))
