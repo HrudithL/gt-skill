@@ -212,6 +212,14 @@ Poll on a **modest cadence (~every 30s) within a bounded window (~15–20 min)**
 
 Re-request after each round of fixes, for as many rounds as the findings stay substantive. If, after the full polling window, **no signal appears at all** for your requested review, or Codex reports it is **rate-limited**, Codex is unavailable for this PR — fall back to the **Claude self-review** below rather than inventing some other substitute or silently skipping review.
 
+### Verifying the signal was actually caught
+
+A background polling loop can complete without you ever acting on it: it can be killed by its own timeout before the review lands, its completion can arrive during a gap in the conversation and never get processed, or you can simply move on to other work and not circle back. **"Waiting on review" is a claim, not a fact — verify it fresh every time before making it, rather than trusting that a background monitor already caught it.**
+
+- **Before stating that a review is still pending, or resuming work that assumes one is, run the direct check yourself** — the same `gh api pulls/<pr>/reviews` + `issues/<pr>/comments` query above, matched against **the PR's own head SHA** (`gh pr view <pr> --json headRefOid`, or the SHA you captured when you pushed/requested this review) — rather than relying on an earlier monitor's presumed-still-running status. Do not match against your local git `HEAD`: across a multi-worktree session your current checkout may belong to a different branch entirely, so a local-HEAD comparison can miss a review that already landed on the PR in question. This is mandatory whenever: you're resuming after any gap or a bare "continue"-type message, a monitor started for this exact review hasn't reported back yet, or the next thing you're about to say is some form of "still waiting" or "watching for it."
+- **A quiet background monitor is not evidence that nothing happened.** It only means the monitor stopped looking (timeout, or otherwise) — not that the review hasn't landed. Any time you have an open PR with a review outstanding, check its live state directly before reporting status on it, and definitely before ending a turn on an unverified "waiting" claim.
+- **If you discover the review already landed while you were doing something else, stop and triage it before continuing** whatever else you were doing — don't set it aside for later, since deferring it is exactly the failure this rule exists to prevent.
+
 ### Fallback when Codex is unavailable (rate limits)
 
 Codex code review runs against the account's usage limits and can be **rate-limited** — instead of reviewing, `chatgpt-codex-connector[bot]` posts an issue comment such as *"You have reached your Codex usage limits for code reviews."* When Codex is unavailable this way (or gives no signal within the polling window), the Claude Code agent driving the branch **performs the review itself and posts it as a PR comment**, standing in for Codex:
