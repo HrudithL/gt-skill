@@ -41,16 +41,342 @@ _METADATA_DEFAULTS = {
 }
 
 
+# ----------------------------------------------------------------------- #
+# Tier-1 compatibility shim -- see the long comment on `build_fingerprint`
+# below for why this exists. Every function here is a straight, unmodified
+# port of the closed `gtc/comparator` branch's OWN `runner/convergence.py`
+# logic (verified against `git show gtc/comparator:runner/convergence.py`),
+# relocated into comparator.py rather than into convergence.py itself
+# (a hard non-goal for this slice) -- it reuses only low-level parsing
+# primitives convergence.py already exposes and comparator.py already
+# reaches into directly elsewhere in this file (e.g. `convergence.
+# _split_top_level`/`_kwarg_value`/`_scan_balanced_paren` in
+# `_summary_row_style_is_distinctive` below).
+# ----------------------------------------------------------------------- #
+
+# The closed `gtc/comparator` branch's OWN `_FAMILY_HEXES` added a second
+# "accent"/"accent_tint" hex pair per family (the great-tables-house skill's
+# brighter, more-saturated heading-band tier, e.g. navy's `#1B5A85`/
+# `#C9E0F0` -- `gtcars_hp_price.py`'s own heading band uses `#C9E0F0`
+# exactly) ON TOP OF convergence.py's base washed-tier pair, discovered as a
+# real classification bug during that branch's own review ("without the
+# accent/accent_tint hexes here, a house-format-compliant band misclassifies
+# as its nearest neutral instead of its actual hue family"). The version of
+# `_FAMILY_HEXES` merged to `gtc/root` today only has the base pair -- this
+# extends it locally (layered on top of convergence.py's own table, not a
+# replacement) so `_classify_hue_extended` below classifies an accent-tier
+# band hex correctly without touching convergence.py itself.
+_ACCENT_TIER_HEXES: dict[str, list[str]] = {
+    "navy": ["#1B5A85", "#C9E0F0"],
+    "forest": ["#2E7350", "#CFEAD9"],
+    "oxblood": ["#A23A3A", "#F4D6D6"],
+    "espresso": ["#8A6238", "#EEDFC7"],
+    "ochre": ["#B8912E", "#F6E8BE"],
+    "tan": ["#9C8258", "#EFE3CE"],
+}
+_EXTENDED_FAMILY_HEXES: dict[str, list[str]] = {
+    family: [*hexes, *_ACCENT_TIER_HEXES.get(family, [])]
+    for family, hexes in convergence._FAMILY_HEXES.items()
+}
+
+
+def _classify_hue_extended(hexstr: str | None) -> str:
+    """Like `convergence._classify_hue`, but against `_EXTENDED_FAMILY_HEXES`
+    (base + accent tier) instead of convergence.py's base-only table --
+    nearest-neighbour in RGB, ported from the closed branch's fixed
+    `_classify_hue`. `build_fingerprint()` below recomputes
+    `tier1["heading_band_hue"]` with this, from `tier1["heading_band_hex"]`
+    (still present, unchanged), rather than trusting convergence.py's own
+    `heading_band_hue` value (computed against the narrower base-only
+    table).
+    """
+    if not hexstr:
+        return "unknown"
+    rgb = convergence._hex_to_rgb(hexstr)
+    if rgb is None:
+        return "unknown"
+    best_family, best_dist = "unknown", float("inf")
+    for family, hexes in _EXTENDED_FAMILY_HEXES.items():
+        for ref in hexes:
+            rr = convergence._hex_to_rgb(ref)
+            if rr is None:
+                continue
+            dist = sum((a - b) ** 2 for a, b in zip(rgb, rr))
+            if dist < best_dist:
+                best_dist, best_family = dist, family
+    return best_family
+
+
+# Flattened, upper-cased hex membership set for "is this quiet-surface fill
+# one of the recognized neutral/washed reference colors" -- derived from the
+# EXTENDED table above (base + accent tier), same reasoning as
+# `_classify_hue_extended`: a literal accent-tier hex used as a stub tint
+# must be recognized too, not just the base washed tier.
+_ALLOWED_TINT_HEXES = {h.upper() for hexes in _EXTENDED_FAMILY_HEXES.values() for h in hexes}
+
+# A whole-string literal (optionally string-prefixed, `b`/`r`/`u`/`f` in any
+# combination/case) -- single or triple quoted. Ported from the closed
+# branch unchanged; used only to tell "a literal path string" from "a
+# variable/expression" when checking a render call's target path.
+_STRING_LITERAL_RE = re.compile(r"^[bBrRuUfF]{0,2}('''|\"\"\"|'|\")(.*)\1$", re.S)
+
+
+def _is_effectively_transparent(color: str) -> bool:
+    """True if a CSS color literal renders with effectively zero opacity.
+
+    Beyond the literal keywords `transparent`/`none`/empty, also catches an
+    `rgba(...)`/`rgb(...)` with a zero alpha channel and an 8-digit
+    `#RRGGBBAA` / 4-digit `#RGBA` hex whose alpha byte/nibble is zero -- all
+    of these render NO visible fill, same as the literal keywords. Ported
+    verbatim from the closed `gtc/comparator` branch's `convergence.py`
+    (that name doesn't exist in the version of `convergence.py` actually
+    merged to `gtc/root` today -- see the shim-section comment above).
+    """
+    c = color.strip()
+    if c.lower() in ("transparent", "none", ""):
+        return True
+    m = re.fullmatch(r"rgba?\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*([\d.]+)\s*\)", c, re.I)
+    if m:
+        try:
+            return float(m.group(1)) == 0.0
+        except ValueError:
+            return False
+    if re.fullmatch(r"#[0-9A-Fa-f]{8}", c):
+        return c[-2:].lower() == "00"
+    if re.fullmatch(r"#[0-9A-Fa-f]{4}", c):
+        return c[-1].lower() == "0"
+    return False
+
+
+def _stub_tint_present(source: str) -> bool:
+    """True if a VISIBLE stub tint is applied, by EITHER accepted mechanism.
+
+    The `stub_tint(gt, *, hue)` runtime helper is one way (detected via
+    convergence.py's own still-present `_find_stub_tint_hue`); a literal
+    `tab_style(style=style.fill(color=...), locations=loc.stub())` call is
+    the other (what `towny_growth_trends.py` actually uses) -- both are
+    equally valid per the outcome-only scoring rule. A `style.fill(color=...)`
+    call only counts if its color is genuinely visible and is one of the
+    recognized neutral/washed reference hexes (`_ALLOWED_TINT_HEXES`) when
+    it's a literal hex -- ported verbatim from the closed branch (the
+    combined `stub_tint_present` field itself doesn't exist in the version
+    of `convergence.py` merged to `gtc/root` today; only the narrower
+    `stub_tint_hue` does).
+    """
+    if convergence._find_stub_tint_hue(source) is not None:
+        return True
+    for block in convergence._call_arg_blocks(source, "tab_style"):
+        loc_val = convergence._kwarg_value(block, "locations")
+        if loc_val is None:
+            positionals = [
+                p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            loc_val = positionals[1] if len(positionals) >= 2 else None
+        if loc_val is None or not re.search(r"loc\s*\.\s*stub\s*\(", loc_val):
+            continue
+        style_val = convergence._kwarg_value(block, "style")
+        if style_val is None:
+            positionals = [
+                p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            style_val = positionals[0] if positionals else None
+        if not style_val:
+            continue
+        fm = re.search(r"style\s*\.\s*fill\s*\(", style_val)
+        if not fm:
+            continue
+        close_idx = convergence._scan_balanced_paren(style_val, fm.end() - 1)
+        fill_block = style_val[fm.end():close_idx] if close_idx is not None else ""
+        color_val = convergence._kwarg_value(fill_block, "color")
+        if color_val is None:
+            fill_positionals = [
+                p for p in convergence._split_top_level(fill_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            color_val = fill_positionals[0] if fill_positionals else None
+        unquoted_color = convergence._unquote(color_val) if color_val else None
+        if unquoted_color is not None:
+            stripped = unquoted_color.strip()
+            if _is_effectively_transparent(stripped):
+                continue
+            if stripped.startswith("#") and stripped.upper() not in _ALLOWED_TINT_HEXES:
+                continue
+        return True
+    return False
+
+
+def _blocks_target_table_png(blocks: list[str], path_kwarg: str, path_index: int) -> bool:
+    """True if any call block's path argument plausibly targets `table.png`.
+
+    A literal path only counts when `convergence._targets_table_png`
+    confirms it; a non-literal path (a variable, an f-string) can't be
+    proven wrong from source text alone and gets the benefit of the doubt.
+    Ported verbatim from the closed branch.
+    """
+    for b in blocks:
+        path_val = convergence._kwarg_value(b, path_kwarg)
+        if path_val is None:
+            positionals = [
+                p for p in convergence._split_top_level_quoted(b) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            path_val = positionals[path_index] if len(positionals) > path_index else None
+        if path_val is None:
+            continue
+        if not _STRING_LITERAL_RE.match(path_val.strip()):
+            return True  # non-literal -- can't prove it's the wrong target
+        if convergence._targets_table_png(path_val):
+            return True
+    return False
+
+
+def _render_call_present(source: str) -> bool:
+    """True if some `gtsave`/`finalize` call plausibly produced the
+    harness's mandated `table.png` artifact. Ported verbatim from the
+    closed branch (`render_call_present` itself doesn't exist in the
+    version of `convergence.py` merged to `gtc/root` today).
+    """
+    if _blocks_target_table_png(convergence._call_arg_blocks(source, "gtsave"), "file", 0):
+        return True
+    return _blocks_target_table_png(convergence._bare_call_blocks(source, "finalize"), "path", 1)
+
+
+# convergence.py's own `_DATA_COLOR_DEFAULTS` covers na_color/truncate/
+# autocolor_text only (current convergence.py never checks `reverse`, so it
+# never needed a default for it). `reverse` DOES have a universal
+# great_tables default when omitted (`False`) even though it has no
+# universal CORRECT value (see check_color_mechanics' own docstring) --
+# layered on top locally rather than added to convergence.py's constant.
+_DATA_COLOR_DEFAULTS_EXT = {**convergence._DATA_COLOR_DEFAULTS, "reverse": "False"}
+
+
+def _kwarg_or_default_positional(block: str, name: str, positionals: list[str], index: int) -> str | None:
+    """Like `convergence._kwarg_or_default(block, name)`, but ALSO falls
+    back to `positionals[index]` when the keyword isn't found -- the
+    version of `_kwarg_or_default` merged to `gtc/root` today only supports
+    the keyword form, not this positional fallback the closed branch's
+    `_color_mechanics` needs (a `.data_color("sales", None, "Blues", [0,
+    10], "red", None, False, False, True)` call sets `na_color`/
+    `autocolor_text`/`truncate` purely positionally).
+    """
+    if any(p.strip().startswith("**") for p in convergence._split_top_level_quoted(block)):
+        return None
+    val = convergence._kwarg_value(block, name)
+    if val is None and len(positionals) > index:
+        val = positionals[index]
+    v = convergence._unquote(val)
+    if v is None or v == "None":
+        return _DATA_COLOR_DEFAULTS_EXT[name]
+    return v
+
+
+def _enrich_color_mechanics(source: str) -> list[dict]:
+    """One dict per colored-measure call (`data_color`/`heatmap`), in TRUE
+    source order, carrying `columns`/`na_color`/`truncate`/`autocolor_text`
+    PLUS `palette`/`domain`/`via_helper`/`kind`/`reverse` -- the per-entry
+    fields `check_colored_measure_selection`, `check_sequential_vs_
+    diverging`, `check_domain_computation`, `check_hue_collision`,
+    `check_band_hue_harmonization`, and `check_color_mechanics` below all
+    depend on and were 14-round Codex-reviewed against.
+
+    This is a straight port of the closed `gtc/comparator` branch's OWN
+    `convergence._color_mechanics()` (verified via `git show gtc/comparator:
+    runner/convergence.py`), relocated here rather than into
+    `runner/convergence.py` itself (a hard non-goal for this slice): the
+    version of `_color_mechanics()` actually merged to `gtc/root` (developed
+    on an independent, differently-scoped branch) only materializes
+    `columns`/`na_color`/`truncate`/`autocolor_text` per entry -- it never
+    picked up `palette`/`domain`/`via_helper`/`kind`/`reverse`, so every
+    colored-measure check below would otherwise silently degrade (e.g. every
+    entry's `(palette, domain)` collapsing to the same `(None, None)` pair,
+    making a candidate with 5 differently-colored measures misreport as "1
+    measure" for the ≤2 ceiling check). `build_fingerprint()` below replaces
+    `tier1["color_mechanics"]` with this function's output entirely, using
+    only convergence.py's still-present, already-exposed low-level parsing
+    primitives -- no change to convergence.py itself.
+    """
+    source = convergence._strip_line_comments(source)
+    var_map = convergence._list_var_map(source)
+    entries: list[tuple[int, dict]] = []
+    for pos, block in convergence._call_arg_blocks_pos(source, "data_color"):
+        # `data_color(columns, rows, palette, domain, ...)` -- shared once so
+        # `rows`/`columns`/`domain` positional fallbacks (slots 1/0/3) all
+        # line up against the SAME split.
+        positionals = [
+            p for p in convergence._split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+        ]
+        rows_val = convergence._kwarg_value(block, "rows")
+        if rows_val is None and len(positionals) > 1:
+            rows_val = positionals[1]
+        if rows_val is not None and rows_val.strip() != "None":
+            continue
+        cols_val = convergence._kwarg_value(block, "columns")
+        if cols_val is None:
+            cols_val = positionals[0] if positionals else None
+        if cols_val is None or cols_val.strip() == "None":
+            resolved_columns = None
+        else:
+            resolved_columns = convergence._resolve_columns_list(cols_val, var_map)
+        domain_val = convergence._kwarg_value(block, "domain")
+        if domain_val is None and len(positionals) > 3:
+            domain_val = positionals[3]
+        entries.append((pos, {
+            "columns": resolved_columns,
+            "palette": convergence._palette_of_block(block),
+            "domain": domain_val,
+            # data_color(columns, rows, palette, domain, na_color, alpha,
+            # reverse, autocolor_text, truncate) -- positional slots 4/6/7/8.
+            "na_color": _kwarg_or_default_positional(block, "na_color", positionals, 4),
+            "reverse": _kwarg_or_default_positional(block, "reverse", positionals, 6),
+            "truncate": _kwarg_or_default_positional(block, "truncate", positionals, 8),
+            "autocolor_text": _kwarg_or_default_positional(block, "autocolor_text", positionals, 7),
+            "via_helper": False,
+        }))
+    for pos, block in convergence._bare_call_blocks_pos(source, "heatmap"):
+        entries.append((pos, {
+            "columns": convergence._resolve_columns_list(convergence._heatmap_columns_raw(block), var_map),
+            "palette": convergence._unquote(convergence._kwarg_value(block, "hue")) or "default",
+            "domain": convergence._kwarg_value(block, "domain"),
+            "kind": convergence._unquote(convergence._kwarg_value(block, "kind")),
+            "na_color": "#808080",
+            "truncate": "False",
+            "autocolor_text": "True",
+            "reverse": "False",
+            "via_helper": True,
+        }))
+    entries.sort(key=lambda e: e[0])
+    return [d for _, d in entries]
+
+
 def build_fingerprint(py_path: Path) -> dict:
     """Tier 1 + Tier 2 fingerprint for one `table.py` (candidate OR ground
     truth — both are built identically, per the spec's "computed the same
     way" instruction).
+
+    Overrides/adds four Tier-1 fields (`color_mechanics`, `stub_tint_present`,
+    `render_call_present`, `heading_band_hue`) via the compatibility shim
+    just above, immediately after `convergence.parse_design_choices()` runs.
+    Why: the 23 unchanged checks vendored from the closed `gtc/comparator`
+    branch (see this module's docstring) were written and 14-round
+    Codex-reviewed against THAT branch's own `runner/convergence.py`, which
+    added richer per-entry color-mechanics fields, two extra boolean fields,
+    and an extended hue-family hex table as part of the SAME PR. `gtc/root`'s
+    actual `convergence.py` was developed independently (a different,
+    differently-scoped branch) and doesn't carry those additions --
+    discovered by running this comparator against the real corpus (self-
+    comparison silently mis-scored `check_colored_measure_selection`/
+    `check_hue_collision`/`check_domain_computation`/`check_stub_tint`/
+    `check_render_mechanics`/`check_band_hue_harmonization` without this
+    shim). Modifying `runner/convergence.py` itself is a hard non-goal for
+    this slice, so the shim lives entirely here instead, built only from
+    primitives convergence.py already exposes.
     """
     source = py_path.read_text()
     tier1 = convergence.parse_design_choices(source)
+    tier1["color_mechanics"] = _enrich_color_mechanics(source)
+    tier1["stub_tint_present"] = _stub_tint_present(source)
+    tier1["render_call_present"] = _render_call_present(source)
+    tier1["heading_band_hue"] = _classify_hue_extended(tier1.get("heading_band_hex"))
     tier2 = execution_tier.exec_table(py_path)
     return {"tier1": tier1, "tier2": tier2, "source": source, "path": py_path}
-
 
 def load_ground_truth_metadata(gt_path: Path) -> dict:
     """Read a ground truth's §5 metadata literals via AST parsing -- no
@@ -1243,7 +1569,11 @@ def _summary_row_style_is_distinctive(source: str) -> bool:
                 ]
                 color_val = fill_positionals[0] if fill_positionals else None
             unquoted_color = convergence._unquote(color_val) if color_val else None
-            if unquoted_color and convergence._is_effectively_transparent(unquoted_color.strip()):
+            # `convergence._is_effectively_transparent` doesn't exist in the
+            # version of convergence.py merged to gtc/root -- see the
+            # compatibility-shim section near `build_fingerprint()` above;
+            # this reuses the local shim copy instead.
+            if unquoted_color and _is_effectively_transparent(unquoted_color.strip()):
                 continue
             return True
     return False
