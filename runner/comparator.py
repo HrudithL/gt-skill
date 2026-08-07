@@ -94,6 +94,36 @@ _EXTENDED_FAMILY_HEXES: dict[str, list[str]] = {
 }
 
 
+def _find_band_color_last(source: str) -> str | None:
+    """Like `convergence._find_band_color`, but returns the LAST literal
+    color occurrence of the preferred key across the whole source, not
+    the first.
+
+    Codex round-8 finding: `convergence._find_band_color` (off-limits --
+    see this file's Tier-1 compatibility-shim section) uses `re.search`,
+    which returns the FIRST match in the whole source -- the same "first
+    call wins instead of the last, effective one" bug class already
+    fixed elsewhere in this file (title/subtitle presence, render-target
+    resolution, striping, reverse orientation, na_color/truncate/
+    autocolor_text). A script that sets an initial band color via one
+    `tab_options(...)` call and overrides it via a LATER call (an
+    initial-theme-then-override pattern) had the ORIGINAL, overridden
+    value trusted instead of the one actually rendered. `runner/
+    convergence.py` is a hard non-goal for this slice, so this is the
+    same shim pattern used throughout: a corrected local
+    reimplementation (`re.findall` + take the last match, instead of
+    `re.search`'s first-match), otherwise identical to the original --
+    same two keys, checked in the same preference order (`column_labels_
+    background_color` over `heading_background_color`, not merged
+    together).
+    """
+    for key in ("column_labels_background_color", "heading_background_color"):
+        matches = re.findall(rf"{key}\s*=\s*['\"]([^'\"]+)['\"]", source)
+        if matches:
+            return matches[-1]
+    return None
+
+
 def _classify_hue_extended(hexstr: str | None) -> str:
     """Like `convergence._classify_hue`, but against `_EXTENDED_FAMILY_HEXES`
     (base + accent tier) instead of convergence.py's base-only table --
@@ -277,9 +307,19 @@ def _stub_tint_present(source: str) -> bool:
     combined `stub_tint_present` field itself doesn't exist in the version
     of `convergence.py` merged to `gtc/root` today; only the narrower
     `stub_tint_hue` does).
+
+    Sweep-A finding (round 8): this returned True on the FIRST `loc.stub(
+    )`-scoped `tab_style(...)` call that resolved to a visible, approved
+    color, without checking whether a LATER `loc.stub()`-scoped call
+    overrides it with a different (possibly invisible/unapproved) one --
+    `tab_style` calls targeting the SAME location apply in order, so only
+    the LAST one actually determines the stub's final rendered fill.
+    Every stub-scoped call is now collected first, in source order, and
+    only the LAST one is evaluated.
     """
     if convergence._find_stub_tint_hue(source) is not None:
         return True
+    stub_blocks: list[str] = []
     for block in convergence._call_arg_blocks(source, "tab_style"):
         loc_val = convergence._kwarg_value(block, "locations")
         if loc_val is None:
@@ -289,62 +329,65 @@ def _stub_tint_present(source: str) -> bool:
             loc_val = positionals[1] if len(positionals) >= 2 else None
         if loc_val is None or not re.search(r"loc\s*\.\s*stub\s*\(", loc_val):
             continue
-        style_val = convergence._kwarg_value(block, "style")
-        if style_val is None:
-            positionals = [
-                p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
-            ]
-            style_val = positionals[0] if positionals else None
-        if not style_val:
-            continue
-        fm = re.search(r"style\s*\.\s*fill\s*\(", style_val)
-        if not fm:
-            continue
-        close_idx = convergence._scan_balanced_paren(style_val, fm.end() - 1)
-        fill_block = style_val[fm.end():close_idx] if close_idx is not None else ""
-        color_val = convergence._kwarg_value(fill_block, "color")
-        if color_val is None:
-            fill_positionals = [
-                p for p in convergence._split_top_level(fill_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
-            ]
-            color_val = fill_positionals[0] if fill_positionals else None
-        unquoted_color = convergence._unquote(color_val) if color_val else None
-        if unquoted_color is not None:
-            stripped = unquoted_color.strip()
-            if _is_effectively_transparent(stripped):
-                continue
-            # Codex round-6 finding: this only ever validated a color
-            # literal that starts with "#", so a named CSS color like
-            # `style.fill(color="red")` bypassed the approved-color check
-            # entirely (a saturated color, never one of palettes.md §2's
-            # neutral/washed tints, silently treated as approved). Reuses
-            # `_normalize_css_color` (the SAME normalizer already built
-            # for `na_color`, per Codex's own suggestion) so hex, `rgb()`/
-            # `rgba()`, and the small recognized named-color spellings all
-            # get resolved equally before checking `_ALLOWED_TINT_HEXES`.
-            # Only a genuinely UNRESOLVABLE expression (a bare variable
-            # reference, not a quoted literal at all) keeps the benefit of
-            # the doubt below -- a real, statically-known literal that
-            # isn't transparent and doesn't normalize to an approved hex
-            # is a real, visible, non-approved color and must fail here,
-            # whether or not it happens to be spelled as a "#..." string.
-            literal_color = _quoted_string_literal_value(color_val) if color_val else None
-            if literal_color is not None:
-                normalized = _normalize_css_color(literal_color.strip())
-                if normalized is None or normalized not in _ALLOWED_TINT_HEXES:
-                    continue
-        return True
-    return False
+        stub_blocks.append(block)
+    if not stub_blocks:
+        return False
+    block = stub_blocks[-1]
+    style_val = convergence._kwarg_value(block, "style")
+    if style_val is None:
+        positionals = [
+            p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+        ]
+        style_val = positionals[0] if positionals else None
+    if not style_val:
+        return False
+    fm = re.search(r"style\s*\.\s*fill\s*\(", style_val)
+    if not fm:
+        return False
+    close_idx = convergence._scan_balanced_paren(style_val, fm.end() - 1)
+    fill_block = style_val[fm.end():close_idx] if close_idx is not None else ""
+    color_val = convergence._kwarg_value(fill_block, "color")
+    if color_val is None:
+        fill_positionals = [
+            p for p in convergence._split_top_level(fill_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+        ]
+        color_val = fill_positionals[0] if fill_positionals else None
+    unquoted_color = convergence._unquote(color_val) if color_val else None
+    if unquoted_color is not None:
+        stripped = unquoted_color.strip()
+        if _is_effectively_transparent(stripped):
+            return False
+        # Codex round-6 finding: this only ever validated a color
+        # literal that starts with "#", so a named CSS color like
+        # `style.fill(color="red")` bypassed the approved-color check
+        # entirely (a saturated color, never one of palettes.md §2's
+        # neutral/washed tints, silently treated as approved). Reuses
+        # `_normalize_css_color` (the SAME normalizer already built
+        # for `na_color`, per Codex's own suggestion) so hex, `rgb()`/
+        # `rgba()`, and the small recognized named-color spellings all
+        # get resolved equally before checking `_ALLOWED_TINT_HEXES`.
+        # Only a genuinely UNRESOLVABLE expression (a bare variable
+        # reference, not a quoted literal at all) keeps the benefit of
+        # the doubt below -- a real, statically-known literal that
+        # isn't transparent and doesn't normalize to an approved hex
+        # is a real, visible, non-approved color and must fail here,
+        # whether or not it happens to be spelled as a "#..." string.
+        literal_color = _quoted_string_literal_value(color_val) if color_val else None
+        if literal_color is not None:
+            normalized = _normalize_css_color(literal_color.strip())
+            if normalized is None or normalized not in _ALLOWED_TINT_HEXES:
+                return False
+    return True
 
 
-def _render_target_var_literals(source: str) -> dict[str, str]:
-    """`{variable name -> literal string value}` for a NARROW, purely
-    syntactic pattern: a plain `name = "literal"` assignment on the
-    statement IMMEDIATELY PRECEDING (same body/scope) a statement that
-    calls `.gtsave(...)`/`finalize(...)` passing that same bare name as
-    its path argument -- e.g. `output = "backup.png"` then
-    `gt.gtsave(output)` on the very next line of the same function (or
-    module) body.
+def _render_target_var_literals(source: str, tree: ast.Module) -> dict[tuple[int, int], str]:
+    """`{gtsave/finalize CALL NODE's own (lineno, col_offset) -> resolved
+    literal string}` for a NARROW, purely syntactic pattern: a plain
+    `name = "literal"` assignment on the statement IMMEDIATELY PRECEDING
+    (same body/scope) the SPECIFIC statement containing a call passing
+    that same bare name as its path argument -- e.g. `output =
+    "backup.png"` then `gt.gtsave(output)` on the very next line of the
+    same function (or module) body.
 
     Codex round-7 finding: `_blocks_target_table_png` gave UNCONDITIONAL
     benefit of the doubt to any non-literal render-target argument,
@@ -356,13 +399,23 @@ def _render_target_var_literals(source: str) -> dict[str, str]:
     )`), or an assignment several statements earlier or in a DIFFERENT
     scope/branch all still correctly resolve to nothing here, and callers
     keep their existing benefit-of-the-doubt behavior for them.
-    """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return {}
 
-    def _call_target_var(stmt: ast.stmt) -> str | None:
+    Codex round-8 follow-up: round 7's version keyed its result dict by
+    VARIABLE NAME, globally across the whole source -- `output =
+    "table.png"; gt.gtsave(output); output = "backup.png";
+    gt.gtsave(output)` had the SECOND assignment clobber the single
+    name-keyed entry used to judge BOTH calls, misjudging the first
+    (correct) call using the second (wrong) value. Keyed by the CALL
+    NODE's own `(lineno, col_offset)` instead -- the exact same sort key
+    `_ast_call_blocks` already uses for this same call node -- so each
+    call site resolves strictly against the statement immediately
+    preceding IT, never a different call's binding. `tree` is passed in
+    (rather than re-parsed here) so callers building `_ast_call_blocks`
+    results from the SAME parse can look up by identical keys.
+    """
+
+    def _matching_calls(stmt: ast.stmt) -> list[tuple[ast.Call, str]]:
+        result: list[tuple[ast.Call, str]] = []
         for node in ast.walk(stmt):
             if not isinstance(node, ast.Call):
                 continue
@@ -371,18 +424,23 @@ def _render_target_var_literals(source: str) -> dict[str, str]:
             is_finalize = isinstance(func, ast.Name) and func.id == "finalize"
             if not (is_gtsave or is_finalize):
                 continue
+            var_name = None
             for kw in node.keywords:
                 if kw.arg in ("file", "path") and isinstance(kw.value, ast.Name):
-                    return kw.value.id
-            idx = 0 if is_gtsave else 1
-            if len(node.args) > idx and isinstance(node.args[idx], ast.Name):
-                return node.args[idx].id
-        return None
+                    var_name = kw.value.id
+                    break
+            if var_name is None:
+                idx = 0 if is_gtsave else 1
+                if len(node.args) > idx and isinstance(node.args[idx], ast.Name):
+                    var_name = node.args[idx].id
+            if var_name is not None:
+                result.append((node, var_name))
+        return result
 
-    out: dict[str, str] = {}
-    for node in ast.walk(tree):
+    out: dict[tuple[int, int], str] = {}
+    for scope_node in ast.walk(tree):
         for field in ("body", "orelse", "finalbody"):
-            stmts = getattr(node, field, None)
+            stmts = getattr(scope_node, field, None)
             if not isinstance(stmts, list):
                 continue
             for i in range(1, len(stmts)):
@@ -395,28 +453,34 @@ def _render_target_var_literals(source: str) -> dict[str, str]:
                     and isinstance(prev.value.value, str)
                 ):
                     continue
-                referenced = _call_target_var(stmts[i])
-                if referenced == prev.targets[0].id:
-                    out[referenced] = prev.value.value
+                for call_node, var_name in _matching_calls(stmts[i]):
+                    if var_name == prev.targets[0].id:
+                        out[(call_node.lineno, call_node.col_offset)] = prev.value.value
     return out
 
 
 def _blocks_target_table_png(
-    blocks: list[str], path_kwarg: str, path_index: int, var_literals: dict[str, str] | None = None
+    blocks: list[tuple[tuple[int, int], str]],
+    path_kwarg: str,
+    path_index: int,
+    var_literals: dict[tuple[int, int], str] | None = None,
 ) -> bool:
     """True if any call block's path argument plausibly targets `table.png`.
+
+    `blocks` is `(call_node_position, arg_block_text)` pairs, the same
+    shape `_ast_call_blocks` returns -- the position is what lets this
+    look up `var_literals` PER CALL SITE (see `_render_target_var_
+    literals`) instead of by variable name globally.
 
     A literal path only counts when `convergence._targets_table_png`
     confirms it; a non-literal path (a variable, an f-string) can't be
     proven wrong from source text alone and gets the benefit of the doubt
-    -- UNLESS `var_literals` (see `_render_target_var_literals`) resolves
-    that exact bare-variable path to a known literal, in which case it's
-    checked directly and does NOT fall back to the benefit of the doubt
-    (a resolved-but-wrong literal is a real, provable failure, not an
-    unknowable one). Ported verbatim from the closed branch, plus the
-    round-7 variable-resolution layer.
+    -- UNLESS `var_literals` resolves THIS SPECIFIC call's bare-variable
+    path to a known literal, in which case it's checked directly and does
+    NOT fall back to the benefit of the doubt (a resolved-but-wrong
+    literal is a real, provable failure, not an unknowable one).
     """
-    for b in blocks:
+    for pos, b in blocks:
         path_val = convergence._kwarg_value(b, path_kwarg)
         if path_val is None:
             positionals = [
@@ -426,8 +490,8 @@ def _blocks_target_table_png(
         if path_val is None:
             continue
         stripped = path_val.strip()
-        if var_literals and re.fullmatch(r"[A-Za-z_]\w*", stripped) and stripped in var_literals:
-            if convergence._targets_table_png(var_literals[stripped]):
+        if var_literals and pos in var_literals and re.fullmatch(r"[A-Za-z_]\w*", stripped):
+            if convergence._targets_table_png(var_literals[pos]):
                 return True
             continue  # resolved to a known, non-matching literal -- not "unknown"
         if not _is_static_string_literal(stripped):
@@ -495,49 +559,79 @@ def _frame_present(source: str) -> bool:
       length, color not effectively transparent. Reuses `_is_zero_length`/
       `_is_effectively_transparent`, the same visibility tests
       `_stub_tint_present` already applies elsewhere in this file.
-    - `frame(...)`/`finalize(...)` (the scripted skill's helpers): kept as
-      an unconditional True when called, same as convergence.py's own
-      bare-token behavior -- neither helper exposes a disabling kwarg.
-      Codex round-6 finding: detected via `_has_real_call` (AST-based,
-      same approach `_ast_call_blocks` already uses for color mechanics)
-      instead of a source-wide regex, which a `def frame(gt, ...):`
-      function definition, a comment, or a docstring mentioning "frame("
-      could all satisfy despite no call ever happening.
+    - `frame(...)` (the scripted skill's helper): kept as an unconditional
+      True when called, same as convergence.py's own bare-token behavior
+      -- the helper exposes no disabling kwarg. Codex round-6 finding:
+      detected via `_has_real_call` (AST-based, same approach `_ast_call_
+      blocks` already uses for color mechanics) instead of a source-wide
+      regex, which a `def frame(gt, ...):` function definition, a
+      comment, or a docstring mentioning "frame(" could all satisfy
+      despite no call ever happening.
+
+    Codex round-8 finding: `finalize(gt, path="table.png", **overrides)`
+    (`.claude/skills/great-tables-ci/scripts/gt_consistency.py`) is a
+    thin passthrough to `gt.gtsave(path, **opts)` -- it sets NO border
+    options at all, so it confers no frame whatsoever. That same skill's
+    own `gt_check.py` (`check_frame`'s docstring: "finalize(...) is NOT
+    accepted -- it only calls gtsave and [does not set border options]")
+    already documents this explicitly. `finalize(...)` is removed from
+    frame detection here (it still separately confers `render_call_
+    present` via `_render_call_present`, which is the check it actually
+    satisfies).
     """
-    if _has_real_call(source, "frame", allow_bare=True) or _has_real_call(source, "finalize", allow_bare=True):
+    if _has_real_call(source, "frame", allow_bare=True):
         return True
-    for block in convergence._call_arg_blocks(source, "opt_table_outline"):
-        style_val = convergence._kwarg_value(block, "style")
+    # Sweep-A finding (round 8): this returned True on the FIRST
+    # `opt_table_outline(...)` call that wasn't itself disabling, without
+    # checking whether a LATER call in the same source overrides it --
+    # `.opt_table_outline().opt_table_outline(style="none")` (enable then
+    # disable) read as "outline present" from the first call despite the
+    # second, effective call turning it back off. Only the LAST call's
+    # own value is consulted now, mirroring the same fix already applied
+    # to `_striping_present`/`_option_line_present`.
+    outline_blocks = convergence._call_arg_blocks(source, "opt_table_outline")
+    if outline_blocks:
+        style_val = convergence._kwarg_value(outline_blocks[-1], "style")
+        disabled = False
         if style_val is not None:
             unquoted = convergence._unquote(style_val)
-            if unquoted and unquoted.strip().lower() in ("none", "hidden"):
-                continue
-        return True
+            disabled = bool(unquoted and unquoted.strip().lower() in ("none", "hidden"))
+        if not disabled:
+            return True
     for side in ("left", "right"):
-        style_m = re.search(rf"table_border_{side}_style\s*=\s*([^\s,)]+)", source)
-        width_m = re.search(rf"table_border_{side}_width\s*=\s*([^\s,)]+)", source)
-        color_m = re.search(rf"table_border_{side}_color\s*=\s*([^\s,)]+)", source)
-        if not (style_m or width_m or color_m):
+        # Sweep-A finding (round 8): `re.search` returns the FIRST
+        # occurrence in the whole source -- a script setting an initial
+        # border and overriding it later (or repeating the kwarg across
+        # chained `.tab_options(...)` calls) had the ORIGINAL, overridden
+        # value trusted instead of the one actually rendered. `re.findall`
+        # + the last match mirrors `_option_line_present`'s existing
+        # "last occurrence wins" handling of the exact same `table_border_
+        # *`-shaped `.tab_options(...)` kwargs for hairlines/dividers.
+        style_matches = re.findall(rf"table_border_{side}_style\s*=\s*([^\s,)]+)", source)
+        width_matches = re.findall(rf"table_border_{side}_width\s*=\s*([^\s,)]+)", source)
+        color_matches = re.findall(rf"table_border_{side}_color\s*=\s*([^\s,)]+)", source)
+        if not (style_matches or width_matches or color_matches):
             continue
-        if style_m:
-            s = convergence._unquote(style_m.group(1))
+        if style_matches:
+            s = convergence._unquote(style_matches[-1])
             if s and s.strip().lower() in ("none", "hidden"):
                 continue
-        if width_m:
-            w = convergence._unquote(width_m.group(1))
+        if width_matches:
+            w = convergence._unquote(width_matches[-1])
             if w and convergence._is_zero_length(w):
                 continue
-        if color_m:
-            col = convergence._unquote(color_m.group(1))
+        if color_matches:
+            col = convergence._unquote(color_matches[-1])
             if col and _is_effectively_transparent(col.strip()):
                 continue
         return True
     return False
 
 
-def _has_visible_tab_style_border(source: str, side_pattern: str) -> bool:
+def _has_visible_tab_style_border(source: str, side_pattern: str, location_pattern: str) -> bool:
     """Like `convergence._has_active_tab_style_border`, but ALSO rejects an
-    effectively-transparent border COLOR.
+    effectively-transparent border COLOR, and validates that the call's
+    OWN `locations=` argument actually matches `location_pattern`.
 
     Codex round-3 finding: `convergence._has_active_tab_style_border`
     (shared by its own `_hlines_active`/`_vlines_active`) already checks a
@@ -547,6 +641,20 @@ def _has_visible_tab_style_border(source: str, side_pattern: str) -> bool:
     that function's own "is a border present" test despite rendering no
     visible line at all. Same class of bug as round 2's `_frame_present`
     fix; reuses this file's own `_is_effectively_transparent`.
+
+    Codex round-8 finding: this validated the border's `sides=` value but
+    never checked the SURROUNDING `tab_style(locations=...)` argument at
+    all -- a border styled with `sides="top"`/`"bottom"` but scoped to
+    `loc.column_labels()` or `loc.stub()` (a header-row or stub-column
+    rule, not a body row) still counted as a genuine body hairline, and
+    likewise a `sides="left"`/`"right"` border on `loc.stub()` counted as
+    a column-group divider despite the stub not being a group boundary.
+    Per `.claude/skills/great-tables-ci/references/small_color.md`, a
+    body hairline is scoped to `loc.body(...)`, and a column-group
+    divider is scoped to `loc.body(...)` and/or `loc.column_labels(...)`
+    (both drawn so the seam runs the table's full height) -- callers pass
+    the `locations` pattern actually associated with what they're
+    checking (`_hairlines_present`/`_dividers_present` below).
     """
     for block in convergence._call_arg_blocks(source, "tab_style"):
         style_val = convergence._kwarg_value(block, "style")
@@ -556,6 +664,14 @@ def _has_visible_tab_style_border(source: str, side_pattern: str) -> bool:
             ]
             style_val = positionals[0] if positionals else None
         if style_val is None:
+            continue
+        locations_val = convergence._kwarg_value(block, "locations")
+        if locations_val is None:
+            positionals = [
+                p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            locations_val = positionals[1] if len(positionals) >= 2 else None
+        if locations_val is None or not re.search(location_pattern, locations_val):
             continue
         for bm in re.finditer(r"style\s*\.\s*borders\s*\(", style_val):
             open_idx = bm.end() - 1
@@ -635,11 +751,13 @@ def _hairlines_present(source: str) -> bool:
     `_option_line_present`'s docstring for the exact bug this fixes. The
     `tab_style` fallback mechanism goes through `_has_visible_tab_style_
     border` instead of convergence.py's own (color-blind)
-    `_has_active_tab_style_border`.
+    `_has_active_tab_style_border`, and (round 8) requires the border's
+    own `locations=` to actually target `loc.body(...)` -- a hairline
+    scoped to the column-labels row or the stub isn't a body row rule.
     """
     if _option_line_present(source, "table_body_hlines"):
         return True
-    return _has_visible_tab_style_border(source, "top|bottom")
+    return _has_visible_tab_style_border(source, "top|bottom", r"loc\s*\.\s*body\s*\(")
 
 
 def _dividers_present(source: str) -> bool:
@@ -647,12 +765,18 @@ def _dividers_present(source: str) -> bool:
     `table_body_vlines_*`/`column_labels_vlines_*` (whichever of style/
     width/color are set, checked as ONE combination per prefix, not
     independently -- see `_option_line_present`'s docstring) indicate a
-    genuinely visible divider.
+    genuinely visible divider. The `tab_style` fallback (round 8) requires
+    the border's own `locations=` to target `loc.body(...)` or
+    `loc.column_labels(...)` -- per `.claude/skills/great-tables-ci/
+    references/small_color.md`'s own column-group-divider recipe, a
+    genuine divider is drawn in one or both of those (so the seam runs
+    the table's full height); `loc.stub()` or any other location isn't a
+    column-group boundary.
     """
     for prefix in ("table_body_vlines", "column_labels_vlines"):
         if _option_line_present(source, prefix):
             return True
-    return _has_visible_tab_style_border(source, "left|right")
+    return _has_visible_tab_style_border(source, "left|right", r"loc\s*\.\s*(?:body|column_labels)\s*\(")
 
 
 def _striping_present(source: str) -> bool:
@@ -676,8 +800,25 @@ def _striping_present(source: str) -> bool:
     argument -- `opt_row_striping(row_striping=False)` (a valid, if
     unusual, EXPLICIT opt-out) was still counted as striping being
     present. Now inspects that argument's actual value.
+
+    Codex round-8 finding: this returned `True` as soon as it found ANY
+    enabled/omitted `opt_row_striping(...)` call, without checking
+    whether a LATER call in the same source disables it --
+    `.opt_row_striping().opt_row_striping(row_striping=False)` (a valid,
+    if unusual, override pattern) read as "striping present" from the
+    FIRST call despite the SECOND, effective call explicitly turning it
+    back off. Only the LAST `opt_row_striping(...)` call's own value is
+    consulted now (mirroring `_option_line_present`'s "last call wins"
+    pattern already used for hairlines/dividers) -- if that last call
+    explicitly disables striping, this falls through to the OTHER
+    independent striping mechanisms below (`row_striping_include_table_
+    body`, `stripe(...)`, a literal background color) rather than
+    returning `False` outright, since striping could still genuinely be
+    present via one of those.
     """
-    for block in convergence._call_arg_blocks(source, "opt_row_striping"):
+    blocks = convergence._call_arg_blocks(source, "opt_row_striping")
+    if blocks:
+        block = blocks[-1]
         val = convergence._kwarg_value(block, "row_striping")
         if val is None:
             positionals = [
@@ -687,15 +828,27 @@ def _striping_present(source: str) -> bool:
         if val is None:
             return True  # omitted -- defaults to True per the installed signature
         unquoted = convergence._unquote(val)
-        if unquoted and unquoted.strip() == "False":
-            continue  # explicitly disabled -- not evidence of striping from THIS call
-        return True  # explicit True, or an unresolvable expression -- benefit of the doubt
-    if re.search(r"row_striping_include_table_body\s*=\s*True", source):
+        if not (unquoted and unquoted.strip() == "False"):
+            return True  # explicit True, or an unresolvable expression -- benefit of the doubt
+        # else: the LAST call explicitly disables striping -- fall through to
+        # the other independent mechanisms below instead of returning False.
+    #
+    # Sweep-A finding (round 8): both checks below used `re.search`, which
+    # returns the FIRST match in the whole source -- the same "first call
+    # wins" bug already fixed for `opt_row_striping` just above. A script
+    # setting `row_striping_include_table_body=True` once and later
+    # `=False` (or a background color set once then overridden), across
+    # repeated/chained `.tab_options(...)` calls, had the ORIGINAL value
+    # trusted instead of the one actually rendered. `re.findall` + the
+    # last match mirrors `_option_line_present`'s existing pattern for the
+    # exact same `.tab_options(...)`-kwarg-repetition shape.
+    include_matches = re.findall(r"row_striping_include_table_body\s*=\s*(\w+)", source)
+    if include_matches and include_matches[-1] == "True":
         return True
     if convergence._bare_call_blocks(source, "stripe"):
         return True
-    m = re.search(r"row_striping_background_color\s*=\s*['\"]([^'\"]+)['\"]", source)
-    if m and not _is_effectively_transparent(m.group(1).strip()):
+    color_matches = re.findall(r"row_striping_background_color\s*=\s*['\"]([^'\"]+)['\"]", source)
+    if color_matches and not _is_effectively_transparent(color_matches[-1].strip()):
         return True
     return False
 
@@ -705,13 +858,26 @@ def _render_call_present(source: str) -> bool:
     harness's mandated `table.png` artifact. Ported verbatim from the
     closed branch (`render_call_present` itself doesn't exist in the
     version of `convergence.py` merged to `gtc/root` today), plus the
-    round-7 `_render_target_var_literals` resolution layer for a simple
+    round-7/8 `_render_target_var_literals` resolution layer for a simple
     same-scope literal-string variable passed as the render target.
+
+    Call sites are located via `_ast_call_blocks` (AST-based, already
+    used for color-mechanics detection) rather than `convergence._call_
+    arg_blocks`/`_bare_call_blocks` -- this is what gives each call its
+    own `(lineno, col_offset)` position, which `_render_target_var_
+    literals` (round-8 fix) needs to resolve a variable PER CALL SITE
+    instead of by name globally.
     """
-    var_literals = _render_target_var_literals(source)
-    if _blocks_target_table_png(convergence._call_arg_blocks(source, "gtsave"), "file", 0, var_literals):
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    var_literals = _render_target_var_literals(source, tree)
+    gtsave_blocks = _ast_call_blocks(source, tree, "gtsave", allow_bare=False)
+    if _blocks_target_table_png(gtsave_blocks, "file", 0, var_literals):
         return True
-    return _blocks_target_table_png(convergence._bare_call_blocks(source, "finalize"), "path", 1, var_literals)
+    finalize_blocks = _ast_call_blocks(source, tree, "finalize", allow_bare=True)
+    return _blocks_target_table_png(finalize_blocks, "path", 1, var_literals)
 
 
 def _tab_header_kwarg_present(source: str, kwarg: str) -> bool:
@@ -1341,6 +1507,18 @@ def build_fingerprint(py_path: Path) -> dict:
     # its hue-harmonization points. Only override when there's an actual
     # hex to reclassify against the extended table.
     if tier1.get("heading_band_hex"):
+        # Codex round-8 finding: convergence.py's own `_find_band_color`
+        # (which originally computed `heading_band_hex`) returns the
+        # FIRST occurrence via `re.search`, not the LAST -- when a script
+        # sets an initial band color and overrides it later (or repeats
+        # the kwarg across chained `tab_options()` calls), the ORIGINAL,
+        # overridden value was trusted instead of the one actually
+        # rendered. Re-resolve to the last occurrence via the local
+        # `_find_band_color_last` shim before normalizing/classifying
+        # (falls back to convergence.py's own value if, for whatever
+        # reason, the shim finds nothing -- keeps this a strict
+        # improvement, never a regression).
+        tier1["heading_band_hex"] = _find_band_color_last(source) or tier1["heading_band_hex"]
         # Codex round-7 finding: `_classify_hue_extended` (and convergence.
         # py's own `_band_shade`, both called below) only recognize HEX
         # strings -- a CSS-equivalent literal like `column_labels_
@@ -2653,6 +2831,19 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
         if _truth_requires_color(meta):
             return CheckResult(name, 8, 0, False, "ground truth requires colored measure(s) but candidate has none")
         return _na(name, "candidate has no colored measures")
+    # Codex round-8 finding: without this gate, a candidate with real
+    # color_mechanics calls (syntactically present) but FAILED Tier-2
+    # execution fell through to the `total == 0` branch below (`_measure_
+    # signedness` returns `None` unconditionally when `tier2.get("ok")` is
+    # False, for every entry), reading as "no colored measure had usable
+    # numeric values to classify" -- the exact same N/A this check
+    # legitimately gives a genuinely-uncheckable candidate -- letting an
+    # execution failure dodge this 8-point check entirely instead of
+    # scoring a real 0. `check_sequential_vs_diverging` (right above) and
+    # several other checks already gate on this explicitly; this one
+    # didn't.
+    if not cand["tier2"].get("ok"):
+        return CheckResult(name, 8, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
     correct, total, notes = 0, 0, []
     for i, entry in enumerate(mechanics):
         shape = _measure_signedness(cand, _mechanics_columns(entry, cand))
@@ -2939,6 +3130,40 @@ def _mechanics_entry_for_column(mechanics: list[dict], fp: dict, column: str) ->
     return match
 
 
+def _effective_mechanics_units(mechanics: list[dict], fp: dict) -> list[dict]:
+    """The list of EFFECTIVE `color_mechanics` entries to actually grade --
+    collapses duplicate calls targeting the SAME resolvable column down to
+    whichever call is effective (last one wins, via `_mechanics_entry_
+    for_column`) for that column, so two `data_color()` calls on one
+    column count as ONE checkable unit, not two. An entry with NO
+    resolvable columns (an unresolvable selector like `cs.starts_with(
+    ...)`, or a genuinely explicit empty columns list) can't be
+    deduplicated by column identity at all -- kept as its own
+    independent unit, exactly as before, since its na_color/truncate/
+    autocolor_text are directly readable from that one call regardless
+    of which columns it ends up targeting.
+
+    Codex round-8 finding: round 7 fixed exactly this "first call wins
+    instead of the last, effective one" bug for `reverse` (via
+    `_mechanics_entry_for_column`, used directly in `check_color_
+    mechanics` below), but left na_color/truncate/autocolor_text summing
+    across EVERY raw mechanics entry (one per CALL) even when multiple
+    calls targeted the SAME column -- an early, WRONG call overridden by
+    a later, correct one still counted as a failure (and vice versa),
+    despite only the LAST call's value ever actually being rendered.
+    """
+    resolved_columns: set[str] = set()
+    independent_entries: list[dict] = []
+    for entry in mechanics:
+        cols = _mechanics_columns(entry, fp)
+        if cols:
+            resolved_columns.update(cols)
+        else:
+            independent_entries.append(entry)
+    effective_by_column = [_mechanics_entry_for_column(mechanics, fp, col) for col in resolved_columns]
+    return [e for e in (*effective_by_column, *independent_entries) if e is not None]
+
+
 def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Color mechanics (na_color, truncate, autocolor_text)"
     mechanics = cand["tier1"].get("color_mechanics", [])
@@ -2946,14 +3171,15 @@ def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
         if _truth_requires_color(meta):
             return CheckResult(name, 4, 0, False, "ground truth requires colored measure(s) but candidate has none")
         return _na(name, "candidate has no colored measures")
-    n = len(mechanics)
+    units = _effective_mechanics_units(mechanics, cand)
+    n = len(units)
     # Codex round-2 finding: a raw-string comparison rejected CSS-equivalent
     # spellings of the required color (`"gray"`, `"rgb(128, 128, 128)"`)
     # that render IDENTICALLY to `"#808080"` -- normalize both sides
     # through `_normalize_css_color` before comparing.
-    na_ok = sum(1 for e in mechanics if _normalize_css_color(e.get("na_color")) == "#808080")
-    trunc_ok = sum(1 for e in mechanics if e.get("truncate") == "False")
-    autocolor_ok = sum(1 for e in mechanics if e.get("autocolor_text") == "True")
+    na_ok = sum(1 for e in units if _normalize_css_color(e.get("na_color")) == "#808080")
+    trunc_ok = sum(1 for e in units if e.get("truncate") == "False")
+    autocolor_ok = sum(1 for e in units if e.get("autocolor_text") == "True")
     # `reverse` has no universal "correct" value the way na_color/truncate/
     # autocolor_text do -- whether a measure's polarity should be inverted
     # (e.g. RdYlGn with reverse=True so green=decline, for a "more is
