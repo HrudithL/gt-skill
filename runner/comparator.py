@@ -609,6 +609,116 @@ def _walk_top_level(tree: ast.AST):
             stack.append(child)
 
 
+def _exported_gt_name(tree: ast.Module) -> str | None:
+    """The bare variable NAME whose call chain actually produces the
+    script's EXPORTED/rendered table -- the root receiver of the
+    (effective, last-by-position) `.gtsave(...)` call's whole chain, or
+    the first positional argument of a bare `finalize(...)` call. `None`
+    when no render call exists, or its receiver/argument isn't a simple,
+    resolvable name/attribute-chain (an expression this bounded fix
+    deliberately doesn't attempt to trace further -- see `_walk_exported_
+    scope`'s own docstring for why giving up here is the SAFE default).
+    """
+    candidates: list[ast.Call] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Attribute) and func.attr == "gtsave":
+            candidates.append(node)
+        elif isinstance(func, ast.Name) and func.id == "finalize":
+            candidates.append(node)
+    if not candidates:
+        return None
+    candidates.sort(key=lambda n: (n.end_lineno, n.end_col_offset))
+    call_node = candidates[-1]
+    func = call_node.func
+    if isinstance(func, ast.Attribute) and func.attr == "gtsave":
+        expr: ast.expr = func.value
+        while isinstance(expr, ast.Call):
+            if not isinstance(expr.func, ast.Attribute):
+                return None  # a bare call mid-chain -- not the simple pattern this resolves
+            expr = expr.func.value
+        return expr.id if isinstance(expr, ast.Name) else None
+    if isinstance(func, ast.Name) and func.id == "finalize":
+        if call_node.args and isinstance(call_node.args[0], ast.Name):
+            return call_node.args[0].id
+        return None
+    return None
+
+
+def _stmt_targets_name(stmt: ast.stmt, name: str) -> bool:
+    """True if `stmt` either (a) is an assignment whose target IS `name`
+    (`gt = GT(df)`, `gt = gt.data_color(...)`, however many times `name`
+    is progressively reassigned to itself), or (b) is a bare expression
+    statement whose own call-chain root is `name` (`gt.gtsave(...)`,
+    `gt.tab_header(...).gtsave(...)`, a bare `finalize(gt, ...)`).
+    """
+    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+        return stmt.targets[0].id == name
+    if isinstance(stmt, ast.Expr):
+        expr = stmt.value
+        while isinstance(expr, ast.Call):
+            func = expr.func
+            if isinstance(func, ast.Attribute):
+                expr = func.value
+            elif isinstance(func, ast.Name):
+                return func.id == name  # a bare call directly on the name, e.g. finalize(gt, ...)
+            else:
+                return False
+        return isinstance(expr, ast.Name) and expr.id == name
+    return False
+
+
+def _walk_exported_scope(tree: ast.AST):
+    """Like `_walk_top_level`, but additionally restricted to only the
+    MODULE-LEVEL statements that build the actual EXPORTED variable's own
+    call chain (`_stmt_targets_name`, keyed on `_exported_gt_name`) -- a
+    statement building some OTHER, unrelated/unused variable is skipped
+    entirely, its calls never visited by anything built on this.
+
+    Codex round-14 finding (bounded scope): AST-based call detection
+    didn't distinguish "a call on some other variable" from "a call
+    that's part of the chain building the actual exported table" -- a
+    candidate could build a separate, unused table object with real
+    color/formatting/frame calls (`preview = GT(df).data_color(...)`)
+    while the ACTUALLY exported object stayed plain, and those calls
+    still counted toward every check built on `_ast_call_blocks`/`_ast_
+    fmt_calls`/`_has_real_call` (color mechanics, formatter detection,
+    frame/stripe/spanner/stub-tint/tab_style/tab_header/source-note
+    presence, and more -- every one of them, transparently, since this
+    only changes what `_walk_top_level` itself visits).
+
+    This deliberately does NOT attempt full data-flow or reachability
+    analysis (same scope boundary as round 9's analogous finding on this
+    same file) -- it only tracks SIMPLE, MODULE-LEVEL statements whose
+    assignment target or call-chain root is LITERALLY the exported name,
+    and conservatively falls back to the UNRESTRICTED `_walk_top_level`
+    behavior whenever the exported name itself can't be resolved this
+    way (`_exported_gt_name` returns `None`) -- there's no signal to
+    restrict by in that case, so this stays a safe superset rather than
+    silently excluding everything. A statement inside a nested `if`/
+    `for`/`with`/`try` block, or a receiver expression that isn't a
+    plain attribute chain, is NOT specially traced either -- excluded
+    from the restricted scope like any other statement that doesn't
+    directly, syntactically target the exported name, matching this
+    corpus's own linear top-level script convention.
+    """
+    if not isinstance(tree, ast.Module):
+        yield from _walk_top_level(tree)
+        return
+    exported_name = _exported_gt_name(tree)
+    if exported_name is None:
+        yield from _walk_top_level(tree)
+        return
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if not _stmt_targets_name(node, exported_name):
+            continue
+        yield from _walk_top_level(node)
+
+
 def _has_real_call(source: str, func_name: str, *, allow_bare: bool = False) -> bool:
     """True if `source` contains a GENUINE `ast.Call` node naming
     `func_name` -- `allow_bare=True` also matches a bare call
@@ -631,12 +741,18 @@ def _has_real_call(source: str, func_name: str, *, allow_bare: bool = False) -> 
     Returns `False` for unparseable source -- consistent with
     `_enrich_color_mechanics`'s own "can't prove a call exists, so don't
     fabricate one" behavior for a broken candidate.
+
+    Codex round-14 finding (bounded scope): now walks via `_walk_
+    exported_scope` (built on `_walk_top_level`) instead of `_walk_top_
+    level` directly -- a `frame(...)` call chained onto some OTHER,
+    unused variable no longer counts toward the exported table's own
+    frame. See `_walk_exported_scope`'s own docstring.
     """
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return False
-    for node in _walk_top_level(tree):
+    for node in _walk_exported_scope(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
@@ -665,6 +781,39 @@ def _spanner_present_local(source: str) -> bool:
     Switched to `_ast_call_arg_blocks` (AST-based).
     """
     return bool(_ast_call_arg_blocks(source, "tab_spanner") or _ast_call_arg_blocks(source, "tab_spanner_delim"))
+
+
+def _source_note_texts_local(source: str) -> list[str | None]:
+    """AST-based replacement for convergence.py's own `source_note_texts`
+    field: literal text of every genuine `.tab_source_note(...)` call, in
+    TRUE source order. ONE entry per call, always -- a call whose text
+    can't be resolved statically (a dynamic expression, an f-string with
+    an interpolation) contributes `None` rather than being dropped (see
+    `convergence._source_note_texts`'s own docstring for why dropping
+    would misalign the caption/source-note slot convention this
+    comparator relies on).
+
+    Codex round-14 finding: `convergence._source_note_texts` (off-limits
+    -- see this file's Tier-1 compatibility-shim section) is computed via
+    `convergence._call_arg_blocks` (a source-wide regex with no comment/
+    string stripping at all) -- the same recurring bug class already
+    fixed for color-mechanics/frame/fmt_*/tab_options/tab_style/tab_
+    header/stripe/tab_spanner detection elsewhere in this file: a comment
+    mentioning `.tab_source_note(...)` is misdetected as a real call.
+    Switched to `_ast_call_arg_blocks` (AST-based) for call DETECTION;
+    the per-block text extraction itself is unchanged (still `convergence.
+    _kwarg_value`/`_split_top_level_quoted`/`_extract_text_literal`).
+    """
+    texts: list[str | None] = []
+    for block in _ast_call_arg_blocks(source, "tab_source_note"):
+        val = convergence._kwarg_value(block, "source_note")
+        if val is None:
+            positionals = [
+                p for p in convergence._split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            val = positionals[0] if positionals else None
+        texts.append(convergence._extract_text_literal(val) if val is not None else None)
+    return texts
 
 
 def _frame_present(source: str) -> bool:
@@ -997,15 +1146,33 @@ def _striping_present(source: str) -> bool:
     FIRST call despite the SECOND, effective call explicitly turning it
     back off. Only the LAST `opt_row_striping(...)` call's own value is
     consulted now (mirroring `_option_line_present`'s "last call wins"
-    pattern already used for hairlines/dividers) -- if that last call
-    explicitly disables striping, this falls through to the OTHER
-    independent striping mechanisms below (`row_striping_include_table_
-    body`, `stripe(...)`) rather than returning `False` outright, since
-    striping could still genuinely be present via one of those.
+    pattern already used for hairlines/dividers).
+
+    Codex round-14 finding: rounds 8/12 fixed "last call wins" WITHIN
+    each mechanism independently, but the three mechanisms (`opt_row_
+    striping(...)`, `tab_options(row_striping_include_table_body=True)`,
+    `stripe(...)`) were still resolved via SEPARATE, fixed-priority
+    early-return branches -- opt_row_striping's own last-call state
+    checked first, then tab_options's, then stripe's mere existence.
+    Mixing mechanisms in an order where a LATER, DIFFERENT-mechanism call
+    should override an EARLIER one got the final state backwards: e.g.
+    `stripe(gt)` (enables) followed by a LATER `.opt_row_striping(
+    row_striping=False)` (explicitly disables) still returned `True`,
+    because `stripe(...)`'s mere existence was checked independently of
+    what the chronologically LATER opt_row_striping call said. All three
+    mechanisms are now resolved as ONE chronologically-ordered sequence
+    of (position, enabled) events -- the LAST event across ALL of them,
+    not the last event within any single mechanism, determines the final
+    state, exactly mirroring how a real render applies each call's
+    effect in source order.
     """
-    blocks = _ast_call_arg_blocks(source, "opt_row_striping")
-    if blocks:
-        block = blocks[-1]
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    events: list[tuple[tuple[int, int], bool]] = []
+
+    for pos, block in _ast_call_blocks(source, tree, "opt_row_striping", allow_bare=False):
         val = convergence._kwarg_value(block, "row_striping")
         if val is None:
             positionals = [
@@ -1013,42 +1180,36 @@ def _striping_present(source: str) -> bool:
             ]
             val = positionals[0] if positionals else None
         if val is None:
-            return True  # omitted -- defaults to True per the installed signature
+            events.append((pos, True))  # omitted -- defaults to True per the installed signature
+            continue
         unquoted = convergence._unquote(val)
-        if not (unquoted and unquoted.strip() == "False"):
-            return True  # explicit True, or an unresolvable expression -- benefit of the doubt
-        # else: the LAST call explicitly disables striping -- fall through to
-        # the other independent mechanisms below instead of returning False.
-    #
-    # Sweep-A finding (round 8): this check used `re.search`, which
-    # returns the FIRST match in the whole source -- the same "first call
-    # wins" bug already fixed for `opt_row_striping` just above. A script
-    # setting `row_striping_include_table_body=True` once and later
-    # `=False`, across repeated/chained `.tab_options(...)` calls, had the
-    # ORIGINAL value trusted instead of the one actually rendered.
-    #
-    # Codex round-12 finding (comprehensive sweep): the round-8 fix still
-    # scanned raw SOURCE TEXT via `re.findall`, with no comment/string
-    # stripping -- a comment mentioning `row_striping_include_table_body=
-    # True` was misdetected as a real, later-overriding option. Extracts
-    # from genuine `.tab_options(...)` AST call blocks (via `_ast_call_
-    # arg_blocks`) instead, still taking the LAST occurrence across ALL
-    # real calls.
-    include_val = None
-    for block in _ast_call_arg_blocks(source, "tab_options"):
+        # Explicit True, or an unresolvable expression, is an ENABLING
+        # event (benefit of the doubt); only an explicit `False` literal
+        # is a DISABLING one.
+        events.append((pos, not (unquoted and unquoted.strip() == "False")))
+
+    # `row_striping_include_table_body` only ever contributes a POSITIVE
+    # signal (matching this field's pre-existing semantics -- an explicit
+    # `=False` here was never treated as an active disable, only as "no
+    # signal from this mechanism," and this preserves that exactly, just
+    # now correctly ordered relative to the other two mechanisms).
+    for pos, block in _ast_call_blocks(source, tree, "tab_options", allow_bare=False):
         val = convergence._kwarg_value(block, "row_striping_include_table_body")
-        if val is not None:
-            include_val = val.strip()
-    if include_val == "True":
-        return True
-    # Codex round-12 finding (comprehensive sweep): `convergence._bare_
-    # call_blocks` is a source-wide regex with no comment/string
-    # stripping -- a comment or docstring mentioning `stripe(` was
-    # misdetected as a real call. `_ast_call_arg_blocks(..., allow_bare=
-    # True)` (AST-based) instead.
-    if _ast_call_arg_blocks(source, "stripe", allow_bare=True):
-        return True
-    return False
+        if val is None:
+            continue
+        unquoted = convergence._unquote(val)
+        if unquoted is not None and unquoted.strip() == "True":
+            events.append((pos, True))
+
+    # `stripe(...)` has no disabling parameter at all -- an unconditional
+    # enabling event wherever it's called.
+    for pos, _block in _ast_call_blocks(source, tree, "stripe", allow_bare=True):
+        events.append((pos, True))
+
+    if not events:
+        return False
+    events.sort(key=lambda e: e[0])
+    return events[-1][1]
 
 
 def _render_call_present(source: str) -> bool:
@@ -1141,7 +1302,18 @@ def _render_params_local(source: str) -> dict:
         # Same **overrides/**{...} guard as convergence._render_params --
         # an expansion can override the materialized defaults with values
         # this parser can't see.
-        if any(p.strip().startswith("**") for p in convergence._split_top_level(block)):
+        #
+        # Codex round-14 finding: a genuinely no-op expansion (`**{}`/
+        # `**dict()`, via `_is_noop_kwargs_expansion` -- already used for
+        # this exact purpose in `_enrich_color_mechanics`/`_fmt_column_
+        # map`) changes nothing at runtime and was wrongly treated
+        # identically to a real, unresolvable `**overrides` expansion,
+        # discarding params this parser CAN actually see just because a
+        # no-op expansion happened to sit in the same call.
+        if any(
+            p.strip().startswith("**") and not _is_noop_kwargs_expansion(p)
+            for p in convergence._split_top_level(block)
+        ):
             return {}
         out = dict(defaults)
         for kw in ("zoom", "expand", "vwidth", "vheight"):
@@ -1386,9 +1558,16 @@ def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: 
     increasing outward through the chain (the outer call's closing paren
     always comes after every inner call's), so it correctly orders both
     chained AND separate-statement calls alike.
+
+    Codex round-14 finding (bounded scope): now walks via `_walk_exported_
+    scope` (built on `_walk_top_level`) instead of `_walk_top_level`
+    directly -- a call chained onto some OTHER, unused variable
+    (`preview = GT(df).data_color(...)` while the actually exported `gt`
+    stays uncolored) no longer counts. See `_walk_exported_scope`'s own
+    docstring.
     """
     out: list[tuple[tuple[int, int], str]] = []
-    for node in _walk_top_level(tree):
+    for node in _walk_exported_scope(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
@@ -1474,13 +1653,19 @@ def _ast_fmt_calls(source: str) -> list[tuple[str, str]]:
     effective call before the earlier one. Sorts on `(end_lineno, end_
     col_offset)` instead, which strictly increases outward through a
     chain and still increases correctly across separate statements.
+
+    Codex round-14 finding (bounded scope): now walks via `_walk_exported_
+    scope` (built on `_walk_top_level`) instead of `_walk_top_level`
+    directly -- a `.fmt_*(...)` call chained onto some OTHER, unused
+    variable no longer counts. See `_walk_exported_scope`'s own
+    docstring.
     """
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return []
     out: list[tuple[tuple[int, int], str, str]] = []
-    for node in _walk_top_level(tree):
+    for node in _walk_exported_scope(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
@@ -1710,6 +1895,15 @@ _UNRESOLVED_COLUMNS = object()
 # data is percentage-scale (False is right) -- rather than a genuine "don't
 # penalize either way" skip.
 _UNRESOLVED_SCALE_VALUES = object()
+
+# Same sentinel shape as `_UNRESOLVED_SCALE_VALUES`, for `.fmt_number(...)`'s
+# `decimals=` argument (round 14) -- `None` from `_fmt_number_decimals_map`
+# means "never touched by any fmt_number(...) call at all" (confidently
+# resolves to great_tables' own `decimals=2` default); this sentinel means
+# "touched, but the argument itself is unresolvable" (a variable, an
+# expression) -- kept distinct so `_fmt_covers_semantic_type` doesn't default
+# an unresolvable expression to the wrong assumption either way.
+_UNRESOLVED_FMT_NUMBER_DECIMALS = object()
 # `heatmap()`'s own hue->palette resolution table, mirroring `.claude/
 # skills/great-tables-ci/scripts/gt_consistency.py`'s `PALETTE["sequential"]`/
 # `PALETTE["diverging"]` dicts and its `_resolve_palette(kind, hue)` helper
@@ -2101,6 +2295,63 @@ def _fmt_percent_scale_values_map(source: str, visible_columns: set[str] | None)
     return out
 
 
+def _fmt_number_decimals_map(source: str, visible_columns: set[str] | None) -> dict[str, object]:
+    """`{column-or-_ALL_COLUMNS -> the resolved `decimals=` state}` for
+    every `.fmt_number(...)` call, mirroring `_fmt_percent_scale_values_
+    map`'s exact column-resolution/override-tracking shape but for
+    `decimals` (an integer, not a boolean) -- the kwarg that determines
+    whether `fmt_number` actually renders a clean integer (`decimals=0`)
+    or shows fractional digits (great_tables' own default, `decimals=2`,
+    verified against the installed signature, when omitted). A value is
+    either a resolved literal integer STRING (an omitted kwarg resolves
+    to `"2"`, great_tables' real default, not "nothing to record") or
+    `_UNRESOLVED_FMT_NUMBER_DECIMALS` (present but unresolvable, e.g. a
+    variable) -- the sentinel still overrides/clears whatever an earlier
+    call recorded for the same column, same "last call wins" convention
+    used throughout this file.
+
+    Codex round-14 finding: `fmt_number` was accepted for `"integer"`-
+    semantic-typed columns purely by METHOD NAME (see `_fmt_covers_
+    semantic_type`) -- but `.fmt_number(columns="hp", decimals=2)` (or
+    simply omitting `decimals=`, which defaults to `2`) renders `"200.00
+    "` for what should be a clean integer count, yet still earned full
+    semantic-formatting credit.
+    """
+    var_map = convergence._list_var_map(source)
+
+    def _resolve_cols(val: str) -> list[str]:
+        if visible_columns is not None and _is_unresolvable_columns_selector(val):
+            parsed = _parse_cs_selector(val)
+            if parsed is not None:
+                kind, pattern = parsed
+                return sorted(c for c in visible_columns if _cs_selector_matches(kind, pattern, c))
+        return convergence._resolve_columns_list(val, var_map)
+
+    out: dict[str, object] = {}
+    for name, block in _ast_fmt_calls(source):
+        if name != "fmt_number":
+            continue
+        positionals = [
+            p for p in convergence._split_top_level_quoted(block)
+            if not re.match(r"[A-Za-z_]\w*\s*=", p) and not p.strip().startswith("**")
+        ]
+        val = convergence._kwarg_value(block, "columns")
+        if val is None:
+            val = positionals[0] if positionals else None
+        decimals_val = convergence._kwarg_value(block, "decimals")
+        if decimals_val is None:
+            decimals_literal: object = "2"  # great_tables' own default when omitted
+        else:
+            stripped = decimals_val.strip()
+            decimals_literal = stripped if re.fullmatch(r"-?\d+", stripped) else _UNRESOLVED_FMT_NUMBER_DECIMALS
+        if val is None or val.strip() == "None":
+            out[convergence._ALL_COLUMNS] = decimals_literal
+            continue
+        for col in _resolve_cols(val):
+            out[col] = decimals_literal
+    return out
+
+
 def _scale_shape_from_values(vals: list[float]) -> str | None:
     """Classify a set of numeric values as `"fractional"` (max absolute
     value comfortably `<= 1.5` -- e.g. 0.05-0.95, a ratio that NEEDS
@@ -2203,6 +2454,10 @@ def build_fingerprint(py_path: Path) -> dict:
     # source-wide regex scan with no comment/string stripping -- see
     # `_spanner_present_local`'s own docstring.
     tier1["spanner_present"] = _spanner_present_local(source)
+    # Codex round-14 finding: convergence.py's own `source_note_texts` is
+    # a source-wide regex scan with no comment/string stripping -- see
+    # `_source_note_texts_local`'s own docstring.
+    tier1["source_note_texts"] = _source_note_texts_local(source)
     # Codex round-2 finding: convergence.py's own `frame_present` is a bare
     # token search that doesn't check whether the border option's actual
     # value is visible (nonzero width, non-"none" style, non-transparent
@@ -2230,6 +2485,11 @@ def build_fingerprint(py_path: Path) -> dict:
     # semantic_type`/`check_summary_row_formatting` can validate it
     # against the matched column's actual data shape.
     tier1["fmt_percent_scale_values_map"] = _fmt_percent_scale_values_map(source, visible_columns)
+    # Codex round-14 finding: see `_fmt_number_decimals_map`'s own
+    # docstring -- `fmt_number`'s `decimals` kwarg is tracked separately
+    # so `check_fmt_semantic_type`/`check_summary_row_formatting` can
+    # validate it against `"integer"` semantic-typed columns.
+    tier1["fmt_number_decimals_map"] = _fmt_number_decimals_map(source, visible_columns)
     # Codex round-1 finding: convergence.py's own `title_present`/
     # `caption_present` (subtitle) only recognize the keyword form and
     # `any()` across every `tab_header(...)` call instead of just the last
@@ -2425,14 +2685,28 @@ def _distinct_colored_measures(mechanics: list[dict], fp: dict) -> list[dict]:
     underlying data and color mechanics are still real and worth
     validating; only the "how many/which VISIBLE distinct measures exist"
     question this function answers needs the filter.
+
+    Codex round-14 finding: this still iterated raw `mechanics` -- every
+    historical `data_color()`/`heatmap()` call -- instead of `_effective_
+    mechanics_units` (the last-effective-entry-per-column collapse
+    already applied to `check_color_mechanics`/`check_sequential_vs_
+    diverging`/`check_domain_computation`). An override pattern (an
+    early, wrong `data_color(palette="Blues", domain=[0,100])` on a
+    column corrected by a LATER `data_color(palette="RdYlGn", domain=
+    [-50,50])` on the SAME column) had both the overridden and the
+    effective entry counted as two DIFFERENT distinct measures (different
+    palette/domain), inflating the apparent measure count toward the
+    ≤2-measure ceiling and comparing hue-collision/band-harmonization
+    against a palette that was never actually rendered.
     """
     visible = _visible_columns(fp)
+    units = _effective_mechanics_units(mechanics, fp)
 
     def _visible_cols(m: dict) -> tuple:
         return tuple(sorted(set(_mechanics_columns(m, fp)) & visible))
 
     seen: dict[tuple, dict] = {}
-    for m in mechanics:
+    for m in units:
         cols = _visible_cols(m)
         if not cols:
             continue
@@ -2835,7 +3109,7 @@ def check_computed_value_correctness(cand: dict, truth: dict, meta: dict) -> Che
         )
     matched, missing = [], []
     for m in measures:
-        found = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
+        found = _match_measure_by_value(cand, truth, m)
         (matched if found else missing).append(m)
     pts = _round_points_covered(len(matched), len(measures), 10)
     detail = f"{len(matched)}/{len(measures)} canonical measures have a value-matching candidate column"
@@ -2857,10 +3131,12 @@ def _any_colored_column_matches(cand_tier2: dict, truth_tier2: dict, colored_col
     uncolored despite a real colored match existing. Checking every
     colored column independently answers "is this measure covered by SOME
     colored column", not "does the single tie-broken winner happen to be
-    colored".
+    colored". Uses `_column_match_fraction` (round-14 relabeling-aware
+    wrapper), not `execution_tier.column_match_fraction` directly -- see
+    `_relabeled_candidate_tier2`'s own docstring.
     """
     for col in colored_cols:
-        frac = execution_tier.column_match_fraction(cand_tier2, truth_tier2, col, truth_col)
+        frac = _column_match_fraction(cand_tier2, truth_tier2, col, truth_col)
         if frac is not None and frac >= execution_tier._MATCH_THRESHOLD:
             return True
     return False
@@ -3381,6 +3657,69 @@ def _relabel_candidate_groups(
     return [relabel.get(gid, gid) for gid in candidate_group_ids]
 
 
+def _relabeled_candidate_tier2(cand_tier2: dict, truth_tier2: dict) -> dict:
+    """A shallow copy of `cand_tier2` with `row_group_ids` relabeled to
+    their value-matched TRUTH counterparts (via `_relabel_candidate_
+    groups`) -- or `cand_tier2` itself, UNCHANGED, when relabeling isn't
+    applicable (either side lacks grouping or row identity) or doesn't
+    resolve to anything (`_relabel_candidate_groups` returns `None`, e.g.
+    a genuinely ambiguous or unrelated grouping).
+
+    Codex round-14 finding (P1): the group-relabeling machinery
+    (`_relabel_candidate_groups`/`_group_partition_match`, built across
+    rounds 1/7/10/11 specifically so a wording difference like `FY2010`
+    vs `2010` doesn't break matching) was only ever applied by `check_
+    row_selection_identity` before calling `_row_multiset_identity` --
+    NOT propagated to `execution_tier.match_measure_by_value`/`column_
+    match_fraction` (off-limits), which are used PERVASIVELY throughout
+    this file (computed-value correctness, colored-measure identity,
+    hero-column matching, semantic-type/column-set/summary-column/sort
+    resolution by rename, and more) via raw, un-relabeled `(group_id,
+    row_id)` key comparison internally. A candidate with a legitimately
+    relabeled grouping passed the row-selection check but could fail
+    nearly every OTHER value-matched check across the file. This is the
+    shared low-level piece `_match_measure_by_value`/`_column_match_
+    fraction` (both just below) build on -- callers needing value-based
+    matching should go through one of THOSE, not `execution_tier`'s
+    functions directly.
+    """
+    cand_group_ids = cand_tier2.get("row_group_ids")
+    truth_group_ids = truth_tier2.get("row_group_ids")
+    cand_row_ids = cand_tier2.get("row_ids")
+    truth_row_ids = truth_tier2.get("row_ids")
+    if not (cand_group_ids and truth_group_ids and cand_row_ids and truth_row_ids):
+        return cand_tier2
+    relabeled = _relabel_candidate_groups(cand_row_ids, cand_group_ids, truth_row_ids, truth_group_ids)
+    if relabeled is None:
+        return cand_tier2
+    return {**cand_tier2, "row_group_ids": relabeled}
+
+
+def _match_measure_by_value(cand: dict, truth: dict, truth_col: str) -> str | None:
+    """Drop-in, relabeling-aware replacement for `execution_tier.match_
+    measure_by_value(cand["tier2"], truth["tier2"], truth_col)` -- every
+    check in this file that needs to resolve a ground-truth column to its
+    value-matched CANDIDATE column should call this instead of the raw
+    `execution_tier` function directly, so a legitimately relabeled
+    grouping doesn't break the match. See `_relabeled_candidate_tier2`'s
+    own docstring for the full round-14 (P1) story.
+    """
+    cand_tier2 = _relabeled_candidate_tier2(cand["tier2"], truth["tier2"])
+    return execution_tier.match_measure_by_value(cand_tier2, truth["tier2"], truth_col)
+
+
+def _column_match_fraction(cand_tier2: dict, truth_tier2: dict, cand_col: str, truth_col: str) -> float | None:
+    """Drop-in, relabeling-aware replacement for `execution_tier.column_
+    match_fraction(cand_tier2, truth_tier2, cand_col, truth_col)` -- for
+    callers (like `_any_colored_column_matches`) that already work with
+    raw Tier-2 dicts instead of the wrapping fingerprint dicts `_match_
+    measure_by_value` takes. See `_relabeled_candidate_tier2`'s own
+    docstring for the full round-14 (P1) story.
+    """
+    relabeled_cand_tier2 = _relabeled_candidate_tier2(cand_tier2, truth_tier2)
+    return execution_tier.column_match_fraction(relabeled_cand_tier2, truth_tier2, cand_col, truth_col)
+
+
 def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Explicit prompt-instruction compliance"
     required = meta["REQUIRED_INSTRUCTIONS"]
@@ -3445,7 +3784,7 @@ def check_explicit_instructions(cand: dict, truth: dict, meta: dict) -> CheckRes
                 # satisfying "sorted" by replacing the column with an
                 # unrelated monotonic sequence still won't value-match and
                 # so still won't resolve here.
-                matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], col)
+                matched_col = _match_measure_by_value(cand, truth, col)
                 if matched_col is None:
                     ok = False
                 else:
@@ -3550,7 +3889,7 @@ def check_column_set(cand: dict, truth: dict, meta: dict) -> CheckResult:
     used_cand_cols: set[str] = set(truth_cols & cand_cols)
     if cand["tier2"].get("ok") and truth["tier2"].get("ok"):
         for tc in sorted(truth_cols - cand_cols):
-            matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], tc)
+            matched_col = _match_measure_by_value(cand, truth, tc)
             if matched_col is not None and matched_col in cand_cols and matched_col not in used_cand_cols:
                 renamed_truth_to_cand[tc] = matched_col
                 used_cand_cols.add(matched_col)
@@ -3778,7 +4117,7 @@ def check_summary_row_existence(cand: dict, truth: dict, meta: dict) -> CheckRes
             # other check uses) whenever the direct name lookup misses.
             matched_col = k
             if matched_col not in cand_values and truth_tier2_ok:
-                matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], k)
+                matched_col = _match_measure_by_value(cand, truth, k)
             if matched_col is None or matched_col not in cand_values or not execution_tier.values_close(cand_values[matched_col], tv):
                 all_ok = False
     if not compared_cols:
@@ -4121,7 +4460,7 @@ def check_striping_gate(cand: dict, truth: dict, meta: dict) -> CheckResult:
     accounted_for: set[str] = set()
     if hero_measures and bold_cols_raw and cand["tier2"].get("ok") and truth["tier2"].get("ok"):
         for hm in hero_measures:
-            matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], hm)
+            matched_col = _match_measure_by_value(cand, truth, hm)
             if matched_col is not None and matched_col in bold_cols_raw:
                 accounted_for.add(matched_col)
     for e in mechanics:
@@ -4311,7 +4650,7 @@ def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
             truth_entry = _mechanics_entry_for_column(truth_mechanics, truth, m)
             if truth_entry is None:
                 continue
-            matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
+            matched_col = _match_measure_by_value(cand, truth, m)
             if matched_col is None:
                 continue
             cand_entry = _mechanics_entry_for_column(mechanics, cand, matched_col)
@@ -4342,7 +4681,14 @@ def check_color_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
     base_ok = na_ok + trunc_ok + autocolor_ok
     if reverse_total:
         base_pts = _round_points(base_ok / base_total, 3) if base_total else 3
-        reverse_pts = _round_points(reverse_ok / reverse_total, 1)
+        # Codex round-14 finding: plain `_round_points` still rounded a
+        # real reverse mismatch away when only a minority of checked
+        # measures were wrong (`round(4/5) == 1` -- full credit for this
+        # 1-point component despite one visibly-reversed measure).
+        # `_round_points_covered` (round 13) caps incomplete coverage
+        # below full credit -- reused here for the same reason it was
+        # built for the other "N of M covered" checks.
+        reverse_pts = _round_points_covered(reverse_ok, reverse_total, 1)
         pts = base_pts + reverse_pts
     else:
         pts = _round_points(base_ok / base_total, 4) if base_total else 4
@@ -4374,6 +4720,7 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
         return CheckResult(name, 4, 0, False, "ground truth has a grand-summary row but candidate has none")
     fmt_map = cand["tier1"].get("fmt_column_map", {})
     scale_map = cand["tier1"].get("fmt_percent_scale_values_map", {})
+    decimals_map = cand["tier1"].get("fmt_number_decimals_map", {})
     # Required numeric columns come from the GROUND TRUTH's summary rows, not
     # the candidate's -- otherwise a candidate that replaces a required
     # numeric aggregate with text/empty (or omits it) makes the required set
@@ -4416,7 +4763,7 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
             # lookup misses, instead of only ever checking the same name.
             matched_col = c
             if matched_col not in cand_values and tier2_ok_for_matching:
-                matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], c)
+                matched_col = _match_measure_by_value(cand, truth, c)
             if matched_col is None or not isinstance(cand_values.get(matched_col), (int, float)):
                 continue
             effective_fmt = fmt_map.get(matched_col, fmt_map.get(convergence._ALL_COLUMNS))
@@ -4442,10 +4789,16 @@ def check_summary_row_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
                 # aggregate's `scale_values` against this single summary
                 # value's own scale -- see `_fmt_covers_semantic_type`'s
                 # docstring.
+                #
+                # Codex round-14 finding: also validate an "integer"
+                # aggregate's `fmt_number(decimals=...)` actually renders
+                # a clean whole number -- see `_fmt_number_decimals_map`'s
+                # docstring.
                 if _fmt_covers_semantic_type(
                     semantic_type, effective_fmt, all_integral=_is_integral_value(cand_values.get(matched_col)),
                     scale_shape=_value_scale_shape(cand_values.get(matched_col)),
                     scale_values=scale_map.get(matched_col, scale_map.get(convergence._ALL_COLUMNS)),
+                    decimals=decimals_map.get(matched_col, decimals_map.get(convergence._ALL_COLUMNS)),
                 ):
                     covered_pairs += 1
             else:
@@ -4505,6 +4858,7 @@ def _fmt_covers_semantic_type(
     all_integral: bool,
     scale_shape: str | None = None,
     scale_values: object = None,
+    decimals: object = None,
 ) -> bool:
     """True if `effective_fmt` is an honest, accepted formatter for
     `sem_type`.
@@ -4550,6 +4904,22 @@ def _fmt_covers_semantic_type(
     actively penalized a candidate whose real (unknowable-from-source)
     value might well have been the correct `False`. The sentinel now
     skips this validation ENTIRELY rather than guessing.
+
+    Codex round-14 finding: `_SEMANTIC_TO_FMT["integer"]` accepts
+    `fmt_number` as well as `fmt_integer` -- reasonable IF `fmt_number`
+    is actually configured to render a clean whole number, but great_
+    tables' own `fmt_number` defaults `decimals=2` (verified against the
+    installed `great_tables` signature), NOT `0` -- so `.fmt_number(
+    columns="hp", decimals=2)` (or simply omitting `decimals=` entirely)
+    renders `"200.00"` for what should be a clean integer count, yet
+    still earned full credit purely from the method name. `decimals` is
+    the resolved literal `decimals=` text from `_fmt_number_decimals_map`
+    (`None` when no overlapping `fmt_number(...)` call ever touched this
+    column, which really does resolve to great_tables' own `2` default
+    with total confidence; `_UNRESOLVED_FMT_NUMBER_DECIMALS` when a call
+    DID target it but the argument itself is unresolvable, e.g. a
+    variable -- kept as benefit-of-the-doubt, same reasoning as `scale_
+    values`' identical sentinel just above).
     """
     if effective_fmt not in _SEMANTIC_TO_FMT.get(sem_type, set()):
         return False
@@ -4560,6 +4930,10 @@ def _fmt_covers_semantic_type(
         if scale_shape == "fractional" and effective_scale_values == "False":
             return False
         if scale_shape == "percentage_scale" and effective_scale_values == "True":
+            return False
+    if sem_type == "integer" and effective_fmt == "fmt_number" and decimals is not _UNRESOLVED_FMT_NUMBER_DECIMALS:
+        effective_decimals = decimals if decimals is not None else "2"
+        if effective_decimals != "0":
             return False
     return True
 
@@ -4597,10 +4971,11 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
     visible = _visible_columns(cand)
     fmt_map = cand["tier1"].get("fmt_column_map", {})
     scale_map = cand["tier1"].get("fmt_percent_scale_values_map", {})
+    decimals_map = cand["tier1"].get("fmt_number_decimals_map", {})
     ok_count = 0
     uncovered: list[str] = []
     for c, sem_type in semantic_types.items():
-        matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], c)
+        matched_col = _match_measure_by_value(cand, truth, c)
         effective_fmt = fmt_map.get(matched_col, fmt_map.get(convergence._ALL_COLUMNS)) if matched_col else None
         if (
             matched_col is not None
@@ -4609,6 +4984,7 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
                 sem_type, effective_fmt, all_integral=_column_values_are_integral(cand["tier2"], matched_col),
                 scale_shape=_values_scale_shape(cand["tier2"], matched_col),
                 scale_values=scale_map.get(matched_col, scale_map.get(convergence._ALL_COLUMNS)),
+                decimals=decimals_map.get(matched_col, decimals_map.get(convergence._ALL_COLUMNS)),
             )
         ):
             ok_count += 1
@@ -4736,7 +5112,7 @@ def check_hero_column_formatting(cand: dict, truth: dict, meta: dict) -> CheckRe
     colored_cols = {c for m in cand["tier1"].get("color_mechanics", []) for c in _mechanics_columns(m, cand)}
     covered = 0
     for m in hero_measures:
-        matched_col = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
+        matched_col = _match_measure_by_value(cand, truth, m)
         if matched_col and matched_col in bold_cols and matched_col not in colored_cols:
             covered += 1
     pts = _round_points_covered(covered, len(hero_measures), 2)
