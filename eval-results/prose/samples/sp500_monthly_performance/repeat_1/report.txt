@@ -1,0 +1,36 @@
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/sp500_monthly_performance/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/sp500_monthly_performance.py
+
+TOTAL: 52/101 (51.5%)
+  Data-compliance:        14/45
+  Formatting-compliance:  38/56
+
+[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[(None, 'apr 2010'), (None, 'apr 2011'), (None, 'apr 2012'), (None, 'apr 2013'), (None, 'apr 2014')], extra=[(None, '2010-01'), (None, '2010-02'), (None, '2010-03'), (None, '2010-04'), (None, '2010-05')]
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/6 canonical measures have a value-matching candidate column; unmatched: ['pct_change', 'best_day_gain', 'worst_day_loss', 'monthly_open', 'monthly_close', 'avg_volume']
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/3 canonical colored measures covered by a candidate color call
+[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
+[PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- visible-column overlap 0.00 (candidate-only=['% Change', 'Avg Volume', 'Close', 'Max Daily Gain', 'Max Daily Loss', 'Open', 'period'], missing=['avg_volume', 'best_day_gain', 'month_label', 'monthly_close', 'monthly_open', 'pct_change', 'worst_day_loss', 'year'])
+[N/A] [MECHANICAL] Grouping existence: 0/0 -- grouping is a discretionary editorial choice here (ground truth groups, but REQUIRED_INSTRUCTIONS has no 'grouping' key) -- judged separately by grouping_choice_quality, not scored as a strict presence match
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- REQUIRED_INSTRUCTIONS contains no 'grouping' key, but neither the ground truth nor the candidate explicitly uses row-level grouping to structure the table—both present a flat monthly time series. The table format is different (ground truth groups by year; candidate uses YYYY-MM stub labels), but neither is using great_tables row-group functionality, so this dimension does not apply.
+[FAIL] [MECHANICAL] Column-group spanners existence: 0/2 -- candidate spanner_present=False, truth=True
+[PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
+[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate labels 'Max Daily Gain' and 'Max Daily Loss' as dollar amounts, but the ground truth's metadata and caption clarify these should be percent changes (continuous day-over-day). The candidate renders them in dollars (e.g., '$17.31', '$25.31'), which fundamentally misrepresents their semantic type; they are percentages, not price deltas.
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
+[FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=OK; dividers=expected=True (gated on spanners), got=False
+[PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=72, fully_filled=False -> expected striping=True, actual=True
+[FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- stub=True, striped=True -> expected tint=False, actual=True
+[PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
+[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/6 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['monthly_open', 'monthly_close', 'pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss']
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
+[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- 0/3 canonical hero-uncolored measures are bolded
+[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
+[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate title 'S&P 500 Monthly Performance (2010-2015)' is clear and accurate, matching the ground truth's framing and core subject. However, it is slightly less descriptive than the ground truth's 'S&P 500 Monthly Performance, 2010–2015', though the difference is minor and both capture the same essential story.
+[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 4/5 -- The candidate subtitle 'Opening price, closing price, percent change, average daily volume, and highest single-day gain and loss within each month' clearly describes what is measured. It avoids the detailed methodological note about continuous day-over-day resets, but it does specify that gains/losses are 'within each month', adding clarifying context beyond the title without major redundancy.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (Month, Open, Close, % Change, Avg Volume, Max Daily Gain, Max Daily Loss) is sensible and mirrors the ground truth's essential logic: prices first, then performance metrics, then daily extremes. The order reads naturally and groups related concepts adjacently.
+[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a green–yellow–red diverging palette for % Change and orange–purple for the daily gain/loss columns, which is harmonious and semantically appropriate (green for gains, red for losses). The hues are slightly more muted than the ground truth's, but the overall effect is tasteful and the palette harmonizes well with the table's structure.
+[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 2/5 -- The candidate caption states formulas for calculating % Change, Max Daily Gain, and Max Daily Loss but omits the critical clarification that best/worst days use 'continuous' day-over-day change that is 'not reset' at month boundaries—a key distinction mentioned in the ground truth's caption and CAPTION_KEYWORDS. The caption adds some information but misses the essential methodological note.
