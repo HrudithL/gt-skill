@@ -501,6 +501,40 @@ def _blocks_target_table_png(
     return False
 
 
+def _walk_top_level(tree: ast.AST):
+    """Like `ast.walk`, but does NOT descend into the body of a `def`/
+    `class` statement -- yields every node reachable from `tree` WITHOUT
+    ever stepping inside a `FunctionDef`/`AsyncFunctionDef`/`ClassDef`'s
+    own body.
+
+    Codex round-9 finding: every AST-based call-detection helper in this
+    file (`_has_real_call`, `_ast_call_blocks`, `_ast_fmt_calls`)
+    previously used `ast.walk(tree)` unconditionally, which visits every
+    node in the WHOLE module, including ones nested inside a function or
+    class body -- a `.data_color(...)` call sitting inside a never-
+    invoked helper function (or a dead branch inside one) still counted
+    as real styling. A full fix would need actual reachability/call-graph
+    analysis -- real scope creep for a file that does no execution beyond
+    what Tier 2 already captures -- so this is the bounded, sufficient
+    fix instead: every ground truth/candidate in this corpus is written
+    as a linear TOP-LEVEL script, so restricting call detection to nodes
+    that are never nested inside a `def`/`class` body at all is
+    conservative (it can only under-count, never over-count, a call the
+    harness would actually execute) and sufficient for this corpus's
+    real shape. A call buried inside a function definition (called or
+    not) is unusual enough to exclude outright rather than try to prove
+    reachability.
+    """
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        yield node
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue  # do not descend into a def/class's own body
+            stack.append(child)
+
+
 def _has_real_call(source: str, func_name: str, *, allow_bare: bool = False) -> bool:
     """True if `source` contains a GENUINE `ast.Call` node naming
     `func_name` -- `allow_bare=True` also matches a bare call
@@ -528,7 +562,7 @@ def _has_real_call(source: str, func_name: str, *, allow_bare: bool = False) -> 
         tree = ast.parse(source)
     except SyntaxError:
         return False
-    for node in ast.walk(tree):
+    for node in _walk_top_level(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
@@ -1057,7 +1091,7 @@ def _ast_call_blocks(source: str, tree: ast.Module, func_name: str, allow_bare: 
     to preserve ordering.
     """
     out: list[tuple[tuple[int, int], str]] = []
-    for node in ast.walk(tree):
+    for node in _walk_top_level(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
@@ -1114,7 +1148,7 @@ def _ast_fmt_calls(source: str) -> list[tuple[str, str]]:
     except SyntaxError:
         return []
     out: list[tuple[tuple[int, int], str, str]] = []
-    for node in ast.walk(tree):
+    for node in _walk_top_level(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
@@ -1229,6 +1263,56 @@ def _is_unresolvable_columns_selector(cols_val: str) -> bool:
 # to it") treatment.
 _UNRESOLVED_COLUMNS = object()
 
+# `heatmap()`'s own hue->palette resolution table, mirroring `.claude/
+# skills/great-tables-ci/scripts/gt_consistency.py`'s `PALETTE["sequential"]`/
+# `PALETTE["diverging"]` dicts and its `_resolve_palette(kind, hue)` helper
+# EXACTLY (`colorblind_safe` resolves to the FIRST of its two alternatives,
+# `["RdBu", "PuOr"]`, same as `_resolve_palette` itself does for a
+# list-valued diverging entry) -- see `_resolve_heatmap_palette` below.
+_HEATMAP_SEQUENTIAL_HUE_TO_PALETTE = {
+    "positive": "Greens",
+    "warning": "Reds",
+    "warning_alt": "Oranges",
+    "neutral": "Blues",
+}
+_HEATMAP_DIVERGING_HUE_TO_PALETTE = {
+    "default": "RdYlGn",
+    "colorblind_safe": "RdBu",
+}
+
+
+def _resolve_heatmap_palette(kind: str | None, hue: str | None) -> str | None:
+    """Mirror `gt_consistency.py`'s own `_resolve_palette(kind, hue)`: a
+    `heatmap(..., hue=...)` call's `hue` is a SEMANTIC KEY (e.g.
+    `"neutral"`, `"positive"`) resolved to an actual ColorBrewer palette
+    NAME at runtime through the skill's own `PALETTE` dict -- NOT the
+    effective color itself. An explicit palette name (or DA-family name,
+    e.g. `hue="navy"`) that isn't one of the recognized semantic keys
+    passes through unchanged, exactly as `_resolve_palette` does for "any
+    other literal the model chose directly."
+
+    Codex round-9 finding: `_enrich_color_mechanics`'s heatmap branch
+    stored the RAW `hue=` key directly as `"palette"` -- so `heatmap(...,
+    kind="sequential", hue="neutral")` (which `gt_consistency.py` itself
+    resolves to the `"Blues"` palette at runtime) couldn't be connected
+    to the navy DA-family for band harmonization (`_SEQ_PALETTE_TO_DA_
+    FAMILY`, keyed on ColorBrewer names), and couldn't be detected as
+    colliding with a literal `data_color(..., palette="Blues")` call on a
+    DIFFERENT measure, even though both render the exact same effective
+    color. `hue="navy"` (a DA-family name passed directly, per round-2's
+    own finding on this same branch) still passes through unresolved
+    here, unchanged from before -- `check_band_hue_harmonization`'s
+    existing `elif sole_palette in _EXTENDED_FAMILY_HEXES` branch already
+    handles that case correctly.
+    """
+    if hue is None:
+        return None
+    if kind == "sequential":
+        return _HEATMAP_SEQUENTIAL_HUE_TO_PALETTE.get(hue, hue)
+    if kind == "diverging":
+        return _HEATMAP_DIVERGING_HUE_TO_PALETTE.get(hue, hue)
+    return hue
+
 
 def _enrich_color_mechanics(source: str) -> list[dict]:
     """One dict per colored-measure call (`data_color`/`heatmap`), in TRUE
@@ -1340,12 +1424,21 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
         else:
             resolved_heatmap_columns = convergence._resolve_columns_list(heatmap_cols_val, var_map)
         hue_raw = convergence._kwarg_value(block, "hue")
+        kind_literal = _quoted_string_literal_value(convergence._kwarg_value(block, "kind"))
+        hue_literal = _quoted_string_literal_value(hue_raw)
+        # Codex round-9 finding: `hue=` is a SEMANTIC KEY (e.g. "neutral")
+        # resolved to an actual palette NAME ("Blues") at runtime by the
+        # skill's own `_resolve_palette` -- storing the raw key here (as
+        # this used to) made a helper call invisible to band-harmonization
+        # and hue-collision checks that key on the ACTUAL ColorBrewer
+        # name. See `_resolve_heatmap_palette`'s own docstring.
+        resolved_palette = _resolve_heatmap_palette(kind_literal, hue_literal)
         entries.append((pos, {
             "columns": resolved_heatmap_columns,
-            "palette": _quoted_string_literal_value(hue_raw) or "default",
+            "palette": resolved_palette or "default",
             "palette_raw": hue_raw.strip() if hue_raw else None,
             "domain": convergence._kwarg_value(block, "domain"),
-            "kind": _quoted_string_literal_value(convergence._kwarg_value(block, "kind")),
+            "kind": kind_literal,
             "na_color": "#808080",
             "truncate": "False",
             "autocolor_text": "True",
@@ -1859,9 +1952,9 @@ def _row_multiset_identity(
 ) -> dict:
     """Like `execution_tier.row_set_identity`, but falls back to a
     MULTISET (duplicate-COUNT-preserving) comparison of bare row ids,
-    instead of that function's own bare-SET fallback, specifically when
-    grouping is present on exactly one side and at least one side's row
-    ids contain duplicates.
+    instead of that function's own bare-SET fallback, whenever grouping
+    ISN'T usable on both sides at once and at least one side's row ids
+    contain duplicates.
 
     Codex round-7 finding: `execution_tier.row_set_identity` only keys by
     `(group_id, row_id)` when BOTH sides supply group ids (`use_groups =
@@ -1877,14 +1970,25 @@ def _row_multiset_identity(
     reporting a false `exact=True` row-identity match despite covering
     only 1/6th of the required rows.
 
+    Codex round-9 finding: round 7's fix only triggered when grouping was
+    genuinely ASYMMETRIC (one side grouped, one not) -- but the identical
+    duplicate-row-dodging problem exists whenever grouping ISN'T usable
+    on BOTH sides, including the plain case where NEITHER side groups at
+    all (e.g. `islands_sizes`/`gtcars_hp_price`, which have no `row_count`
+    instruction to catch it separately) -- a candidate could simply
+    duplicate an existing row and still report a false `exact=True`
+    against `execution_tier.row_set_identity`'s bare-set fallback.
+    Triggers whenever `use_groups` is False (not just when it's False
+    AND grouping is asymmetric) and either side has a genuine duplicate.
+
     `runner/execution_tier.py` is a hard non-goal for this slice, so this
     wraps it rather than editing it: delegate straight through for every
     case that function already gets right (either side `None`, both-
-    grouped, both-ungrouped, or grouped-on-exactly-one-side but with no
-    actual duplicate row ids to lose), and only take over the comparison
+    grouped, or ungrouped-on-at-least-one-side but with no actual
+    duplicate row ids to lose), and only take over the comparison
     directly -- via `Counter` multisets, ignoring group labels on the
-    grouped side too since only one side has them to compare against --
-    for the narrow case its own set-based fallback mishandles.
+    grouped side too when only one side has them to compare against --
+    for the case its own set-based fallback mishandles.
     """
     if candidate_row_ids is None or truth_row_ids is None:
         return execution_tier.row_set_identity(
@@ -1892,11 +1996,10 @@ def _row_multiset_identity(
             candidate_group_ids=candidate_group_ids, truth_group_ids=truth_group_ids,
         )
     use_groups = bool(candidate_group_ids) and bool(truth_group_ids)
-    asymmetric_grouping = bool(candidate_group_ids) != bool(truth_group_ids)
     cand_norm = [execution_tier.normalize_id(r) for r in candidate_row_ids]
     truth_norm = [execution_tier.normalize_id(r) for r in truth_row_ids]
     has_duplicates = len(cand_norm) != len(set(cand_norm)) or len(truth_norm) != len(set(truth_norm))
-    if use_groups or not (asymmetric_grouping and has_duplicates):
+    if use_groups or not has_duplicates:
         return execution_tier.row_set_identity(
             candidate_row_ids, truth_row_ids,
             candidate_group_ids=candidate_group_ids, truth_group_ids=truth_group_ids,
@@ -2807,6 +2910,19 @@ def _domain_element_symmetric(lo: str, hi: str, value_range: tuple[float, float]
         # domain expression elsewhere in this check (a bare variable
         # reference, an entirely non-bracketed expression, etc.).
         return True
+    # Codex round-9 finding: `domain=[-1e309, 1e309]` parses to Python
+    # floats `-inf`/`inf` (both magnitudes exceed float max ~1.8e308) --
+    # `flo < 0 < fhi` and `math.isclose(flo, -fhi, ...)` (which special-
+    # cases equal infinities as "close") both pass as if genuinely
+    # symmetric, and the coverage check below (`flo <= actual_lo and fhi
+    # >= actual_hi`) is trivially satisfied by ANY finite data range too
+    # -- but an infinite domain collapses ALL real data to the palette
+    # midpoint, defeating the entire point of data-driven coloring. A
+    # resolved-but-non-finite literal is a real, provable failure, not
+    # benefit-of-the-doubt territory (contrast with the `ValueError`
+    # branch above, which is for genuinely UNRESOLVABLE expressions).
+    if not (math.isfinite(flo) and math.isfinite(fhi)):
+        return False
     # Require an actually-negative lower bound and an actually-positive
     # upper bound, not just equal magnitudes -- a collapsed `[0, 0]` domain
     # (zero-width; every value maps to the same color) and a REVERSED
@@ -2924,12 +3040,23 @@ def check_domain_computation(cand: dict, truth: dict, meta: dict) -> CheckResult
                 except ValueError:
                     ok = True
                 else:
-                    value_range = _actual_value_range(cand, _mechanics_columns(entry, cand))
-                    if value_range is None:
-                        ok = True
+                    # Codex round-9 finding: same non-finite-domain gap as
+                    # `_domain_element_symmetric`'s diverging branch --
+                    # `[-1e309, 1e309]` parses to `-inf`/`inf`, and
+                    # `flo < fhi and flo <= actual_lo and fhi >= actual_hi`
+                    # is trivially true for ANY finite data range despite
+                    # an infinite domain collapsing every real value to
+                    # the palette midpoint. Require both endpoints finite
+                    # before any other validation runs.
+                    if not (math.isfinite(flo) and math.isfinite(fhi)):
+                        ok = False
                     else:
-                        actual_lo, actual_hi = value_range
-                        ok = flo < fhi and flo <= actual_lo and fhi >= actual_hi
+                        value_range = _actual_value_range(cand, _mechanics_columns(entry, cand))
+                        if value_range is None:
+                            ok = True
+                        else:
+                            actual_lo, actual_hi = value_range
+                            ok = flo < fhi and flo <= actual_lo and fhi >= actual_hi
         correct += 1 if ok else 0
         if not ok:
             notes.append(f"measure {i} ({entry.get('columns')}): domain '{dom}' doesn't match a {shape} shape")
