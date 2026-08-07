@@ -375,11 +375,18 @@ def _stub_tint_present(source: str) -> bool:
     the LAST one actually determines the stub's final rendered fill.
     Every stub-scoped call is now collected first, in source order, and
     only the LAST one is evaluated.
+
+    Codex round-12 finding (comprehensive sweep): scanned via `convergence.
+    _call_arg_blocks` (a source-wide regex with no comment/string
+    stripping) -- the same recurring bug class already fixed for stub_
+    tint_hue/color-mechanics/frame/fmt_*/tab_options-band-color/
+    opt_row_striping/hairlines-dividers-options detection elsewhere in
+    this file. Switched to `_ast_call_arg_blocks` (AST-based).
     """
     if _find_stub_tint_hue_local(source) is not None:
         return True
     stub_blocks: list[str] = []
-    for block in convergence._call_arg_blocks(source, "tab_style"):
+    for block in _ast_call_arg_blocks(source, "tab_style"):
         loc_val = convergence._kwarg_value(block, "locations")
         if loc_val is None:
             positionals = [
@@ -703,27 +710,43 @@ def _frame_present(source: str) -> bool:
         # occurrence in the whole source -- a script setting an initial
         # border and overriding it later (or repeating the kwarg across
         # chained `.tab_options(...)` calls) had the ORIGINAL, overridden
-        # value trusted instead of the one actually rendered. `re.findall`
-        # + the last match mirrors `_option_line_present`'s existing
-        # "last occurrence wins" handling of the exact same `table_border_
-        # *`-shaped `.tab_options(...)` kwargs for hairlines/dividers.
-        style_matches = re.findall(rf"table_border_{side}_style\s*=\s*([^\s,)]+)", source)
-        width_matches = re.findall(rf"table_border_{side}_width\s*=\s*([^\s,)]+)", source)
-        color_matches = re.findall(rf"table_border_{side}_color\s*=\s*([^\s,)]+)", source)
-        if not (style_matches or width_matches or color_matches):
+        # value trusted instead of the one actually rendered.
+        #
+        # Codex round-12 finding (proactive AST conversion): this scanned
+        # raw SOURCE TEXT via `re.findall`, with no comment/string
+        # stripping -- the same recurring bug class already fixed for
+        # `_option_line_present`/stub_tint/color-mechanics/etc. Extracts
+        # from genuine `.tab_options(...)` AST call blocks (via `_ast_
+        # call_arg_blocks`) instead, still taking the LAST occurrence of
+        # each attribute across ALL real calls.
+        style, width, color = None, None, None
+        for block in _ast_call_arg_blocks(source, "tab_options"):
+            style_val = convergence._kwarg_value(block, f"table_border_{side}_style")
+            literal = _quoted_string_literal_value(style_val) if style_val is not None else None
+            if literal is not None:
+                style = literal
+            width_val = convergence._kwarg_value(block, f"table_border_{side}_width")
+            literal_w = _quoted_string_literal_value(width_val) if width_val is not None else None
+            if literal_w is not None:
+                width = literal_w
+            color_val = convergence._kwarg_value(block, f"table_border_{side}_color")
+            literal_c = _quoted_string_literal_value(color_val) if color_val is not None else None
+            if literal_c is not None:
+                color = literal_c
+        # Codex round-12 finding: this previously accepted ANY ONE of
+        # style/width/color as sufficient to proceed -- so setting ONLY
+        # `table_border_{side}_color`/`_width` (no style at all) skipped
+        # the (empty) style check entirely and returned True. But
+        # great_tables defaults the side border STYLE to `"none"`
+        # regardless of color/width -- an explicit, non-disabling style is
+        # REQUIRED for this side to render at all, not merely checked
+        # when present.
+        if style is None or style.strip().lower() in ("none", "hidden", ""):
             return False
-        if style_matches:
-            s = convergence._unquote(style_matches[-1])
-            if s and s.strip().lower() in ("none", "hidden"):
-                return False
-        if width_matches:
-            w = convergence._unquote(width_matches[-1])
-            if w and convergence._is_zero_length(w):
-                return False
-        if color_matches:
-            col = convergence._unquote(color_matches[-1])
-            if col and _is_effectively_transparent(col.strip()):
-                return False
+        if width is not None and convergence._is_zero_length(width):
+            return False
+        if color is not None and _is_effectively_transparent(color.strip()):
+            return False
         return True
 
     # Codex round-10 finding: BOTH sides must be independently visible --
@@ -760,8 +783,13 @@ def _has_visible_tab_style_border(source: str, side_pattern: str, location_patte
     (both drawn so the seam runs the table's full height) -- callers pass
     the `locations` pattern actually associated with what they're
     checking (`_hairlines_present`/`_dividers_present` below).
+
+    Codex round-12 finding (comprehensive sweep): scanned via `convergence.
+    _call_arg_blocks` (a source-wide regex with no comment/string
+    stripping) -- the same recurring bug class already fixed elsewhere in
+    this file. Switched to `_ast_call_arg_blocks` (AST-based).
     """
-    for block in convergence._call_arg_blocks(source, "tab_style"):
+    for block in _ast_call_arg_blocks(source, "tab_style"):
         style_val = convergence._kwarg_value(block, "style")
         if style_val is None:
             positionals = [
@@ -830,10 +858,30 @@ def _option_line_present(source: str, prefix: str) -> bool | None:
     ONE of them indicating invisibility (an explicit `"none"`/`"hidden"`
     style, a zero-length width, or an effectively-transparent color) is
     authoritative and disables it, regardless of what the others say.
+
+    Codex round-12 finding: this scanned raw SOURCE TEXT via `re.findall`,
+    with no comment/string stripping at all -- the same recurring source-
+    wide-regex bug class already fixed for stub_tint/color-mechanics/
+    frame/fmt_*/heading-band-color/opt_row_striping detection: a comment
+    mentioning `table_body_hlines_style="solid"` (or `"none"`) is
+    misdetected as a real, score-affecting option. Extracts from genuine
+    `.tab_options(...)` AST call blocks (via `_ast_call_arg_blocks`,
+    already scoped to top-level-only calls per the round-9 `_walk_top_
+    level` fix) instead of raw text -- still takes the LAST occurrence of
+    each attribute ACROSS ALL real `tab_options()` calls, preserving the
+    existing override-resolution behavior, and still only accepts a
+    genuine quoted string literal as a value (via `_quoted_string_
+    literal_value`), matching the original regex's own "only ever a
+    quoted literal, never a bare variable" behavior exactly.
     """
     def _last(attr: str) -> str | None:
-        matches = re.findall(rf"{re.escape(prefix)}_{attr}\s*=\s*['\"]([^'\"]+)['\"]", source)
-        return matches[-1] if matches else None
+        last_val = None
+        for block in _ast_call_arg_blocks(source, "tab_options"):
+            val = convergence._kwarg_value(block, f"{prefix}_{attr}")
+            literal = _quoted_string_literal_value(val) if val is not None else None
+            if literal is not None:
+                last_val = literal
+        return last_val
 
     style = _last("style")
     width = _last("width")
@@ -950,13 +998,27 @@ def _striping_present(source: str) -> bool:
     # setting `row_striping_include_table_body=True` once and later
     # `=False`, across repeated/chained `.tab_options(...)` calls, had the
     # ORIGINAL value trusted instead of the one actually rendered.
-    # `re.findall` + the last match mirrors `_option_line_present`'s
-    # existing pattern for the exact same `.tab_options(...)`-kwarg-
-    # repetition shape.
-    include_matches = re.findall(r"row_striping_include_table_body\s*=\s*(\w+)", source)
-    if include_matches and include_matches[-1] == "True":
+    #
+    # Codex round-12 finding (comprehensive sweep): the round-8 fix still
+    # scanned raw SOURCE TEXT via `re.findall`, with no comment/string
+    # stripping -- a comment mentioning `row_striping_include_table_body=
+    # True` was misdetected as a real, later-overriding option. Extracts
+    # from genuine `.tab_options(...)` AST call blocks (via `_ast_call_
+    # arg_blocks`) instead, still taking the LAST occurrence across ALL
+    # real calls.
+    include_val = None
+    for block in _ast_call_arg_blocks(source, "tab_options"):
+        val = convergence._kwarg_value(block, "row_striping_include_table_body")
+        if val is not None:
+            include_val = val.strip()
+    if include_val == "True":
         return True
-    if convergence._bare_call_blocks(source, "stripe"):
+    # Codex round-12 finding (comprehensive sweep): `convergence._bare_
+    # call_blocks` is a source-wide regex with no comment/string
+    # stripping -- a comment or docstring mentioning `stripe(` was
+    # misdetected as a real call. `_ast_call_arg_blocks(..., allow_bare=
+    # True)` (AST-based) instead.
+    if _ast_call_arg_blocks(source, "stripe", allow_bare=True):
         return True
     return False
 
@@ -986,6 +1048,85 @@ def _render_call_present(source: str) -> bool:
         return True
     finalize_blocks = _ast_call_blocks(source, tree, "finalize", allow_bare=True)
     return _blocks_target_table_png(finalize_blocks, "path", 1, var_literals)
+
+
+def _render_params_local(source: str) -> dict:
+    """Local replacement for `convergence._render_params`: `zoom`/
+    `expand`/`vwidth`/`vheight` off the SAME render call `_render_call_
+    present` determines actually produced `table.png` -- reusing its
+    exact per-call resolved-target binding (`_ast_call_blocks` +
+    `_render_target_var_literals`) instead of a separate, target-unaware
+    "prefers a literal table.png text match" parser.
+
+    Codex round-12 finding: `convergence._render_params` (off-limits) can
+    only recognize a call as "targeting table.png" via its OWN literal-
+    text check -- it has no knowledge of the per-call variable-resolution
+    binding `_render_target_var_literals` (built in round 7/8
+    specifically for `_render_call_present`). So `output = "table.png";
+    gt.gtsave(output, zoom=2.0)` (correct) followed by an unrelated
+    `gt.gtsave("backup.png", zoom=1.0)` had `render_call_present`
+    correctly recognize the FIRST call as the one producing `table.png`
+    (via the smarter binding), while `render_params` independently fell
+    back to ITS OWN "last call overall" default (since NEITHER call
+    textually/literally mentions "table.png" from its naive perspective)
+    and scored the SECOND, unrelated call's zoom/expand values instead.
+    Ported the same target-selection SHAPE `convergence._render_params`
+    uses (prefer a call resolving to table.png; last-write-wins among
+    multiple such calls; fall back to the overall last call when none
+    resolves to table.png at all) but through the shared, smarter
+    resolution machinery, so both checks agree on WHICH call actually
+    produced the mandated artifact.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+    var_literals = _render_target_var_literals(source, tree)
+
+    def _call_targets_table_png(pos: tuple[int, int], block: str, path_kwarg: str, path_index: int) -> bool:
+        path_val = convergence._kwarg_value(block, path_kwarg)
+        if path_val is None:
+            positionals = [
+                p for p in convergence._split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            path_val = positionals[path_index] if len(positionals) > path_index else None
+        if path_val is None:
+            return False
+        stripped = path_val.strip()
+        if re.fullmatch(r"[A-Za-z_]\w*", stripped) and pos in var_literals:
+            return convergence._targets_table_png(var_literals[pos])
+        return _is_static_string_literal(stripped) and convergence._targets_table_png(path_val)
+
+    def _extract_params(block: str, defaults: dict[str, str]) -> dict:
+        # Same **overrides/**{...} guard as convergence._render_params --
+        # an expansion can override the materialized defaults with values
+        # this parser can't see.
+        if any(p.strip().startswith("**") for p in convergence._split_top_level(block)):
+            return {}
+        out = dict(defaults)
+        for kw in ("zoom", "expand", "vwidth", "vheight"):
+            v = convergence._kwarg_value(block, kw)
+            if v is not None:
+                out[kw] = v.strip()
+        return out
+
+    gtsave_blocks = sorted(_ast_call_blocks(source, tree, "gtsave", allow_bare=False), key=lambda b: b[0])
+    if gtsave_blocks:
+        chosen_pos, chosen_block = gtsave_blocks[-1]  # last-wins default when none resolves to table.png
+        for pos, block in gtsave_blocks:
+            if _call_targets_table_png(pos, block, "file", 0):
+                chosen_pos, chosen_block = pos, block  # keep scanning -- a LATER table.png write wins
+        return _extract_params(chosen_block, {"zoom": "2.0", "expand": "5"})
+
+    finalize_blocks = sorted(_ast_call_blocks(source, tree, "finalize", allow_bare=True), key=lambda b: b[0])
+    if finalize_blocks:
+        chosen_pos, chosen_block = finalize_blocks[-1]
+        for pos, block in finalize_blocks:
+            if _call_targets_table_png(pos, block, "path", 1):
+                chosen_pos, chosen_block = pos, block
+        return _extract_params(chosen_block, {"expand": "15", "zoom": "2.0"})
+
+    return {}
 
 
 def _tab_header_kwarg_present(source: str, kwarg: str) -> bool:
@@ -1022,6 +1163,13 @@ def _tab_header_kwarg_present(source: str, kwarg: str) -> bool:
     (a variable, an f-string with interpolation) -- there's nothing further
     to verify from static text alone -- but a value that resolves to
     exactly `None` or `""` is provably absent, not merely un-checkable.
+
+    Codex round-12 finding (comprehensive sweep): call sites were located
+    via `convergence._call_arg_blocks` (a source-wide regex with no
+    comment/string stripping) -- the same recurring bug class already
+    fixed elsewhere in this file: a comment or docstring mentioning
+    `tab_header(` was misdetected as a real call. Switched to `_ast_
+    call_arg_blocks` (AST-based).
     """
 
     def _value_present(val: str | None) -> bool:
@@ -1034,7 +1182,7 @@ def _tab_header_kwarg_present(source: str, kwarg: str) -> bool:
             return False
         return True
 
-    blocks = convergence._call_arg_blocks(source, "tab_header")
+    blocks = _ast_call_arg_blocks(source, "tab_header")
     if not blocks:
         return False
     block = blocks[-1]
@@ -1464,6 +1612,20 @@ def _cs_selector_matches(kind: str, pattern: str, column: str) -> bool:
 # to it") treatment.
 _UNRESOLVED_COLUMNS = object()
 
+# A distinct sentinel for "a `.fmt_percent(...)` call's `scale_values=`
+# argument IS present but its value is genuinely UNRESOLVABLE from static
+# text" (a variable, an expression) -- deliberately NOT the same as `None`,
+# which `_fmt_percent_scale_values_map`'s callers get from a plain
+# `dict.get()` miss (a column NEVER touched by any `fmt_percent(...)` call
+# at all, which really does resolve to great_tables' own `True` default with
+# total confidence). Codex round-12 finding: collapsing "explicitly
+# unresolvable" and "never set" into the same bare `None` made `_fmt_covers_
+# semantic_type` default an UNRESOLVABLE override to `"True"` for validation
+# purposes -- correct benefit-of-the-doubt when the matched column's data is
+# fractional (True is right), but an active WRONG-answer assumption when the
+# data is percentage-scale (False is right) -- rather than a genuine "don't
+# penalize either way" skip.
+_UNRESOLVED_SCALE_VALUES = object()
 # `heatmap()`'s own hue->palette resolution table, mirroring `.claude/
 # skills/great-tables-ci/scripts/gt_consistency.py`'s `PALETTE["sequential"]`/
 # `PALETTE["diverging"]` dicts and its `_resolve_palette(kind, hue)` helper
@@ -1767,19 +1929,25 @@ def _fmt_column_map(source: str, visible_columns: set[str] | None = None) -> dic
     return out
 
 
-def _fmt_percent_scale_values_map(source: str, visible_columns: set[str] | None) -> dict[str, str]:
-    """`{column-or-_ALL_COLUMNS -> the resolved LITERAL `scale_values=`
-    text}` for every `.fmt_percent(...)` call, using the same column-
-    resolution (positional/`_ALL_COLUMNS` sentinel/`cs.*` selector) as
-    `_fmt_column_map`, but tracking `scale_values` instead of the
-    formatter name -- the one kwarg that changes what the RENDERED VALUE
-    actually looks like for `fmt_percent` specifically (great_tables
-    multiplies by 100 when `scale_values=True`, its own default, and does
-    NOT when `False`). A LATER call overrides an earlier one for the same
-    column, same "last call wins" convention used throughout this file.
-    Only a genuine `"True"`/`"False"` literal is ever recorded; an
-    omitted or unresolvable value simply adds no entry, leaving the
-    caller's own default/benefit-of-the-doubt handling in charge.
+def _fmt_percent_scale_values_map(source: str, visible_columns: set[str] | None) -> dict[str, object]:
+    """`{column-or-_ALL_COLUMNS -> the resolved `scale_values=` state}`
+    for every `.fmt_percent(...)` call, using the same column-resolution
+    (positional/`_ALL_COLUMNS` sentinel/`cs.*` selector) as `_fmt_column_
+    map`, but tracking `scale_values` instead of the formatter name --
+    the one kwarg that changes what the RENDERED VALUE actually looks
+    like for `fmt_percent` specifically (great_tables multiplies by 100
+    when `scale_values=True`, its own default, and does NOT when
+    `False`). A LATER call overrides an earlier one for the same column,
+    same "last call wins" convention used throughout this file. A value
+    is either `"True"`/`"False"` (a resolved literal -- an OMITTED kwarg
+    resolves to `"True"`, great_tables' own default, not "nothing to
+    record") or `_UNRESOLVED_SCALE_VALUES` (explicitly present but
+    UNRESOLVABLE, e.g. a variable) -- the sentinel still overrides/clears
+    whatever an earlier call recorded for the same column, since the
+    later call is what actually determines the final rendered state even
+    though this file can't see what it resolves to; it's deliberately
+    NOT plain `None` (see that sentinel's own module-level comment for
+    why the distinction matters to `_fmt_covers_semantic_type`).
 
     Codex round-11 finding: a candidate using `fmt_percent(columns=...,
     scale_values=False)` on genuinely FRACTIONAL ratio data (e.g. 0.05 to
@@ -1790,6 +1958,20 @@ def _fmt_percent_scale_values_map(source: str, visible_columns: set[str] | None)
     never this kwarg. See `_fmt_covers_semantic_type`'s own docstring for
     how this map's output is actually validated against the matched
     column's real data shape.
+
+    Codex round-12 finding: the round-11 version `continue`d (recorded
+    nothing at all) whenever `scale_values` was omitted OR unresolvable,
+    which left a STALE earlier value in place for either case -- a LATER
+    `fmt_percent(columns="rate")` (omitting `scale_values`, meaning
+    "restore the True default") didn't override an earlier call's
+    recorded `scale_values=False` for the same column at all. Omitted now
+    resolves to the explicit literal `"True"` (great_tables' real
+    default); a present-but-unresolvable value now explicitly clears
+    (`_UNRESOLVED_SCALE_VALUES`) any prior entry for its columns instead
+    of leaving it untouched, so a caller's `dict.get(col, dict.get(
+    _ALL_COLUMNS))` lookup correctly stops at the sentinel rather than
+    silently falling through to an unrelated, possibly stale `_ALL_
+    COLUMNS` default.
     """
     var_map = convergence._list_var_map(source)
 
@@ -1801,7 +1983,7 @@ def _fmt_percent_scale_values_map(source: str, visible_columns: set[str] | None)
                 return sorted(c for c in visible_columns if _cs_selector_matches(kind, pattern, c))
         return convergence._resolve_columns_list(val, var_map)
 
-    out: dict[str, str] = {}
+    out: dict[str, object] = {}
     for name, block in _ast_fmt_calls(source):
         if name != "fmt_percent":
             continue
@@ -1813,9 +1995,20 @@ def _fmt_percent_scale_values_map(source: str, visible_columns: set[str] | None)
         if val is None:
             val = positionals[0] if positionals else None
         scale_val = convergence._kwarg_value(block, "scale_values")
-        scale_literal = convergence._unquote(scale_val).strip() if scale_val else None
-        if scale_literal not in ("True", "False"):
-            continue  # omitted, or a non-literal expression -- nothing to record
+        if scale_val is None:
+            # Genuinely omitted from this call -- great_tables' own
+            # default (True) applies, explicitly overriding whatever an
+            # earlier call recorded for these columns.
+            scale_literal: object = "True"
+        else:
+            unquoted = convergence._unquote(scale_val)
+            resolved = unquoted.strip() if unquoted else None
+            # Present but not a plain True/False literal (a variable, an
+            # expression) -- unresolvable, but this call still OVERRIDES
+            # any earlier recorded value for these columns;
+            # `_UNRESOLVED_SCALE_VALUES` marks that explicitly rather
+            # than leaving the stale entry alone.
+            scale_literal = resolved if resolved in ("True", "False") else _UNRESOLVED_SCALE_VALUES
         if val is None or val.strip() == "None":
             out[convergence._ALL_COLUMNS] = scale_literal
             continue
@@ -1916,6 +2109,12 @@ def build_fingerprint(py_path: Path) -> dict:
     tier1["color_mechanics"] = _enrich_color_mechanics(source)
     tier1["stub_tint_present"] = _stub_tint_present(source)
     tier1["render_call_present"] = _render_call_present(source)
+    # Codex round-12 finding: convergence.py's own `render_params` can
+    # only recognize a call as "targeting table.png" via a literal-text
+    # check, with no knowledge of the per-call variable-resolution
+    # binding `render_call_present` (just above) uses -- see `_render_
+    # params_local`'s own docstring.
+    tier1["render_params"] = _render_params_local(source)
     # Codex round-2 finding: convergence.py's own `frame_present` is a bare
     # token search that doesn't check whether the border option's actual
     # value is visible (nonzero width, non-"none" style, non-transparent
@@ -2120,14 +2319,40 @@ def _distinct_colored_measures(mechanics: list[dict], fp: dict) -> list[dict]:
     iteration order (mirrors round-2's hue-collision fix, which stopped
     trusting Python's hash-randomized set order for this same kind of
     dedup).
+
+    Codex round-12 finding (comprehensive sweep): the dedup key's
+    `columns` didn't intersect with `fp`'s actually-VISIBLE columns -- a
+    colored measure entirely hidden via `cols_hide(...)` still counted as
+    a real, distinct measure toward the ceiling (`check_colored_measure_
+    selection`), hue-collision detection (`check_hue_collision`), and the
+    "is there a sole measure to harmonize the band to" test (`check_band_
+    hue_harmonization`) -- all three exist to police what's ACTUALLY
+    VISIBLE on the rendered table, not raw call syntax. An entry whose
+    resolved columns have NO overlap with the visible-column set
+    contributes nothing and is dropped entirely; an entry with a PARTIAL
+    overlap (some, but not all, target columns hidden) is deduplicated by
+    its VISIBLE subset only. Deliberately NOT applied to `_mechanics_
+    columns` itself -- the domain/shape-validation checks need the FULL
+    target list regardless of visibility, since a hidden column's
+    underlying data and color mechanics are still real and worth
+    validating; only the "how many/which VISIBLE distinct measures exist"
+    question this function answers needs the filter.
     """
+    visible = _visible_columns(fp)
+
+    def _visible_cols(m: dict) -> tuple:
+        return tuple(sorted(set(_mechanics_columns(m, fp)) & visible))
+
     seen: dict[tuple, dict] = {}
     for m in mechanics:
-        key = (m.get("palette"), m.get("domain"), tuple(_mechanics_columns(m, fp)))
+        cols = _visible_cols(m)
+        if not cols:
+            continue
+        key = (m.get("palette"), m.get("domain"), cols)
         seen.setdefault(key, m)
     return sorted(
         seen.values(),
-        key=lambda m: ((m.get("palette") or ""), (m.get("domain") or ""), tuple(_mechanics_columns(m, fp))),
+        key=lambda m: ((m.get("palette") or ""), (m.get("domain") or ""), _visible_cols(m)),
     )
 
 
@@ -2359,6 +2584,20 @@ def _row_multiset_identity(
     directly -- via `Counter` multisets, ignoring group labels on the
     grouped side too when only one side has them to compare against --
     for the case its own set-based fallback mishandles.
+    Codex round-12 finding: this only ever took over the comparison for
+    `use_groups=False` (asymmetric grouping, or neither side grouped) --
+    when BOTH sides are grouped, it always delegated straight to
+    `execution_tier.row_set_identity`, which keys by `(group_id, row_id)`
+    but STILL as a bare Python `set`, collapsing repeats. A candidate
+    that duplicates a row WITHIN one group (two "January" entries in the
+    same year, alongside the ground truth's one) has both entries
+    collapse to the SAME `(group, row)` set element, silently hiding the
+    extra/duplicate row and potentially still reporting a false
+    `exact=True`. Generalized to key by `(group_id, row_id)` tuples when
+    `use_groups` is True and by bare `row_id` otherwise (unchanged), and
+    to check for duplicates -- and take over via multiset comparison --
+    under EITHER keying scheme, covering all three grouping
+    configurations (asymmetric, both-grouped, both-ungrouped) uniformly.
     """
     if candidate_row_ids is None or truth_row_ids is None:
         return execution_tier.row_set_identity(
@@ -2366,15 +2605,25 @@ def _row_multiset_identity(
             candidate_group_ids=candidate_group_ids, truth_group_ids=truth_group_ids,
         )
     use_groups = bool(candidate_group_ids) and bool(truth_group_ids)
-    cand_norm = [execution_tier.normalize_id(r) for r in candidate_row_ids]
-    truth_norm = [execution_tier.normalize_id(r) for r in truth_row_ids]
-    has_duplicates = len(cand_norm) != len(set(cand_norm)) or len(truth_norm) != len(set(truth_norm))
-    if use_groups or not has_duplicates:
+    if use_groups:
+        cand_keys = [
+            (execution_tier.normalize_id(g), execution_tier.normalize_id(r))
+            for r, g in zip(candidate_row_ids, candidate_group_ids)
+        ]
+        truth_keys = [
+            (execution_tier.normalize_id(g), execution_tier.normalize_id(r))
+            for r, g in zip(truth_row_ids, truth_group_ids)
+        ]
+    else:
+        cand_keys = [execution_tier.normalize_id(r) for r in candidate_row_ids]
+        truth_keys = [execution_tier.normalize_id(r) for r in truth_row_ids]
+    has_duplicates = len(cand_keys) != len(set(cand_keys)) or len(truth_keys) != len(set(truth_keys))
+    if not has_duplicates:
         return execution_tier.row_set_identity(
             candidate_row_ids, truth_row_ids,
             candidate_group_ids=candidate_group_ids, truth_group_ids=truth_group_ids,
         )
-    cand_counts, truth_counts = Counter(cand_norm), Counter(truth_norm)
+    cand_counts, truth_counts = Counter(cand_keys), Counter(truth_keys)
     matched = sum((cand_counts & truth_counts).values())
     cand_total, truth_total = sum(cand_counts.values()), sum(truth_counts.values())
     precision = (matched / cand_total) if cand_total else (1.0 if not truth_total else 0.0)
@@ -2427,6 +2676,27 @@ def check_row_selection_identity(cand: dict, truth: dict, meta: dict) -> CheckRe
     )
 
 
+def _requires_candidate_stub_for_value_matching(cand: dict, truth: dict) -> bool:
+    """True if per-entity value-matching CAN'T be honestly trusted here:
+    the ground truth supplies real row identity (a stub) but the
+    candidate doesn't supply its own.
+
+    Codex round-12 finding: `execution_tier.match_measure_by_value`'s
+    underlying `_shared_pairs` (off-limits -- see this file's Tier-1/
+    Tier-2 compatibility-shim conventions) falls back to an UNORDERED
+    "does the same set of values appear somewhere" comparison whenever
+    the CANDIDATE has no stub/row ids at all, collapsing per-entity
+    identity entirely (deliberately, for the legitimate case where
+    NEITHER side has one). But when the ground truth DOES supply real
+    per-entity identity and the candidate omits its own, a candidate
+    could scramble which entity gets which value (permute horsepower
+    numbers across different cars) and still value-match every measure,
+    since the same set of numbers appears SOMEWHERE -- passing per-entity
+    "computed correctness" that was never actually verified.
+    """
+    return bool(truth["tier2"].get("row_ids")) and not cand["tier2"].get("row_ids")
+
+
 def check_computed_value_correctness(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Computed/derived value correctness"
     measures = list(dict.fromkeys(
@@ -2436,6 +2706,13 @@ def check_computed_value_correctness(cand: dict, truth: dict, meta: dict) -> Che
         return _na(name, "ground truth declares no CANONICAL_MEASURES to verify")
     if not cand["tier2"].get("ok"):
         return CheckResult(name, 10, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
+    if _requires_candidate_stub_for_value_matching(cand, truth):
+        return CheckResult(
+            name, 10, 0, False,
+            "ground truth has per-entity row identity (a stub) but candidate has none -- "
+            "value-matching would only prove the same VALUES appear somewhere, not that they're "
+            f"attached to the correct entities; all {len(measures)} canonical measures unverifiable",
+        )
     matched, missing = [], []
     for m in measures:
         found = execution_tier.match_measure_by_value(cand["tier2"], truth["tier2"], m)
@@ -2533,8 +2810,18 @@ def check_sequential_vs_diverging(cand: dict, truth: dict, meta: dict) -> CheckR
         return _na(name, "candidate has no colored measures")
     if not cand["tier2"].get("ok"):
         return CheckResult(name, 5, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
+    # Codex round-12 finding: this iterated raw `mechanics` -- every
+    # historical `data_color()`/`heatmap()` call -- instead of `_effective_
+    # mechanics_units` (the round-8 fix that collapses multiple calls
+    # targeting the SAME column down to whichever one is actually
+    # EFFECTIVE, last-wins). An early, wrong-shape palette overridden by a
+    # later, correct one on the same column still counted as a failure
+    # (and vice versa), even though only the later call's palette is what
+    # actually renders. Same fix already applied to `reverse`/na_color/
+    # truncate/autocolor_text in `check_color_mechanics`.
+    units = _effective_mechanics_units(mechanics, cand)
     correct, total, notes = 0, 0, []
-    for entry in mechanics:
+    for entry in units:
         shape = _measure_signedness(cand, _mechanics_columns(entry, cand))
         if shape is None:
             continue
@@ -3733,7 +4020,19 @@ _SEQ_PALETTE_TO_DA_FAMILY = {"blues": "navy", "greens": "forest", "reds": "oxblo
 def check_band_hue_harmonization(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Heading band hue harmonization"
     t1 = cand["tier1"]
-    has_color = bool(t1.get("color_mechanics"))
+    # Codex round-12 finding: `bool(t1.get("color_mechanics"))` counts any
+    # `data_color()`/`heatmap()` call as "has color" purely syntactically
+    # -- a candidate that colors a column and then hides it entirely
+    # (`cols_hide(...)`) still counted as having visible Big Color, even
+    # though a hidden colored column renders as an effectively UNCOLORED
+    # table and should get the dark-band rule instead. Intersect each
+    # entry's resolved target columns with the ACTUALLY VISIBLE column
+    # set before deciding whether real, visible color exists.
+    visible_cols = _visible_columns(cand)
+    has_color = any(
+        set(_mechanics_columns(entry, cand)) & visible_cols
+        for entry in t1.get("color_mechanics", [])
+    )
     expected_shade = "light" if has_color else "dark"
     actual_shade = t1.get("heading_band_shade", "none")
     shade_ok = actual_shade == expected_shade
@@ -4063,7 +4362,7 @@ def _fmt_covers_semantic_type(
     *,
     all_integral: bool,
     scale_shape: str | None = None,
-    scale_values: str | None = None,
+    scale_values: object = None,
 ) -> bool:
     """True if `effective_fmt` is an honest, accepted formatter for
     `sem_type`.
@@ -4090,17 +4389,31 @@ def _fmt_covers_semantic_type(
     from_values`/`_values_scale_shape`/`_value_scale_shape`) classifies
     the matched column/value's ACTUAL numeric shape; `scale_values` is
     the resolved literal `scale_values=` text from `_fmt_percent_scale_
-    values_map` (`None` when omitted or unresolvable, which correctly
-    defaults to great_tables' own `True`). This only ever COSTS credit
-    when both signals are confidently known and they actively DISAGREE --
-    an ambiguous data shape or an unresolvable `scale_values` expression
-    keeps the benefit of the doubt, same as everywhere else in this file.
+    values_map` (`None` when NO overlapping `fmt_percent(...)` call ever
+    touched this column at all, which really does resolve to great_
+    tables' own `True` default with total confidence; `_UNRESOLVED_
+    SCALE_VALUES` when a call DID target it but the argument itself is
+    unresolvable). This only ever COSTS credit when both signals are
+    confidently known and they actively DISAGREE -- an ambiguous data
+    shape keeps the benefit of the doubt, same as everywhere else in this
+    file.
+
+    Codex round-12 finding: `None` (never touched) and `_UNRESOLVED_
+    SCALE_VALUES` (touched, but unresolvable) both used to default to
+    `"True"` here -- correct benefit-of-the-doubt for the former (it's
+    genuinely, confidently `True`), but an active WRONG-answer assumption
+    for the latter whenever `scale_shape == "percentage_scale"` (where
+    the correct choice is `False`): an unresolvable expression could
+    resolve to either value at runtime, so defaulting it to `"True"`
+    actively penalized a candidate whose real (unknowable-from-source)
+    value might well have been the correct `False`. The sentinel now
+    skips this validation ENTIRELY rather than guessing.
     """
     if effective_fmt not in _SEMANTIC_TO_FMT.get(sem_type, set()):
         return False
     if sem_type == "number" and effective_fmt == "fmt_integer" and not all_integral:
         return False
-    if sem_type == "percent" and effective_fmt == "fmt_percent":
+    if sem_type == "percent" and effective_fmt == "fmt_percent" and scale_values is not _UNRESOLVED_SCALE_VALUES:
         effective_scale_values = scale_values if scale_values is not None else "True"
         if scale_shape == "fractional" and effective_scale_values == "False":
             return False
@@ -4364,8 +4677,14 @@ def _summary_row_style_is_distinctive(source: str) -> bool:
     anywhere" check (which a no-op like `style.text(weight="normal")`
     scoped to that location would also satisfy, despite rendering
     identically to the body).
+
+    Codex round-12 finding (comprehensive sweep): call sites were located
+    via `convergence._call_arg_blocks` (a source-wide regex with no
+    comment/string stripping) -- the same recurring bug class already
+    fixed elsewhere in this file. Switched to `_ast_call_arg_blocks`
+    (AST-based).
     """
-    for block in convergence._call_arg_blocks(source, "tab_style"):
+    for block in _ast_call_arg_blocks(source, "tab_style"):
         loc_val = convergence._kwarg_value(block, "locations")
         if loc_val is None:
             positionals = [
