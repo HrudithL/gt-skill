@@ -1,4 +1,4 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080530_scripts_6prompts/prompts/airquality_monthly_summary/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/airquality_monthly_summary.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260808_104911_scripts_6prompts/prompts/airquality_monthly_summary/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py
 
 TOTAL: 16/91 (17.6%)
   Data-compliance:        7/47

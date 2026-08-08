@@ -1,36 +1,36 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/islands_sizes/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/islands_sizes.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260808_104920_prose_6prompts/prompts/islands_sizes/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/islands_sizes.py
 
-TOTAL: 16/86 (18.6%)
-  Data-compliance:        7/42
-  Formatting-compliance:  9/44
+TOTAL: 27/99 (27.3%)
+  Data-compliance:        12/43
+  Formatting-compliance:  15/56
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 1 canonical measures unverifiable
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/1 canonical colored measures covered by a candidate color call
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The ground truth does not use row grouping (it is one continuous sorted list), and the REQUIRED_INSTRUCTIONS metadata contains no 'grouping' key, so this discretionary editorial dimension does not apply—neither table groups rows.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- Both column labels correctly name their concepts: 'Island Name' clearly identifies the landmass, and 'Size (1000 km²)' unambiguously describes the area measurement with explicit unit notation, matching the ground truth's approach of labeling size with units.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=48, fully_filled=False -> expected striping=True, actual=False
 [FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- ground truth requires a stub but candidate has none; stub tint unverifiable
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=False present=False, source expected=True present=False
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/1 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['size']
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 1/3 -- title=OK, subtitle=MISSING, caption expected=True present=False, source expected=True present=False
 [FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- bold_columns=[] (no canonical hero measure declared)
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Caption doesn't just restate the subtitle: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Islands and Their Sizes' is accurate and clear but somewhat generic compared to the ground truth's 'Islands of the World, by Size', which explicitly adds the scope ('World') and the organizing principle ('by Size'). Both capture the core framing, but the ground truth's is more complete and specific.
+[FAIL] [JUDGE] Subtitle quality: 1/3 -- judge score 1/5 -- The candidate has no subtitle. The ground truth includes 'Land area in thousands of square miles, continents and smaller islands together', which adds essential context about the unit, scale, and inclusion of continents. This clarification is entirely missing in the candidate.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (Island Name, then Size) matches the ground truth's order and reads naturally—the identifier comes first, the quantitative measure follows. This is a sensible and conventional ordering for a simple two-column table.
+[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 3/5 -- The candidate uses a very minimal grayscale scheme with alternating light rows and no cell background coloring on the size values, whereas the ground truth employs a blue sequential gradient on the size column to emphasize the magnitude variation. Both are legible, but the ground truth's color encoding is more purposeful and harmonious—the candidate's approach, while clean, is generic and underutilizes visual encoding to highlight the data pattern.
+[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 1/5 -- The candidate table has no caption or source note at all, whereas the ground truth provides a detailed caption explaining the ordering (largest to smallest), the definition of 'landmass' (includes continents alongside literal islands), and the data source (R's built-in islands dataset with land area in thousands of square miles). The candidate entirely lacks this essential clarifying information.

@@ -1,4 +1,4 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080527_house_6prompts/prompts/gtcars_top10_by_country/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/gtcars_top10_by_country.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260808_102042_house_6prompts/prompts/gtcars_top10_by_country/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
 TOTAL: 13/91 (14.3%)
   Data-compliance:        4/47

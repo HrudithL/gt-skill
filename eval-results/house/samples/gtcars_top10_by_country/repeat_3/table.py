@@ -1,56 +1,86 @@
 import pandas as pd
-from great_tables import GT, loc, md, style
-from house_table import (
-    PALETTE, frame, finalize, band, stub_tint, heatmap, group_emphasis, humanize_labels
-)
+from great_tables import GT, md, style, loc
+from house_table import PALETTE, frame, finalize, humanize_labels, heatmap, band, group_emphasis
 
-# Read the data
-gtcars = pd.read_csv("gtcars.csv")
+# Read the data and filter to top 10 most expensive cars
+df = pd.read_csv("gtcars.csv")
+df_sorted = df.nlargest(10, "msrp")[["mfr", "model", "year", "drivetrain", "trsmn", "ctry_origin", "msrp"]].copy()
 
-# Get the top 10 most expensive cars
-top10 = gtcars.nlargest(10, "msrp").copy()
+# Map drivetrain and transmission to readable labels
+drivetrain_map = {
+    "rwd": "RWD",
+    "awd": "AWD",
+    "fwd": "FWD",
+}
+trsmn_map = {
+    "6m": "6-Speed Manual",
+    "6a": "6-Speed Auto",
+    "7a": "7-Speed Auto",
+    "7m": "7-Speed Manual",
+    "8a": "8-Speed Auto",
+    "8am": "8-Speed Auto/Manual",
+    "9a": "9-Speed Auto",
+    "1dd": "1-Speed Direct Drive",
+}
 
-# Sort by country and then by price (descending) for better grouping
-top10 = top10.sort_values(["ctry_origin", "msrp"], ascending=[True, False]).reset_index(drop=True)
+df_sorted["drivetrain"] = df_sorted["drivetrain"].map(drivetrain_map)
+df_sorted["transmission"] = df_sorted["trsmn"].map(trsmn_map)
+df_sorted["car"] = df_sorted["mfr"] + " " + df_sorted["model"]
 
-# Create a display-friendly version
-display_data = top10[["mfr", "model", "year", "drivetrain", "trsmn", "msrp", "ctry_origin"]].copy()
-display_data.columns = ["manufacturer", "model", "year", "drivetrain", "transmission", "msrp", "country"]
+# Create a display dataframe with the columns we want
+display_df = df_sorted[["car", "year", "drivetrain", "transmission", "ctry_origin", "msrp"]].copy()
+display_df.columns = ["car", "year", "drivetrain", "transmission", "country", "msrp"]
+display_df = display_df.sort_values(["country", "msrp"], ascending=[True, False]).reset_index(drop=True)
 
-# Reorder columns for the table
-display_data = display_data[["manufacturer", "model", "year", "drivetrain", "transmission", "msrp", "country"]]
-
-# Build the table
+# Create the GT table with country grouping
 gt = (
-    GT(display_data, rowname_col="manufacturer", groupname_col="country")
+    GT(display_df, rowname_col="car", groupname_col="country")
     .tab_header(
         title="Top 10 Most Expensive GT Cars",
-        subtitle=md("Grouped by country of origin with drivetrain and transmission details"),
+        subtitle=md("Grouped by country of origin — showing drivetrain, transmission, and MSRP")
     )
-    .tab_stubhead(label="Manufacturer")
-    .fmt_currency(columns="msrp", decimals=0, currency="USD")
+    .tab_stubhead(label="Car")
     .fmt_integer(columns="year")
+    .fmt_currency(columns="msrp", decimals=0)
+    .sub_missing(columns=["year", "drivetrain", "transmission"], missing_text="—")
 )
 
-# Apply humanize_labels with overrides
+# Apply humanize_labels for column headers
 gt = humanize_labels(
     gt,
-    display_data,
-    overrides={"msrp": "MSRP (USD)"},
+    display_df,
+    overrides={"msrp": "MSRP"}
 )
 
-# Apply color to MSRP as the hero measure (sequential, neutral = Blues)
+# Apply the sequential heatmap to MSRP (the hero measure)
 gt = heatmap(gt, "msrp", kind="sequential", hue="neutral")
 
-# Apply styling
-gt = band(gt, hue="navy")
-gt = stub_tint(gt, hue="navy")
-gt = group_emphasis(gt)
-
-# Add source note and frame
-gt = (
-    gt.tab_source_note(source_note="Source: gtcars.csv dataset")
+# Apply the heading band with navy accent tint
+gt = gt.tab_options(
+    column_labels_background_color="#C9E0F0",
+    column_labels_border_bottom_color=PALETTE["neutral"]["column_label_rule"],
+    column_labels_border_bottom_width="2px",
+    column_labels_border_bottom_style="solid",
 )
 
+# Apply stub tint to harmonize with the navy heatmap
+gt = gt.tab_style(style=style.fill(color=PALETTE["washed"]["navy"]), locations=loc.stub())
+
+# Apply group emphasis for country headers
+gt = group_emphasis(gt)
+
+# Apply row hairlines
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color=PALETTE["neutral"]["hairline"],
+    table_body_hlines_width="1px",
+)
+
+# Apply the frame
 gt = frame(gt)
-finalize(gt, path="table.png")
+
+# Add source note
+gt = gt.tab_source_note(source_note="Source: provided gtcars dataset.")
+
+# Finalize and render
+finalize(gt, path="table.png", zoom=2.0, expand=15)

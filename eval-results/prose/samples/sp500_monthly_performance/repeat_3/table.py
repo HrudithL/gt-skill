@@ -1,88 +1,145 @@
-import pandas as pd
+"""S&P 500 Monthly Performance Summary, 2010-2015."""
 import numpy as np
-from great_tables import GT, md, style, loc
+import pandas as pd
+from great_tables import GT, style, loc
 
-# Read the data
-df = pd.read_csv("sp500.csv")
-df["date"] = pd.to_datetime(df["date"])
+df = pd.read_csv("sp500.csv", parse_dates=["date"]).sort_values("date")
 
-# Filter to 2010-2015
-df = df[(df["date"].dt.year >= 2010) & (df["date"].dt.year <= 2015)]
+# Restrict to 2010-2015
+df = df[(df["date"].dt.year >= 2010) & (df["date"].dt.year <= 2015)].copy()
 
-# Aggregate by year-month
-df["year_month"] = df["date"].dt.to_period("M")
+# Create month-year period
+df["month"] = df["date"].dt.to_period("M")
 
-monthly = []
-for period, group in df.groupby("year_month"):
-    # Get first and last row of the month
-    first_row = group.iloc[0]
-    last_row = group.iloc[-1]
+# Compute daily returns across the full series (continuous, not reset at month boundaries)
+df["daily_return"] = df["close"].pct_change()
 
-    # Calculate metrics
-    open_price = first_row["open"]
-    close_price = last_row["close"]
-    percent_change = (close_price - open_price) / open_price
+# Aggregate by month
+monthly = df.groupby("month").agg(
+    open_price=("open", "first"),
+    close_price=("close", "last"),
+    high_price=("high", "max"),
+    low_price=("low", "min"),
+    volume_avg=("volume", "mean"),
+    daily_return_max=("daily_return", "max"),
+    daily_return_min=("daily_return", "min"),
+)
 
-    # Average daily volume
-    avg_volume = group["volume"].mean()
+# Month-to-month price change
+monthly["pct_change"] = monthly["close_price"].pct_change()
 
-    # Highest single-day gain (high - low within the day, max across month)
-    daily_range = group["high"] - group["low"]
-    highest_gain = daily_range.max()
+# For the first month of 2010, get the prior close to anchor the return
+first_month = monthly.index[0]
+prior_year_close = df.loc[df["date"] == "2009-12-31", "close"]
+if not prior_year_close.empty:
+    prior_close = prior_year_close.iloc[0]
+    monthly.loc[first_month, "pct_change"] = (
+        monthly.loc[first_month, "close_price"] / prior_close - 1
+    )
 
-    # Highest single-day loss (as negative value, or track separately)
-    # For clarity, we'll show the largest intra-day drop
-    highest_loss = -daily_range.max()  # negative for loss
+# Reset and label
+monthly = monthly.reset_index()
+monthly["month_label"] = monthly["month"].dt.strftime("%b %Y")
 
-    monthly.append({
-        "Period": period.strftime("%b %Y"),
-        "Year": period.year,
-        "Month": period.month,
-        "Open": open_price,
-        "Close": close_price,
-        "Percent Change": percent_change,
-        "Avg Daily Volume": avg_volume,
-        "Highest Gain": highest_gain,
-        "Highest Loss": highest_loss,
-    })
+# Reorder columns
+monthly = monthly[[
+    "month_label",
+    "open_price",
+    "close_price",
+    "pct_change",
+    "volume_avg",
+    "daily_return_max",
+    "daily_return_min",
+]].reset_index(drop=True)
 
-monthly_df = pd.DataFrame(monthly)
-monthly_df = monthly_df.sort_values(["Year", "Month"]).reset_index(drop=True)
+# Compute symmetric domain for the single signed measure (pct_change)
+pc_m = float(np.nanmax(np.abs(monthly["pct_change"].to_numpy())))
+dr_m = float(np.nanmax(np.abs(monthly[["daily_return_max", "daily_return_min"]].to_numpy())))
 
-# Compute symmetric domain for percent change
-cols = ["Percent Change"]
-lo = float(np.nanmin(monthly_df[cols].to_numpy()))
-hi = float(np.nanmax(monthly_df[cols].to_numpy()))
-M = max(abs(lo), abs(hi))
-
-# Build the table
 gt = (
-    GT(monthly_df, rowname_col="Period")
-    .cols_hide(columns=["Year", "Month"])
-    .fmt_currency(columns=["Open", "Close"], currency="USD", decimals=2)
-    .fmt_percent(columns=["Percent Change"], decimals=2, force_sign=True)
-    .fmt_number(columns=["Avg Daily Volume"], decimals=0)
-    .fmt_currency(columns=["Highest Gain", "Highest Loss"], currency="USD", decimals=2)
+    GT(monthly)
+    .tab_header(
+        title="S&P 500 Monthly Performance Summary",
+        subtitle="2010–2015: Opening, closing, returns, volume, and intraday extremes",
+    )
+    .cols_label(
+        month_label="Month",
+        open_price="Open ($)",
+        close_price="Close ($)",
+        pct_change="MoM Change",
+        volume_avg="Avg Daily Volume",
+        daily_return_max="Highest Daily Gain",
+        daily_return_min="Lowest Daily Loss",
+    )
+    # Format prices as currency
+    .fmt_currency(
+        columns=["open_price", "close_price"],
+        currency="USD",
+        decimals=2,
+    )
+    # Format percentages with sign
+    .fmt_percent(
+        columns=["pct_change"],
+        decimals=2,
+        force_sign=True,
+    )
+    .fmt_percent(
+        columns=["daily_return_max", "daily_return_min"],
+        decimals=2,
+        force_sign=True,
+    )
+    # Format volume with thousands separators
+    .fmt_number(
+        columns=["volume_avg"],
+        decimals=0,
+        use_seps=True,
+    )
+    # Color the month-over-month change with diverging RdYlGn
+    # Use a single domain across all signed measures for consistency
     .data_color(
-        columns=["Percent Change"],
+        columns=["pct_change"],
         palette="RdYlGn",
-        domain=[-M, M],
+        domain=[-pc_m, pc_m],
+        na_color="#808080",
         truncate=False,
     )
+    # Alignment
+    .cols_align(align="left", columns=["month_label"])
+    .cols_align(align="right", columns=[
+        "open_price", "close_price", "pct_change",
+        "volume_avg", "daily_return_max", "daily_return_min"
+    ])
+    # Small-Color polish per checklist
     .tab_options(
-        column_labels_background_color="#F0F0F0",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
+        column_labels_border_bottom_color="#CCCCCC",
+        column_labels_border_bottom_width="2px",
+        # Frame
+        table_border_top_style="solid",
+        table_border_top_color="#CCCCCC",
+        table_border_top_width="1px",
+        table_border_bottom_style="solid",
+        table_border_bottom_color="#CCCCCC",
+        table_border_bottom_width="1px",
+        table_border_left_style="solid",
+        table_border_left_color="#CCCCCC",
+        table_border_left_width="1px",
+        table_border_right_style="solid",
+        table_border_right_color="#CCCCCC",
+        table_border_right_width="1px",
     )
-    .tab_header(
-        title="S&P 500 Monthly Performance",
-        subtitle="2010–2015 Summary Statistics",
-    )
+    # Row striping (≥10 rows, ≥5 rows for caption)
     .opt_row_striping()
-    .tab_options(table_width="100%")
+    # Caption and source note (separate calls, methodology first)
+    .tab_source_note(
+        source_note="Single-day gains/losses use continuous day-over-day change "
+                     "across the full historical series, not reset at each month's start."
+    )
+    .tab_source_note(
+        source_note="Source: S&P 500 daily closing prices, 2010–2015."
+    )
 )
 
-gt.gtsave("table.png")
+gt.gtsave("table.png", expand=15)

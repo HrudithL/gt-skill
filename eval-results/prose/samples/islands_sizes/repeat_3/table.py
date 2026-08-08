@@ -2,61 +2,56 @@ import pandas as pd
 import numpy as np
 from great_tables import GT, style, loc
 
-# Step 1: Data cleaning
+# Step 1: Load and clean data
 df = pd.read_csv("islands.csv")
-# Data is already clean: name column (object), size column (int64)
 
-# Step 2: Organize columns
-# "name" is the stub (row identifier), "size" is the measure
-# No grouping, no spanners
+# Step 2: Organize columns — name is stub, size is measure
+# 49 islands (rows ≥ 10) → proceed with striping and color
 
-# Step 3: Big Color
-# Size is an ordered numeric magnitude with 48 rows (≥5) → qualifies for gradient fill
-# Palette: "size" is a neutral magnitude (quantity/count) → Blues (palettes.md §3)
-cols_to_color = ["size"]
-lo = float(np.nanmin(df[cols_to_color].to_numpy()))
-hi = float(np.nanmax(df[cols_to_color].to_numpy()))
+# Step 3: Big Color — size is ordered magnitude (≥5 rows)
+# Palette: Blues (neutral magnitude per palettes.md §3)
+cols_measure = ["size"]
+lo = float(np.nanmin(df[cols_measure].to_numpy()))
+hi = float(np.nanmax(df[cols_measure].to_numpy()))
 
+# Step 4 & 5: Build the table
 gt = (
     GT(df, rowname_col="name")
-    # Step 5a: Cell borders — always
-    .tab_options(
-        table_body_hlines_style="solid",
-        table_body_hlines_color="#E8E8E8",
-        table_body_hlines_width="1px",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
-    )
-    # Step 5c: Row striping (≥10 body rows and not fully filled by Big Color)
-    .opt_row_striping()
-    .tab_options(row_striping_background_color="#F6F6F6")
-    # Step 5d: Stub tint (stub exists; grey default, will harmonize later if needed)
-    .tab_style(
-        style=style.fill(color="#F0F0F0"),
-        locations=loc.stub(),
-    )
-    # Step 5e: Formatting per column
-    .fmt_number(columns="size", decimals=0, use_seps=True)
-    .sub_missing(columns="size", missing_text="—")
-    # Step 3: Big Color — gradient fill
+    # Column labels
+    .cols_label(size="Size")
+    # Format
+    .fmt_number(columns=cols_measure, decimals=0, use_seps=True)
+    .sub_missing(columns=cols_measure, missing_text="—")
+    # Step 3: Big Color gradient
     .data_color(
-        columns=cols_to_color,
+        columns=cols_measure,
         palette="Blues",
         domain=[lo, hi],
         truncate=False,
         na_color="#808080",
     )
-    # Step 4: Heading band (has Big Color → LIGHT band with washed Navy tint)
+    # Step 4: Light band (Big Color present)
     .tab_options(
         column_labels_background_color="#EAF0F6",
         column_labels_font_weight="bold",
+        column_labels_border_bottom_color="#CCCCCC",
+        column_labels_border_bottom_width="2px",
     )
-    # Step 6: Titles & Annotations
-    .tab_header(
-        title="Islands by Size",
-        subtitle="Land area in thousands of square kilometers",
+    # Step 5: Small Color polish
+    # (a) Cell borders
+    .tab_options(
+        table_body_hlines_style="solid",
+        table_body_hlines_color="#E8E8E8",
+        table_body_hlines_width="1px",
     )
-    # Step 5: Frame — boxed enclosing border
+    # (c) Row striping (≥10 rows, not fully filled by Big Color)
+    .opt_row_striping()
+    # (d) Stub tint (washed-DA tint for Big Color)
+    .tab_style(
+        style=style.fill(color="#EAF0F6"),
+        locations=loc.stub(),
+    )
+    # Frame border (all four sides)
     .tab_options(
         table_border_top_style="solid",
         table_border_top_color="#CCCCCC",
@@ -71,7 +66,13 @@ gt = (
         table_border_right_color="#CCCCCC",
         table_border_right_width="1px",
     )
+    # Step 6: Titles + caption
+    .tab_header(
+        title="Island Sizes",
+        subtitle="Area in thousands of square kilometers",
+    )
+    .tab_source_note(source_note="Source: provided dataset.")
 )
 
-# Step 7: Render & Verify
+# Render
 gt.gtsave("table.png", expand=15)

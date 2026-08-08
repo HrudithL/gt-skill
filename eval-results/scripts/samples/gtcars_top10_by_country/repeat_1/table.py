@@ -1,70 +1,53 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, style, loc
+from great_tables import GT
+from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe
 
-# Step 1: Load and clean data
+# Load and prepare data
 df = pd.read_csv("gtcars.csv")
 
-# Ensure MSRP is numeric
-df["msrp"] = pd.to_numeric(df["msrp"], errors="coerce")
+# Get top 10 most expensive cars overall, sorted by price descending
+top_10 = df.nlargest(10, "msrp").copy()
 
-# Get top 10 by MSRP
-df_top10 = df.nlargest(10, "msrp").copy()
+# Sort by country, then by msrp descending within each country
+top_10 = top_10.sort_values(["ctry_origin", "msrp"], ascending=[True, False]).reset_index(drop=True)
 
-# Create display columns
-df_top10["car"] = df_top10["mfr"] + " " + df_top10["model"]
+# Create a readable car name
+top_10["car"] = top_10["mfr"] + " " + top_10["model"]
 
-# Select and rename columns for display
-display_cols = ["ctry_origin", "car", "drivetrain", "trsmn", "msrp"]
-df_display = df_top10[display_cols].copy()
-df_display.columns = ["Country", "Car", "Drivetrain", "Transmission", "MSRP"]
+# Select and order columns
+top_10 = top_10[["ctry_origin", "car", "year", "drivetrain", "trsmn", "msrp"]]
 
-# Sort by country, then by MSRP descending within each country
-df_display = df_display.sort_values(["Country", "MSRP"], ascending=[True, False]).reset_index(drop=True)
-
-# Step 2: Calculate domain for Big Color
-cols = ["MSRP"]
-lo = float(np.nanmin(df_display[cols].to_numpy()))
-hi = float(np.nanmax(df_display[cols].to_numpy()))
-
-# Step 3 & 4 & 5: Build table with Big Color (Blues gradient) and Light band
 gt = (
-    GT(df_display, rowname_col="Car", groupname_col="Country")
-    .fmt_currency(columns="MSRP", currency="USD", decimals=0)
-    .data_color(
-        columns="MSRP",
-        palette="Blues",
-        domain=[lo, hi],
-        truncate=False,
-        na_color="#808080",
-    )
-    # Step 4: Light band (Big Color present) with washed Navy tint
-    .tab_options(
-        column_labels_background_color="#EAF0F6",
-        column_labels_font_weight="bold",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
-    )
-    # Step 5: Cell borders and striping
-    .tab_options(
-        table_body_hlines_style="solid",
-        table_body_hlines_color="#E8E8E8",
-        table_body_hlines_width="1px",
-        row_striping_background_color="#F6F6F6",
-    )
-    .opt_row_striping()
-    # Titles and subtitle
+    GT(top_10, groupname_col="ctry_origin")
     .tab_header(
-        title="Top 10 Most Expensive GT Cars by Country",
-        subtitle="Organized by country of origin with drivetrain and transmission details"
+        title="Top 10 Most Expensive GT Cars",
+        subtitle="Grouped by country of origin, showing drivetrain and transmission details",
     )
-    # Frame and finalization
+    .cols_label(
+        ctry_origin="Country",
+        car="Car",
+        year="Year",
+        drivetrain="Drivetrain",
+        trsmn="Transmission",
+        msrp="MSRP",
+    )
+    .fmt_currency(columns=["msrp"], currency="USD", decimals=0)
+    .fmt_integer(columns=["year"], use_seps=False)
+    .cols_align(align="left", columns=["car", "drivetrain", "trsmn"])
+    .cols_align(align="right", columns=["year", "msrp"])
+    .tab_source_note(source_note="Source: gtcars dataset (Posit / great_tables sample data).")
 )
 
-# Add subtle frame via borders
-gt = gt.tab_style(
-    style=style.borders(sides="all", color="#CCCCCC", weight="1px"),
-    locations=loc.body(),
-)
+# Apply Big Color (MSRP as sequential Blues)
+gt = heatmap(gt, columns="msrp", kind="sequential", hue="neutral")
 
-gt.gtsave("table.png")
+# Apply light heading band (since we have Big Color)
+gt = band(gt, shade="light", hue="navy")
+
+# Apply row striping (>=10 rows and body not fully filled)
+gt = stripe(gt)
+
+# Apply frame and finalize
+gt = frame(gt)
+gt = finalize(gt)

@@ -2,73 +2,76 @@ import pandas as pd
 import numpy as np
 from great_tables import GT, style, loc
 
-# Step 1: Load and clean data
+# Step 1: Data cleaning
 df = pd.read_csv("gtcars.csv")
 
-# Keep only the columns we need: mfr, model, hp, msrp
-df = df[["mfr", "model", "hp", "msrp"]].copy()
-
-# Create a display column combining mfr and model
-df["car"] = df["mfr"] + " " + df["model"]
-df = df[["car", "hp", "msrp"]].copy()
+# Keep only the columns we need
+df = df[["model", "mfr", "hp", "msrp"]].copy()
 
 # Ensure numeric columns are properly typed
 df["hp"] = pd.to_numeric(df["hp"], errors="coerce")
 df["msrp"] = pd.to_numeric(df["msrp"], errors="coerce")
 
-# Remove rows with missing values
-df = df.dropna()
+# Step 2: Organize columns and determine Big Color
+# Both hp and msrp qualify (≥5 rows, numeric magnitude)
+# hp is primary (prompt mentions horsepower first), msrp is secondary
+# By the tie-breaker rule for two neutral measures: hp → Blues, msrp → Greens
 
-# Step 2: Organize columns - car is the stub/identifier
-# Step 3: Big Color - both hp and msrp qualify as ordered magnitudes (≥5 rows)
-# Primary (hp, leftmost): Blues
-# Secondary (msrp): Greens (fallback for second neutral magnitude)
-
-# Compute domains for data_color
+# Step 3: Compute domains for Big Color
 hp_cols = ["hp"]
-msrp_cols = ["msrp"]
+price_cols = ["msrp"]
 
 hp_lo = float(np.nanmin(df[hp_cols].to_numpy()))
 hp_hi = float(np.nanmax(df[hp_cols].to_numpy()))
 
-msrp_lo = float(np.nanmin(df[msrp_cols].to_numpy()))
-msrp_hi = float(np.nanmax(df[msrp_cols].to_numpy()))
+price_lo = float(np.nanmin(df[price_cols].to_numpy()))
+price_hi = float(np.nanmax(df[price_cols].to_numpy()))
 
-# Step 4: Build table with light band (Big Color present)
+# Step 4 & 5: Build the table with heading band (light, washed Navy), polish, and formatting
 gt = (
-    GT(df, rowname_col="car")
-    # Format columns
-    .fmt_number(columns="hp", decimals=0, use_seps=True)
-    .fmt_currency(columns="msrp", decimals=0)
-    # Step 3: Big Color - two colored measures
+    GT(df, rowname_col="model")
+    # Step 5(a): Cell borders
+    .tab_options(
+        table_body_hlines_style="solid",
+        table_body_hlines_color="#E8E8E8",
+        table_body_hlines_width="1px",
+        column_labels_border_bottom_color="#CCCCCC",
+        column_labels_border_bottom_width="2px",
+    )
+    # Step 5(c): Row striping (≥10 rows)
+    .opt_row_striping()
+    .tab_options(row_striping_background_color="#F6F6F6")
+    # Step 5(d): Stub tint (grey default)
+    .tab_style(
+        style=style.fill(color="#F0F0F0"),
+        locations=loc.stub(),
+    )
+    # Step 5(e): Format columns
+    .fmt_number(columns=["hp"], decimals=0, use_seps=True)
+    .fmt_currency(columns=["msrp"], currency="USD", decimals=0)
+    .sub_missing(columns=["hp", "msrp"], missing_text="—")
+    # Step 3: Big Color - hp (Blues, primary)
     .data_color(
-        columns="hp",
+        columns=["hp"],
         palette="Blues",
         domain=[hp_lo, hp_hi],
         truncate=False,
         na_color="#808080",
     )
+    # Step 3: Big Color - msrp (Greens, secondary per tie-breaker)
     .data_color(
-        columns="msrp",
+        columns=["msrp"],
         palette="Greens",
-        domain=[msrp_lo, msrp_hi],
+        domain=[price_lo, price_hi],
         truncate=False,
         na_color="#808080",
     )
-    # Step 4: Light heading band (washed-DA tint, matching Blues hue)
+    # Step 4: Heading band (light Navy tint, has Big Color)
     .tab_options(
-        column_labels_background_color="#EAF0F6",  # pale blue for Blues table
-        column_labels_font_weight="bold",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
+        column_labels_background_color="#EAF0F6",
     )
-    # Step 5: Small Color polish
-    # (a) Cell borders
+    # Frame: light border on all sides
     .tab_options(
-        table_body_hlines_style="solid",
-        table_body_hlines_color="#E8E8E8",
-        table_body_hlines_width="1px",
-        # Frame
         table_border_top_style="solid",
         table_border_top_color="#CCCCCC",
         table_border_top_width="1px",
@@ -82,20 +85,13 @@ gt = (
         table_border_right_color="#CCCCCC",
         table_border_right_width="1px",
     )
-    # (c) Row striping (≥10 rows and not fully filled)
-    .opt_row_striping()
-    # (d) Stub tint (grey default, or washed-DA if grey becomes monotonous)
-    .tab_style(
-        style=style.fill(color="#EAF0F6"),  # harmonize stub to pale blue (grey-budget rule)
-        locations=loc.stub(),
+    # Step 6: Titles and annotations
+    .tab_header(
+        title="GT Cars: Horsepower and Price",
+        subtitle="Comparison of luxury and performance vehicles"
     )
-    # Column labels
-    .tab_style(
-        style=style.text(color="#000000"),  # dark text on light band
-        locations=loc.column_labels(),
-    )
+    .tab_source_note(source_note="Source: provided GT cars dataset.")
 )
 
-# Step 7: Render
+# Render to PNG
 gt.gtsave("table.png", expand=15)
-print("Table saved to table.png")

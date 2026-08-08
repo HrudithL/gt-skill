@@ -1,36 +1,36 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/gtcars_hp_price/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/gtcars_hp_price.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260808_104920_prose_6prompts/prompts/gtcars_hp_price/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 84/100 (84.0%)
-  Data-compliance:        44/44
-  Formatting-compliance:  40/56
+TOTAL: 56/100 (56.0%)
+  Data-compliance:        20/44
+  Formatting-compliance:  36/56
 
-[PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
-[PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 2/2 canonical measures have a value-matching candidate column
+[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 2 canonical measures unverifiable
 [PASS] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 6/6 -- ≤2 measures OK; 1/1 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 2/2 colored measures use an encoding matching their data shape
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
-[PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.40 (candidate-only=['Manufacturer', 'Model'], missing=['car']); value-matched renamed columns: {'hp': 'Horsepower', 'msrp': 'Price'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate groups rows; grouping was not a mandated instruction (REQUIRED_INSTRUCTIONS is empty). Since grouping is not a discretionary editorial choice being tested here, this dimension is not applicable.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping; the ground truth's presentation is flat/ungrouped (sorted by MSRP descending). Since neither table groups and REQUIRED_INSTRUCTIONS has no 'grouping' key, this dimension does not apply.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
-[PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
+[FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [PASS] [MECHANICAL] No same-family hue collision across 2 measures: 1/1 -- colored-measure palettes: ['Blues', 'Greens']
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- Both 'hp' (horsepower) and 'msrp' (price) columns are labeled correctly and unambiguously, matching the LABEL_SYNONYMS grounding. The headers clearly identify the underlying concepts without ambiguity.
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- Both 'Horsepower' and 'Price' labels are clear and directly name their underlying concepts, matching the LABEL_SYNONYMS (hp/horsepower, msrp/price). The candidate's labels are unambiguous and consistent.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 2/2 colored measures have a shape-appropriate domain
-[PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=47, fully_filled=True -> expected striping=False, actual=True
-[FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- stub=True, striped=True -> expected tint=False, actual=True
+[FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=47, fully_filled=False -> expected striping=True, actual=False
+[FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- ground truth requires a stub but candidate has none; stub tint unverifiable
 [PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 2/2, truncate=False correct 2/2, autocolor_text=True correct 2/2, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=False, source expected=True present=False
 [FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- 0/1 canonical hero-uncolored measures are bolded
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'GT Cars: Horsepower and Price' is identical to the ground truth's and clearly establishes the same core framing—a straightforward presentation of the two requested metrics for the GT cars dataset.
-[FAIL] [JUDGE] Subtitle quality: 1/3 -- judge score 2/5 -- The candidate's subtitle 'Comparative specifications across luxury and performance vehicles' is vague and generic—it doesn't clarify what's actually shown (all 47 makes/models, sorted by MSRP) unlike the ground truth's informative subtitle. It adds some framing but overlaps with the title's general concept and lacks the ground truth's specificity about scope and sort order.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate orders columns as Car name, Horsepower, then Price—a natural and sensible left-to-right reading order that mirrors the ground truth's arrangement. The identifying column (car name) comes first, followed by the two metrics in a logical sequence that is equally effective as the ground truth's order.
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a blue sequential gradient for horsepower and a green sequential gradient for price, which are both tasteful and harmonious with the table's light blue/gray header band. The color encoding is clear and legible. However, the ground truth uses a single blue gradient for price (with price as the canonically colored measure per CANONICAL_MEASURES) while keeping horsepower uncolored, a more restrained and elegant approach; the candidate's dual-color scheme is slightly busier and less minimalist than the ground truth's design choice.
-[PASS] [JUDGE] Caption doesn't just restate the subtitle: 1/1 -- judge score 4/5 -- The candidate's caption—'Data: gtcars.csv | Horsepower (Blues) and Price (Greens) gradients show relative magnitude'—adds metadata about the data source and explains the color encoding, but misses the key insight about Bentley/Corvette price-horsepower disconnect that the ground truth's caption explicitly highlights. It adds some genuine information beyond the subtitle but not the analytical insight the ground truth provides.
+[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'GT Cars: Horsepower & Price' captures the same core framing as the ground truth's 'GT Cars: Horsepower and Price.' Both clearly name the subject and the two measures being shown.
+[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 3/5 -- The candidate's subtitle 'Performance and pricing comparison for high-performance vehicles' adds some context but is generic and does not capture the ground truth's specificity ('All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP'), which provides exact scope and sort order.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate splits the car name into 'Manufacturer' and 'Model' columns (left-to-right: Manufacturer, Model, Horsepower, Price), while the ground truth combines them as 'Car' then Horsepower, Price. Both orders are sensible, though the candidate's separation makes the stub less identifying-focused compared to the ground truth's unified car-name approach. The ordering is workable but slightly less optimized.
+[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a blue-to-light-blue gradient for Horsepower and a green gradient for Price, harmonizing reasonably with the pale gray header. The ground truth uses a dark-blue highlight on the top price and light-blue wash for the Horsepower column, which is more tasteful. The candidate's dual-color approach is acceptable and legible but slightly less cohesive than the ground truth's single-palette focus.
+[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 1/5 -- The candidate has no caption or source note at all. The ground truth includes a crucial caption noting that 'Price and horsepower don't move together' with the Bentley and Corvette example, plus a source attribution. The candidate completely lacks this essential insight.
