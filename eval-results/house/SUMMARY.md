@@ -9,7 +9,7 @@ below with `python plots/make_plots.py`.
 | Metric (mean across 6 prompts) | `house` (2026-08-07) | `house` (2026-08-08, after fixes) | baseline |
 |---|---|---|---|
 | Comparator total score | 57.7% | **60.6%** | 24.2% |
-| Cost per invocation | $0.110 | $0.115 | $0.060 |
+| Cost per invocation | $0.110 | $0.115 | $0.070 |
 
 **2026-08-08 skill-content fixes** (`SKILL.md`/`references/RULES.md`/
 `scripts/house_table.py`) targeted a specific, code-confirmed comparator

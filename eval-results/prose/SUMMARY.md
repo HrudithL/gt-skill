@@ -9,14 +9,14 @@ below with `python plots/make_plots.py`.
 | Metric (mean across 6 prompts) | `prose` (2026-08-07) | `prose` (2026-08-08, after fixes) | baseline |
 |---|---|---|---|
 | Comparator total score | 70.5% | 62.4% | 26.5% |
-| Cost per invocation | $0.150 | $0.150 | $0.082 |
+| Cost per invocation | $0.150 | $0.150 | $0.084 |
 
 **Read this drop with real skepticism before treating it as a regression** —
 see `scripts`' summary for the full explanation, which applies identically
 here (`prose` shares the same 6 archetype example files under
 `assets/examples/`). Short version: this re-sweep caught and fixed a
 genuine pre-existing bug where every archetype example built its final `GT`
-chain as an unassigned bare expression (no top-level `gt`), which void the
+chain as an unassigned bare expression (no top-level `gt`), which voids the
 comparator's whole Tier-2/Data-compliance score for any candidate that
 copied the structure closely — 2 of 3 `sp500_monthly_performance` repeats
 hit exactly this before the fix. Separately, this sweep's per-repeat spread
@@ -35,10 +35,16 @@ See [`plots/cost.png`](plots/cost.png), [`plots/tokens.png`](plots/tokens.png),
 [`plots/consistency.png`](plots/consistency.png),
 [`plots/comparator_score.png`](plots/comparator_score.png).
 
-`prose` is the best performer of the four: the **highest mean comparator
-score** (nearly 3x baseline) *and* the **most consistent** (smallest
-repeat-to-repeat spread) — the 7-step flowchart + `REFERENCE.md` router
-gets the model to the same design decisions run after run, without a
+**The paragraph below describes the 2026-08-07 sweep** and is left
+unedited as the original rationale for the skill's design (still accurate
+on its own terms — the flowchart + router mechanism hasn't changed); it is
+NOT a re-confirmed ranking claim against the 2026-08-08 numbers above,
+which this file's own caveat says not to over-read.
+
+`prose` was the best performer of the four on 2026-08-07: the **highest
+mean comparator score** (nearly 3x baseline) *and* the **most consistent**
+(smallest repeat-to-repeat spread) — the 7-step flowchart + `REFERENCE.md`
+router gets the model to the same design decisions run after run, without a
 checker loop's added cost or variance. See
 [`progressive_disclosure.md`](progressive_disclosure.md) for a transcript
 excerpt of the router-driven reference reads (router -> data -> the specific

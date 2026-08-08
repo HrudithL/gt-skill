@@ -13,7 +13,7 @@ Per-skill detail, plots, and curated runs are in `house/`, `scripts/`,
 | `scripts` | 65.0% | 52.7%\*\* | $0.164 |
 | `house` | 57.7% | **60.6%** | $0.115 |
 | `creator` | 21.7% (not re-tested) | — | $0.095 |
-| baseline (no skill) | 21.3-24.8%\* | 21.3-26.5%\* | $0.060-$0.089\* |
+| baseline (no skill) | 21.3-24.8%\* | 21.3-26.5%\* | $0.070-$0.084\* |
 
 \*baseline varies slightly per skill's sweep because each sweep's baseline
 runs are separate invocations (same prompts, no skill mounted, different
@@ -38,17 +38,26 @@ none of this round's fixes touched it.
 
 ## Findings
 
-- **`prose` wins on both quality and consistency.** The full 7-step
-  flowchart + `REFERENCE.md` router produces the highest mean score and the
-  smallest repeat-to-repeat spread of the three real skills, at a mid-range
-  cost.
-- **`scripts`' checker loop is a double-edged sword.** It pushes the mean
-  score above `prose`'s in aggregate, but the loop itself (how many issues
-  it catches, how many fix attempts it takes) makes `scripts` both the most
-  expensive and the least consistent skill.
-- **`house` is the cheap, decent option.** No flowchart, no checker loop —
-  one worked reference script + a rules file — costs the least of the three
-  real skills for a real (if smaller) quality gain over baseline.
+**The three bullets below describe the 2026-08-07 sweep.** They are not
+re-confirmed against the 2026-08-08 re-sweep (see the table's `**` note) —
+that re-sweep's aggregate moved in ways this file explains are dominated by
+noise and one now-fixed bug, not by re-running enough repeats to responsibly
+re-rank the three skills. Treat these as the prior baseline understanding,
+not current fact:
+
+- **`prose` won on both quality and consistency (2026-08-07).** The full
+  7-step flowchart + `REFERENCE.md` router produced the highest mean score
+  and the smallest repeat-to-repeat spread of the three real skills, at a
+  mid-range cost.
+- **`scripts`' checker loop was a double-edged sword (2026-08-07).** It
+  pushed the mean score above `prose`'s in aggregate, but the loop itself
+  (how many issues it catches, how many fix attempts it takes) made
+  `scripts` both the most expensive and the least consistent skill.
+- **`house` was the cheap, decent option (2026-08-07), and still is on cost.**
+  No flowchart, no checker loop — one worked reference script + a rules
+  file — costs the least of the three real skills. Its 2026-08-08 numbers
+  are the one skill in this round with a mechanism-confirmed quality gain
+  (see `house/SUMMARY.md`), on top of already being the cheapest.
 - **`creator` currently loses to no skill at all.** This is the headline
   result of this sweep: the skill-creator-produced candidate mounted by
   `creator` scores *below* the baseline on average, while still costing
