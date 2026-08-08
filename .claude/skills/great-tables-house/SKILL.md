@@ -14,12 +14,21 @@ procedure.**
    `stub_tint`/`heatmap`/`status_chip`/`summary_row`/`group_emphasis`/
    `humanize_labels`) you import into your own script the same way
    `great-tables-ci` imports `gt_consistency.py`.
-2. **Before organizing columns**: if the request's measure or selection
-   criterion has more than one reasonable reading (e.g. "top N
-   fastest-growing" — by what metric?), pick ONE definition and state it
-   in the subtitle/source note — see `references/RULES.md`'s "Ambiguous
-   measures" section. This decides which columns exist at all; do it
-   before step 3.
+2. **Before organizing columns**, resolve these on the data you were
+   actually given, not by pattern-matching later once the script exists:
+   - Does any column hold row identifiers (name/date/ID)? If so, it's the
+     stub — `rowname_col=...`, default ON. Decide this now, not as
+     something to notice while formatting.
+   - If a date/month stub is in play, its exact format is pinned — see
+     `references/RULES.md`'s "Row identifiers" section — don't let a
+     library default (e.g. a raw `Period`'s `str()`) leak through.
+   - If the request's measure or selection criterion has more than one
+     reasonable reading (e.g. "top N fastest-growing" — by what metric?
+     or "single-day gain" — same-day or day-over-day?), pick ONE
+     definition and state it in a source note — see `references/RULES.md`'s
+     "Ambiguous measures" and "Period-over-period / day-over-day metrics"
+     sections. This decides which columns exist at all; do it before
+     step 3.
 3. Find the block in `house_table.py` that matches your data's shape — a
    plain magnitude, a currency hero measure, a signed percent, a
    categorical status column, a stub, a group, a summary row, a missing
@@ -38,12 +47,24 @@ unconditional, regardless of how simple the request looks:
 
 1. **Title AND subtitle** — both, always.
 2. **A source note** — always; a generic one ("Source: provided dataset.")
-   beats none.
+   beats none. When the table makes a non-obvious computational choice
+   (an ambiguous-measure resolution, a continuous-vs-reset definition),
+   that gets its OWN separate source note in addition to the plain
+   citation — two notes, not one trying to do both jobs.
 3. **The boxed frame** — `frame(gt)`.
-4. **At most 2 colored measures, total** — never one heatmap per numeric
+4. **Row hairlines between body rows** — a literal, inline
+   `tab_options(table_body_hlines_style=..., ...)` call. `frame()` does
+   NOT set this (it only sets the outer `table_border_*` box) — it needs
+   its own call, every time.
+5. **At most 2 colored measures, total** — never one heatmap per numeric
    column. Three or more `heatmap(...)`/`data_color(...)` calls in one
-   script is a bug, not a choice.
-5. **`finalize(gt, path="table.png")`** as the final call.
+   script is a bug, not a choice. This is also a FLOOR: if the data
+   supports 2 legitimate measures (including a related pair of columns
+   colored together as one measure via a single call), color both —
+   don't settle for 1.
+6. **`finalize(gt, path="table.png", zoom=2.0, expand=15)`** as the final
+   call, with `zoom=`/`expand=` passed explicitly even though they match
+   the defaults.
 
 Full detail and the reasoning for each lives in `references/RULES.md`'s
 "THE NON-NEGOTIABLE BASE" section (read it — this list is the summary, not

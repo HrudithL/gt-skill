@@ -269,6 +269,14 @@ def band(gt, *, shade="light", hue):
     column and sits right under the title), so it carries the
     more-visible tint; the stub is a narrower, secondary surface and stays
     quieter so it doesn't out-compete the band above it.
+
+    PREFER writing the equivalent ``tab_options(column_labels_background_
+    color=<literal hex>, ...)`` call directly in your own table script
+    instead of calling this helper (see ``build_house_table()`` below and
+    ``references/RULES.md``'s "Hex reference" table) — the resolved color
+    should be visible in your own script's text, not only reachable by
+    running it. This function is kept for convenience/backward
+    compatibility, not as the primary taught pattern.
     """
     rule = PALETTE["neutral"]["column_label_rule"]
     options = {
@@ -682,7 +690,17 @@ def build_house_table():
     # heatmap's family, per the DA hue-selection rule: match an existing
     # heatmap hue first). Quiet enough that the heatmap stays the star, but
     # the band is still the MORE visible of the band/stub pairing below.
-    gt = band(gt, hue="navy")
+    # Written as a literal `tab_options(...)` call (not `band(gt, hue=...)`)
+    # so the exact color this table renders with is visible in this
+    # script's own text — see RULES.md's "Hex reference" table for where
+    # "#C9E0F0" (navy's accent_tint) comes from. `band()` below still exists
+    # and does the identical thing; this is the recommended written form.
+    gt = gt.tab_options(
+        column_labels_background_color="#C9E0F0",
+        column_labels_border_bottom_color="#CCCCCC",
+        column_labels_border_bottom_width="2px",
+        column_labels_border_bottom_style="solid",
+    )
 
     # Small-Color polish: 12 body rows clears the >=10-row striping gate,
     # and only 2 of 6 columns carry continuous color (revenue, yoy_change)
@@ -746,8 +764,19 @@ def build_house_table():
         .tab_source_note(source_note="Source: internal sales ledger, FY close. Figures in USD.")
     )
 
+    # Row hairlines between body rows — a THIRD, separate border concern
+    # from frame() below (frame sets the outer table_border_* box; this
+    # sets table_body_hlines_*, the thin rule BETWEEN rows). Written
+    # literally here, always, per RULES.md's non-negotiable base.
+    gt = gt.tab_options(
+        table_body_hlines_style="solid",
+        table_body_hlines_color="#E8E8E8",
+        table_body_hlines_width="1px",
+    )
     gt = frame(gt)
-    finalize(gt, path="house_table.png")
+    # zoom=/expand= passed explicitly even though they match finalize()'s
+    # own defaults — see RULES.md's non-negotiable base item 6.
+    finalize(gt, path="house_table.png", zoom=2.0, expand=15)
     return gt
 
 

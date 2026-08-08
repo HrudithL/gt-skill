@@ -18,26 +18,80 @@ unchecked, the table isn't done yet.
 2. **A source note, always** — `tab_source_note(source_note=...)`. If the
    actual provenance is unknown, write a generic-but-real one ("Source:
    provided dataset.") rather than omitting it — an unstated source is
-   still a gap, not a neutral default.
+   still a gap, not a neutral default. See "Two source notes, not one"
+   below for the full shape of this rule.
 3. **The boxed frame, always** — `frame(gt)`.
-4. **At most 2 colored measures, TOTAL, no exceptions** — `data_color`/
+4. **Row hairlines between body rows, always** — a THIRD, separate border
+   concern from the frame above: the frame is the table's outer box;
+   hairlines are the thin rule *between individual body rows*, and
+   `frame(gt)` does not set them (it only touches
+   `table_border_{top,bottom,left,right}_*`). Write this literally, inline,
+   in your own script — do not route it through a helper:
+   ```python
+   gt = gt.tab_options(
+       table_body_hlines_style="solid",
+       table_body_hlines_color="#E8E8E8",
+       table_body_hlines_width="1px",
+   )
+   ```
+   `#E8E8E8` is the fixed neutral hairline hex (see "Hex reference" below) —
+   every table uses this same value, it is never themed to the table's hue.
+5. **At most 2 colored measures, TOTAL, no exceptions** — `data_color`/
    `heatmap()` calls across the WHOLE table, not per column-group and not
    "one per numeric column." A table with 5 numeric columns still gets
    **at most 2** heatmaps — pick the 1–2 that are actually the point of the
    request and leave the rest uncolored (bold text at most). Three or more
    `heatmap(...)` calls in one script is always a bug, never a stylistic
-   choice — if you catch yourself writing a third one, delete it.
-5. **`finalize(gt, path="table.png")`** — the mandatory render, always last.
+   choice — if you catch yourself writing a third one, delete it. This is a
+   **floor as well as a ceiling**: if the data genuinely supports 2
+   distinct, request-relevant measures, color both — settling for 1 when a
+   second legitimate measure is sitting right there is the same kind of
+   error as coloring a 3rd. See "A related PAIR of columns can be ONE
+   measure" below for the case where a second measure is easy to miss.
+6. **`finalize(gt, path="table.png", zoom=2.0, expand=15)`** — the mandatory
+   render, always last, with `zoom=`/`expand=` passed **explicitly** at the
+   call site even though they match `finalize()`'s own defaults. Relying on
+   the hidden default means nothing in your own script records what was
+   actually rendered with; typing them out costs nothing and makes the
+   script self-documenting.
 
 Everything else in this file — a stub, a group, a spanner, a status chip,
 a summary row, the striping/tint hierarchy — is genuinely conditional on
-what the data and request actually call for, and stays that way. The five
+what the data and request actually call for, and stays that way. The six
 items above are different in kind: they are the base every table stands
 on, never something to selectively adopt. If you imported a helper
 (`stripe`, `stub_tint`, `humanize_labels`, ...) and then don't end up
 calling it, that's a sign you copied more of `house_table.py` than your
 table needs — remove the unused import, but never let "I didn't get to
 it" cost you an item on this list.
+
+## Hex reference — copy these literally
+
+`house_table.py`'s `PALETTE` dict holds these same values for the helper
+functions to resolve at runtime — but for the two surfaces above that need
+their *exact color* typed directly into your own script (the hairline, and
+the heading-band background below), copy the hex string itself from this
+table rather than writing `PALETTE["accent_tint"]["navy"]` or similar. A
+dict lookup resolves correctly at runtime but is invisible to anything that
+only reads your script's text (a reviewer skimming a diff, a linter, a
+teammate grepping for a color) — the literal string is what makes the
+choice legible from the code alone, the same reason `great-tables`/
+`great-tables-ci`'s `palettes.md` is written as a copy-from-here table
+instead of a Python constants module.
+
+| Hue | `accent_tint` (band) | `washed` (stub) | `accent` (dark band / status chip) | `solid` (rare) |
+|---|---|---|---|---|
+| navy (default) | `#C9E0F0` | `#EAF0F6` | `#1B5A85` | `#22384F` |
+| forest (nature/growth/money) | `#CFEAD9` | `#EAF1EC` | `#2E7350` | `#2F4A38` |
+| oxblood (risk/alerts) | `#F4D6D6` | `#F5EBEB` | `#A23A3A` | `#5C2E2E` |
+| espresso (historical/vintage) | `#EEDFC7` | `#F1EADD` | `#8A6238` | `#4A3A2C` |
+| ochre (premium/highlight) | `#F6E8BE` | `#F5EFDC` | `#B8912E` | `#9A7B33` |
+| tan (secondary warm accent) | `#EFE3CE` | `#EFE7D6` | `#9C8258` | `#8A7452` |
+
+Neutral structural surfaces (no Big-Color hue in the table): label band
+`#F0F0F0` · row stripe `#F6F6F6` · hairline `#E8E8E8` · column-label bottom
+rule / frame border `#CCCCCC` · group/summary rule `#BDBDBD` · vertical
+divider `#D0D0D0` · NA cell `#808080`.
 
 ## Ambiguous measures / selection criteria — pick ONE definition, STATE it
 
@@ -149,6 +203,72 @@ reproducible and defensible on its own. Do all of this BEFORE organizing
 columns — it decides which columns (and which 15 rows) exist at all, not
 just how they're formatted.
 
+## Period-over-period / day-over-day metrics — compute CONTINUOUSLY, never reset at a boundary
+
+A request like "the highest single-day gain/loss **within each month**" (or
+"...within each quarter/week/year") is asking for an aggregation
+**window**, not a computation boundary. It is tempting to compute the
+day-over-day change ONLY from data already inside that window (e.g. treat
+each month's first row as having no prior day, or recompute the delta
+same-day as `close − open` to sidestep the boundary question entirely) —
+resist that. The underlying process (a stock price, a sensor reading, a
+running total) did not stop and restart at the window edge; it kept moving
+continuously, and the window is only how you're choosing to REPORT it.
+
+**The canonical definition, in order:**
+
+1. Sort the FULL underlying series (every row, not the request's date
+   range) chronologically first.
+2. Compute the period-over-period change (`series.pct_change()`, or the
+   equivalent `(this - previous) / previous`) across that FULL sorted
+   series, unconditionally — a month's first day still gets a real change
+   value relative to the PRIOR month's last entry, not `NaN`/undefined.
+3. THEN filter down to the requested date range and group into the
+   requested window.
+4. Aggregate within each group (`max`/`min`/etc.) over the per-row change
+   column computed in step 2 — never a value recomputed fresh from only
+   that group's own rows.
+
+**Why this is the canonical reading, not a same-day-delta alternative:** a
+"day-over-day"/"single-day change" phrase names two ADJACENT observations
+in the underlying continuous series — the wording itself never says
+"restart counting at the window boundary." A same-day computation
+(`close − open` on one row) answers a genuinely different, narrower
+question (intraday movement) that the request didn't ask, even though it's
+a simpler thing to compute from a single grouped-and-filtered DataFrame.
+When the request's phrase is ambiguous between "day-over-day" and
+"intraday," the "Ambiguous measures" precedence above still applies (pick
+one, state it) — but when it specifically says day-over-day/period-over-
+period, this continuous-series definition is not a discretionary pick.
+
+## Two source notes, not one
+
+Every table gets a source note (non-negotiable base, above) — but when the
+table ALSO makes a non-obvious computational choice (the continuous-series
+rule just above, an ambiguous-measure resolution, a baseline-guard
+exclusion), that choice needs its OWN, separate `tab_source_note(...)` call,
+distinct from the plain provenance citation:
+
+```python
+gt = (
+    gt.tab_source_note(
+        source_note="Single-day gain/loss use a continuous day-over-day change "
+                     "across the full historical series, not reset at each month's start."
+    )
+    .tab_source_note(source_note="Source: provided S&P 500 dataset.")
+)
+```
+
+The FIRST call states the methodology (why the numbers are what they are —
+it should mention the specific words that make the choice concrete, e.g.
+"continuous"/"day-over-day"/"not reset", not a vague "see methodology"
+gesture); the SECOND is the plain, generic citation ("Source: ..."). Two
+short notes, not one note trying to carry both jobs — a single combined
+sentence tends to drop the methodology half, since the citation phrasing
+("Source: ...") is the part that comes to mind first. If there's no
+non-obvious computational choice to explain, the plain citation alone is
+enough — don't invent a methodology note with nothing to say.
+
 ## Data-cleaning gotchas (fix these before any `fmt_*`/`data_color` call)
 
 - A currency string like `"$1,200"` or a percent string like `"12%"` is
@@ -179,6 +299,32 @@ above/below target) is the diverging **RdYlGn** measure —
 `yoy_change` in `house_table.py`. `positive=good` is the default
 orientation; pass `reverse=True` only when positive genuinely means worse
 (cost overrun, error rate, latency, churn).
+
+**A related PAIR of columns can be ONE measure.** When a request names two
+columns that are really one comparison split across two cells — a
+best/worst pair, a high/low pair, a before/after pair — color BOTH columns
+together via a SINGLE `heatmap(gt, [col_a, col_b], kind="diverging", ...)`
+call sharing one domain, rather than either coloring only one of the pair
+or spending two separate slots of the 2-measure ceiling on them. This keeps
+the colored-measure COUNT at 1 for the pair (not 2), leaving the ceiling's
+other slot free for a genuinely different measure elsewhere in the table.
+It's easy to color only the obvious "headline" measure (e.g. overall
+percent change) and never notice the pair exists as a second colorable
+measure at all — actively look for one before finalizing which columns are
+colored. Use a SHARED symmetric domain spanning both columns (`M =
+max(abs of every value in EITHER column)`, `domain=[-M, M]`) so the two
+columns render at comparable saturation for comparable magnitude,
+regardless of which column happens to hold the larger value in a given row:
+```python
+day_m = max(df["best_day_gain"].abs().max(), df["worst_day_loss"].abs().max())
+gt = heatmap(gt, ["best_day_gain", "worst_day_loss"], kind="diverging",
+             hue="PuOr", domain=[-day_m, day_m])
+```
+(`hue="PuOr"` is passed straight through as an explicit palette name — not
+one of the `PALETTE["diverging"]` keys — deliberately NOT `RdYlGn` again if
+another diverging measure elsewhere in the same table already uses it: two
+diverging measures in one table must use two different palette families,
+same rule as two sequential measures never sharing one hue.)
 
 **Want an explicit `+`/`−` sign on a signed value?** Pass `force_sign=True`
 — do NOT hand-rewrite it with `pattern="{x:+.1f}%"`. `force_sign=True` is a
@@ -225,10 +371,26 @@ good/bad, whether it's continuous (a heatmap) or discrete (a status chip)
 
 ## Row identifiers (name / date / ID)
 
-Becomes the stub: `rowname_col=...`, default ON whenever a column holds
-row identifiers. `tab_stubhead(label=...)` requires the stub to already
-exist — see the `product` column / `tab_stubhead("Product")` call in
-`house_table.py`.
+Becomes the stub: `rowname_col=...`, **default ON, not optional, whenever a
+column holds row identifiers** — resolve this BEFORE you organize the rest
+of the columns (right after you've decided what the rows and grain of the
+table are), not as a pattern-match you get to later. `tab_stubhead(label=
+...)` requires the stub to already exist — see the `product` column /
+`tab_stubhead("Product")` call in `house_table.py`. Skipping the stub on an
+obvious identifier column is not a stylistic minimalism — it's an
+incomplete table.
+
+**A month/date-and-year stub is always formatted `"Mon YYYY"`** (Python
+`strftime("%b %Y")` — e.g. `"Apr 2010"`), never `"YYYY-MM"`/`"YYYY-Mon"`/a
+raw `Period`'s default string form. This is a pinned, deterministic choice
+like every other value in this file — don't let `str(a_pandas_period)` or
+`to_period("M")`'s default stringification leak into the stub unformatted;
+always route it through an explicit `strftime`.
+
+**A day-level date stub** (a daily time series, not a monthly aggregation)
+is formatted `"Mon DD, YYYY"` (`strftime("%b %d, %Y")` — e.g. `"Jan 05,
+2010"`) — always include the year even when it's constant across every row,
+since a stub label should be unambiguous read in isolation.
 
 ## Natural grouping category
 
@@ -245,13 +407,28 @@ strength. Only ONE row deserves its own distinct, highlighted treatment: a
 summary/total row (see below). Column labels, the stub, and group headers
 are all quieter than that, and quieter than each other:
 
-1. **Column-label band** — `band(gt, hue=...)` — the house DEFAULT is the
-   `accent_tint` (a clearly-visible light tint, not a solid fill) — the
-   MORE visible of the band/stub pairing, since the band spans every
-   column and sits right under the title. The heatmap is still the star
-   of the table, not the header; reach for `shade="dark"` (a solid
-   `accent` fill + white text) only for a pure categorical/text table with
-   no heatmap at all, where the band IS the color story.
+1. **Column-label band.** The house DEFAULT is the `accent_tint` (a
+   clearly-visible light tint, not a solid fill) — the MORE visible of the
+   band/stub pairing, since the band spans every column and sits right
+   under the title. The heatmap is still the star of the table, not the
+   header. Write this call directly, with the literal hex copied from the
+   "Hex reference" table above, rather than through `band(gt, hue=...)` —
+   the exact color should be visible in your own script's text, not only
+   resolvable by running it:
+   ```python
+   gt = gt.tab_options(
+       column_labels_background_color="#C9E0F0",  # accent_tint.navy, from the table above
+       column_labels_border_bottom_color="#CCCCCC",
+       column_labels_border_bottom_width="2px",
+       column_labels_border_bottom_style="solid",
+   )
+   ```
+   (`band()` in `house_table.py` still exists and does the same thing — use
+   it if you prefer, but this literal form is the one to reach for when the
+   script's own text should show the exact choice made.) Reach for the dark
+   variant (`accent` solid fill + white column-label text) only for a pure
+   categorical/text table with no heatmap at all, where the band IS the
+   color story.
 2. **Stub** — `stub_tint(gt, hue=...)` — the quieter `washed` tint. A
    narrower, secondary surface next to the more prominent band, so it
    stays subtler rather than competing with it.
