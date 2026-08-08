@@ -31,7 +31,7 @@ top = (
 abs_max = max(abs(top[change_cols].min().min()),
               abs(top[change_cols].max().max()))
 
-(
+gt = (
     GT(top)
     .tab_header(
         title="Population growth in Ontario's 15 largest cities",

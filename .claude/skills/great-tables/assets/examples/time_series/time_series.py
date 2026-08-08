@@ -37,7 +37,7 @@ monthly = monthly[[
     "temp_mean", "wind_mean", "solar_mean",
 ]]
 
-(
+gt = (
     GT(monthly)
     .tab_header(
         title="NYC Air Quality — Summer 1973",

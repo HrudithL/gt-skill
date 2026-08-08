@@ -46,7 +46,9 @@ only — the helpers execute a decision you already made.
   semantic type, the grey-budget rule, row-group emphasis) plus **all
   neutral hexes** and the **frame border color/width + `gtsave`
   margin/zoom values**. Open before Step 5 and before setting the frame; run
-  every gated item.
+  every gated item. Its **"(f) Titles, caption, and source note"** section is
+  Step 6's rule (caption vs. source note as two separate calls) — read at
+  Step 6.
 
 ## 2. A numeric magnitude / trend / signed measure is present (Step 3)
 

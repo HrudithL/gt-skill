@@ -69,7 +69,33 @@ gt = (
 - **A diverging palette on UNSIGNED data** (e.g. `RdYlGn` on a price or volume) — WRONG.
   Diverging implies a good-vs-bad axis around a midpoint that does **not** exist for a
   pure magnitude; use a **sequential** gradient (`column_gradient_fill.md`) instead.
+- **Text-color-only (no `data_color` fill) as a substitute for this treatment** on a
+  signed measure that's the point of the request — plain green/red
+  `tab_style(style=style.text(...))` on up/down rows with no `data_color` call — is
+  WRONG: the measure then carries **zero** Big Color treatment under the ≤2-measure
+  accounting despite being a genuine continuous signed magnitude, not a binary state.
+  Bare text-color is for a genuinely categorical case (`big_color/status_cell_fill.md`),
+  not a continuous percent/dollar return.
+
+## A related PAIR of columns can be ONE measure
+
+A request naming two columns that are really one comparison split across two cells
+(best/worst, high/low, before/after) — color BOTH together via a SINGLE
+`data_color(columns=[col_a, col_b], ...)` call sharing one domain, not two ceiling
+slots. Easy to color only the obvious headline measure and miss this second one —
+check for it before finalizing which columns are colored:
+
+```python
+day_m = max(df[["best_day_gain", "worst_day_loss"]].abs().to_numpy().max(), 0.0)
+gt = gt.data_color(
+    columns=["best_day_gain", "worst_day_loss"],
+    palette="PuOr",              # a DIFFERENT family from any other diverging measure
+    domain=[-day_m, day_m],
+    truncate=False,
+)
+```
 
 ## Counts as
 
-One Big Color treatment.
+One Big Color treatment — including a related pair colored together via one call
+above, which is still ONE measure, not two.

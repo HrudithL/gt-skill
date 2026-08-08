@@ -40,7 +40,9 @@ design decision stays in SKILL.md and the files below.
   dividers, the row-striping gate, stub tint, `fmt_*` per semantic type, the
   grey-budget rule, row-group emphasis) plus **all neutral hexes** and the **frame
   border color/width + the `gtsave` margin/zoom values**. Open it before Step 5 and
-  before you set the frame; run every gated item.
+  before you set the frame; run every gated item. Its **"(f) Titles, caption, and
+  source note"** section is Step 6's own rule (caption vs. source note as two
+  separate calls) — read it at Step 6, not Step 5.
 
 ## 2. A numeric magnitude / trend / signed measure is present (Step 3)
 

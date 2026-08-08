@@ -5,8 +5,9 @@ Story: At-a-glance monthly summary of the S&P 500 in 2015 — closing
        level, intraday range, month-over-month return, year-to-date
        return.
 """
+import numpy as np
 import pandas as pd
-from great_tables import GT, loc, style
+from great_tables import GT
 
 df = pd.read_csv("data/sp500.csv", parse_dates=["date"]).sort_values("date")
 
@@ -35,11 +36,11 @@ monthly = monthly.reset_index()
 monthly["month_label"] = monthly["month"].dt.strftime("%b %Y")
 monthly = monthly[["month_label", "close", "high", "low", "mom_return", "ytd_return"]].reset_index(drop=True)
 
-# tab_style takes integer row indices, not boolean masks.
-mom_up = monthly.index[monthly["mom_return"] >= 0].tolist()
-mom_down = monthly.index[monthly["mom_return"] < 0].tolist()
-ytd_up = monthly.index[monthly["ytd_return"] >= 0].tolist()
-ytd_down = monthly.index[monthly["ytd_return"] < 0].tolist()
+# Two signed measures (MoM and YTD return) — each is its own diverging Big
+# Color treatment (big_color/diverging_fill.md), sharing ONE symmetric domain
+# ACROSS BOTH columns so a MoM swing and a YTD swing of equal magnitude render
+# at equal saturation, not two independently-scaled columns.
+ret_m = float(np.nanmax(np.abs(monthly[["mom_return", "ytd_return"]].to_numpy())))
 
 (
     GT(monthly)
@@ -60,12 +61,17 @@ ytd_down = monthly.index[monthly["ytd_return"] < 0].tolist()
     .fmt_currency(columns=["close", "high", "low"], currency="USD", decimals=2)
     # force_sign=True so the leading + is the at-a-glance up/down signal.
     .fmt_percent(columns=["mom_return", "ytd_return"], decimals=2, force_sign=True)
-    # tab_style + loc.body for binary up/down coloring. data_color would map a
-    # gradient over the whole column, which over-encodes a directional signal.
-    .tab_style(style=style.text(color="#1b7837"), locations=loc.body(columns=["mom_return"], rows=mom_up))
-    .tab_style(style=style.text(color="#b2182b"), locations=loc.body(columns=["mom_return"], rows=mom_down))
-    .tab_style(style=style.text(color="#1b7837"), locations=loc.body(columns=["ytd_return"], rows=ytd_up))
-    .tab_style(style=style.text(color="#b2182b"), locations=loc.body(columns=["ytd_return"], rows=ytd_down))
+    # Diverging RdYlGn fill, per big_color/diverging_fill.md: positive=good is
+    # the default orientation for a stock return (no reverse=True). Both
+    # columns share ONE domain/palette since they're the SAME measure
+    # (return) reported at two different windows, not two separate measures.
+    .data_color(
+        columns=["mom_return", "ytd_return"],
+        palette="RdYlGn",
+        domain=[-ret_m, ret_m],
+        na_color="#808080",
+        truncate=False,
+    )
     .cols_align(align="right", columns=["close", "high", "low", "mom_return", "ytd_return"])
     .cols_align(align="left", columns=["month_label"])
     .tab_source_note(source_note="Source: S&P 500 daily closing prices, 2015.")
