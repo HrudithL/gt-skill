@@ -697,7 +697,7 @@ def build_house_table():
     # and does the identical thing; this is the recommended written form.
     gt = gt.tab_options(
         column_labels_background_color="#C9E0F0",
-        column_labels_border_bottom_color=PALETTE["neutral"]["column_label_rule"],
+        column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
         column_labels_border_bottom_style="solid",
     )
@@ -770,7 +770,7 @@ def build_house_table():
     # literally here, always, per RULES.md's non-negotiable base.
     gt = gt.tab_options(
         table_body_hlines_style="solid",
-        table_body_hlines_color=PALETTE["neutral"]["hairline"],
+        table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
     )
     gt = frame(gt)
