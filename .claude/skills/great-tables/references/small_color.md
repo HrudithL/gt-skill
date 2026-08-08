@@ -54,6 +54,14 @@ as a plain value column. A `tab_stubhead(label=…)` **requires** that the stub 
 exist — **no orphan label** (setting a stubhead when there is no `rowname_col` is
 wrong, PP-25).
 
+**A month/date-and-year stub is always formatted `"Mon YYYY"`**
+(`strftime("%b %Y")` — e.g. `"Apr 2010"`), never `"YYYY-MM"`, `"YYYY-Mon"`, or a raw
+`Period`'s default string form (`str(period)` yields `"2010-04"` — always route it
+through an explicit `strftime` instead). A day-level date stub is `"Mon DD, YYYY"`
+(`strftime("%b %d, %Y")`). This is a pinned, deterministic choice like every hex in
+this file — the same input must produce the same spelling on every run, not whatever
+a library's default stringification happens to yield.
+
 ### Grouping — a computable trigger (PP-1)
 
 **IF the user's prompt names a grouping dimension** ("grouped by X", "by country",
@@ -64,12 +72,69 @@ may coexist.)
 
 ### Ambiguous measures — pick ONE canonical definition (F-canonical-metric, PP-18)
 
-**IF a requested measure has more than one reasonable definition** (e.g. "highest
-single-day gain" = `close − open`? intraday `high − low`? day-over-day
-`close.diff()`?) **⇒ pick ONE canonical definition, compute it, and STATE the chosen
-definition** in the subtitle or a source note so the number is reproducible. Do **not**
-silently pick one — an unstated choice makes the same prompt yield different numbers
-across runs.
+**IF a requested measure has more than one reasonable definition** (e.g. a ranking
+metric vs. a display column, or which of several plausible formulas to use) **⇒ pick
+ONE canonical definition, compute it, and STATE the chosen definition** in the
+subtitle or a source note so the number is reproducible. Do **not** silently pick
+one — an unstated choice makes the same prompt yield different numbers across runs.
+
+**One specific case is NOT a discretionary pick, despite looking like one:** a
+"day-over-day"/"single-period change" measure requested **within** an aggregation
+window ("highest single-day gain **within the month**", "week-over-week change
+**within the quarter**") names two ADJACENT observations in the FULL underlying
+continuous series — the window is how you're asked to *report* it, not a
+computation boundary the series itself resets at. Compute the change across the
+**entire sorted series first** (`series.pct_change()`, unconditionally — a period's
+first row still gets a real value relative to the PRIOR period's last one, never
+`NaN`), filter to the requested range **after**, then aggregate within each window
+over that already-computed column. A same-period computation (e.g. `close − open`
+on one row) answers a different, narrower question (intraday movement) the request
+didn't ask, even though it only needs a single grouped-and-filtered DataFrame to
+compute. When the request's wording is genuinely ambiguous between same-period and
+day-over-day, the ordinary "pick one, state it" rule above still applies — but when
+it specifically says day-over-day/period-over-period, the continuous-series
+definition is the canonical one, not one of several equally-valid choices.
+
+**A frequent, specific instance of this trigger: a request that names a ranking/
+selection metric AND separate display columns in the same sentence.** "Population
+growth trends for the top 15 fastest-growing towns, comparing their density changes"
+mixes two questions — what to **rank/select by** (which rows make the list) and what
+to **display** once selected (which columns appear). Resolve BOTH with this
+precedence, then STATE the result in the subtitle/source note:
+
+1. **Find the ranking metric SEPARATELY from the display columns** — it's usually
+   the request's stated TOPIC (the noun phrase right after "a table of/showing..."),
+   not whichever measure sits nearest "top N"/"fastest-growing" in the sentence. An
+   explicitly named ranking metric ("top 15 by revenue") always wins outright. If the
+   topic metric and the named display columns differ, show BOTH as columns — a table
+   titled "population growth trends" with zero population data reads as incomplete
+   regardless of how well it answers the display question.
+2. **Entity/category scope matches every row the term plausibly covers, never the
+   narrower literal subset** — "Ontario towns" means Ontario municipalities
+   generically; if a type/category column exists (`town`/`city`/`township`/...),
+   include every type unless the request is explicit about excluding some. State the
+   scope choice.
+3. **A stated date range means the FULL span** ("1996 to 2021" compares the 2021 and
+   1996 values, not an interior period) **as a percentage/relative change**, not an
+   absolute difference, whenever the request says "growth"/"fastest-growing"/"rate."
+   **Guard the baseline against the ACTUAL data before computing**: check whether any
+   eligible row's starting value is zero/negative — a measure that's merely
+   *capable* of going negative but happens to be positive everywhere needs no special
+   handling. When a real zero/negative baseline exists and the metric was left
+   **unstated**, fall back to absolute change for the whole table and say so. When
+   the request **explicitly** asked for a rate, exclude only the non-positive-
+   baseline rows (a rate is genuinely undefined for them) and note the exclusion,
+   rather than silently swapping the whole table to a different metric. This guard
+   applies per-cell too, not just to the overall ranking figure: `np.where(start > 0,
+   (end - start) / start, None)` catches both the zero-baseline `inf` case (which
+   `sub_missing` does NOT catch on its own — it only substitutes `None`/`NaN`) and
+   the negative-baseline case (a finite but meaningless sign-reversed value, e.g.
+   `(5 - (-10)) / (-10) = -1.5`) — mask on the condition before formatting, not on
+   whether the rendered number happens to look broken.
+4. **"Show X across all periods, with changes between each period" means BOTH** —
+   include the per-checkpoint values AND the between-period deltas as separate
+   columns when the request names both, rather than picking one to stand in for the
+   other. This is a *display* choice; it never overrides the ranking metric from (1).
 
 ---
 
@@ -191,6 +256,37 @@ overridable by an explicit user instruction.
 Always: `use_seps=True` for thousands separators, and `sub_missing(columns=…,
 missing_text="—")` for empty cells. Put units in the column **label** only when the
 formatter doesn't already convey them.
+
+---
+
+## (f) Titles, caption, and source note (Step 6)
+
+**Gate:** title + subtitle are unconditional, every table. Caption fires at **≥5
+rows**; source note fires whenever provenance is known (write a generic one —
+"Source: provided dataset." — rather than omitting it when it isn't).
+
+**Caption and source note are two SEPARATE `tab_source_note(...)` calls, not one
+combined sentence.** The caption's job is to state a non-obvious computational
+choice made elsewhere in the table (an ambiguous-measure resolution, the
+continuous-series rule above, a baseline-guard exclusion) — it should name the
+specific words that make the choice concrete ("continuous", "day-over-day", "not
+reset"), not gesture vaguely at "see methodology." The source note's job is the
+plain citation. Stack them, methodology first:
+
+```python
+gt = (
+    gt.tab_source_note(
+        source_note="Single-day gain/loss use a continuous day-over-day change "
+                     "across the full historical series, not reset at each month's start."
+    )
+    .tab_source_note(source_note="Source: provided S&P 500 dataset.")
+)
+```
+
+A single combined sentence tends to drop the methodology half, since the citation
+phrasing ("Source: ...") is what comes to mind first when writing one note. If the
+table made no non-obvious computational choice, the plain citation alone is
+enough — don't invent a methodology caption with nothing to say.
 
 ---
 

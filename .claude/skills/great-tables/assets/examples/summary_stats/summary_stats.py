@@ -25,7 +25,7 @@ agg["type"] = agg["type"].map({"classic": "Classic", "veggie": "Veggie",
                                 "chicken": "Chicken", "supreme": "Supreme"})
 agg = agg.sort_values(["type", "size"]).reset_index(drop=True)
 
-(
+gt = (
     # rowname_col + groupname_col is the gt-native way to express a two-level
     # row layout: group banners on `type`, indented size labels under each.
     GT(agg, rowname_col="size", groupname_col="type")

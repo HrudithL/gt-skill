@@ -24,7 +24,7 @@ sub = (
 )
 sub["cmpd_name"] = sub["cmpd_name"].str.capitalize()
 
-(
+gt = (
     GT(sub)
     .tab_header(
         title="OH reaction rate constants at 298 K",

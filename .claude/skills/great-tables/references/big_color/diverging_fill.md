@@ -82,7 +82,37 @@ gt = (
 - **A diverging palette on UNSIGNED data** (e.g. `RdYlGn` on a price or volume) — WRONG.
   Diverging implies a good-vs-bad axis around a midpoint that does **not** exist for a
   pure magnitude; use a **sequential** gradient (`column_gradient_fill.md`) instead.
+- **Text-color-only (no `data_color` fill at all) as a substitute for this treatment**
+  on a signed measure that's the point of the request — e.g. plain green/red
+  `tab_style(style=style.text(color=...))` on up/down rows with no `data_color` call —
+  is WRONG for the same reason as the empty-fill case above: this measure then carries
+  **zero** Big Color treatment under the ≤2-measure accounting, even though it's a
+  genuine continuous signed magnitude the request is about, not a binary state. Reserve
+  a bare text-color approach for a case that's genuinely categorical (2-3 discrete
+  states, `big_color/status_cell_fill.md`), not a continuous percent/dollar return.
+
+## A related PAIR of columns can be ONE measure
+
+When a request names two columns that are really one comparison split across two
+cells — a best/worst pair, a high/low pair, a before/after pair — color BOTH columns
+together via a SINGLE `data_color(columns=[col_a, col_b], ...)` call sharing one
+domain, rather than coloring only one of the pair or spending two separate ceiling
+slots on them. It's easy to color only the obvious "headline" measure and never
+notice the pair exists as a second colorable measure — actively check for one before
+finalizing which columns are colored. Compute the shared domain across **both**
+columns together:
+
+```python
+day_m = max(df[["best_day_gain", "worst_day_loss"]].abs().to_numpy().max(), 0.0)
+gt = gt.data_color(
+    columns=["best_day_gain", "worst_day_loss"],
+    palette="PuOr",              # a DIFFERENT family from any other diverging measure in the table
+    domain=[-day_m, day_m],
+    truncate=False,
+)
+```
 
 ## Counts as
 
-One Big Color treatment.
+One Big Color treatment — including a related pair of columns colored together via
+one call (see above), which is still ONE measure, not two.

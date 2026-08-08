@@ -51,6 +51,11 @@ is a computable condition, not a judgment call: if it fires, the action is manda
 **requires** that the stub already exist — **no orphan label** (setting a stubhead
 when there is no `rowname_col` is wrong, PP-25).
 
+**A month/date-and-year stub is always `"Mon YYYY"`** (`strftime("%b %Y")` —
+`"Apr 2010"`), never `"YYYY-MM"` or a raw `Period`'s default `str()`. A day-level
+stub is `"Mon DD, YYYY"` (`strftime("%b %d, %Y")`). Pinned like every hex here —
+route any date through an explicit `strftime`, never a library default.
+
 ### Grouping — a computable trigger (PP-1)
 
 **IF the user's prompt names a grouping dimension** ("grouped by X", "by country",
@@ -60,12 +65,51 @@ story ⇒ use `groupname_col=…`.** Prompt-named grouping is **MANDATORY** (Rul
 
 ### Ambiguous measures — pick ONE canonical definition (F-canonical-metric, PP-18)
 
-**IF a requested measure has more than one reasonable definition** (e.g. "highest
-single-day gain" = `close − open`? intraday `high − low`? day-over-day
-`close.diff()`?) **⇒ pick ONE canonical definition, compute it, and STATE the chosen
-definition** in the subtitle or a source note so the number is reproducible. Do
-**not** silently pick one — an unstated choice makes the same prompt yield different
-numbers across runs.
+**IF a requested measure has more than one reasonable definition** (e.g. a ranking
+metric vs. a display column, or which of several formulas to use) **⇒ pick ONE
+canonical definition, compute it, and STATE the chosen definition** in the subtitle
+or a source note so the number is reproducible. Do **not** silently pick one — an
+unstated choice makes the same prompt yield different numbers across runs.
+
+**Exception — NOT a discretionary pick:** a "day-over-day"/"single-period change"
+measure requested **within** an aggregation window ("highest single-day gain
+**within the month**") names two ADJACENT observations in the FULL underlying
+continuous series — the window is a reporting grain, not a computation boundary.
+Compute the change across the **entire sorted series first**
+(`series.pct_change()`, unconditionally — a period's first row still gets a real
+value relative to the PRIOR period's last one, never `NaN`), filter to the
+requested range **after**, then aggregate within each window over that already-
+computed column. A same-period computation (`close − open` on one row) answers a
+different, narrower question (intraday movement), not the one asked. This
+continuous-series definition is canonical when the wording says day-over-day/
+period-over-period — the ordinary "pick one, state it" rule above still governs
+genuinely ambiguous wording (same-period vs. day-over-day unclear).
+
+**Frequent specific instance: ranking/selection metric named alongside separate
+display columns in one sentence.** "Population growth trends for the top 15
+fastest-growing towns, comparing their density changes" mixes what to **rank/select
+by** and what to **display**. Resolve with this precedence, then STATE the result:
+
+1. **Ranking metric SEPARATELY from display columns** — usually the request's
+   TOPIC (the noun right after "a table of/showing..."), not whatever sits nearest
+   "top N." An explicitly named metric ("top 15 by revenue") always wins. If topic
+   metric and display columns differ, show BOTH.
+2. **Entity/category scope matches every row the term plausibly covers**, never the
+   narrower literal subset ("Ontario towns" = every municipality type present,
+   unless explicitly narrowed). State the scope.
+3. **A stated date range means the FULL span, as relative change**, not an interior
+   period or absolute difference, when the request says "growth"/"rate." **Guard the
+   baseline against the actual data first**: a measure merely *capable* of going
+   negative but positive everywhere needs no special handling. Real zero/negative
+   baseline + unstated metric ⇒ fall back to absolute change and say so. Real
+   baseline + explicit rate request ⇒ exclude only the non-positive-baseline rows
+   (undefined, not just inconvenient) and note it. Apply the guard per-cell:
+   `np.where(start > 0, (end - start) / start, None)` catches both the zero-baseline
+   `inf` case (`sub_missing` alone does NOT — it only substitutes `None`/`NaN`) and
+   the negative-baseline case (a finite, sign-reversed, meaningless value).
+4. **"X across all periods, with changes between each period" means BOTH** —
+   per-checkpoint values AND between-period deltas as separate columns, not one
+   standing in for the other. A display choice; never overrides (1).
 
 ---
 
@@ -187,6 +231,35 @@ overridable by an explicit user instruction.
 Always: `use_seps=True` for thousands separators, and `sub_missing(columns=…,
 missing_text="—")` for empty cells. Put units in the column **label** only when the
 formatter doesn't already convey them.
+
+---
+
+## (f) Titles, caption, and source note (Step 6)
+
+**Gate:** title + subtitle unconditional, every table. Caption fires at **≥5 rows**;
+source note fires whenever provenance is known (a generic "Source: provided
+dataset." beats omitting it).
+
+**Caption and source note are TWO separate `tab_source_note(...)` calls, not one
+combined sentence.** The caption states a non-obvious computational choice made
+elsewhere (an ambiguous-measure resolution, the continuous-series rule above, a
+baseline-guard exclusion) — name the specific words that make it concrete
+("continuous", "day-over-day", "not reset"), not a vague "see methodology." The
+source note is the plain citation. Stack them, methodology first:
+
+```python
+gt = (
+    gt.tab_source_note(
+        source_note="Single-day gain/loss use a continuous day-over-day change "
+                     "across the full historical series, not reset at each month's start."
+    )
+    .tab_source_note(source_note="Source: provided S&P 500 dataset.")
+)
+```
+
+A combined sentence tends to drop the methodology half (the citation phrasing
+comes to mind first). No non-obvious computational choice to explain → the plain
+citation alone is enough.
 
 ---
 

@@ -19,7 +19,7 @@ top = df.sort_values("hp", ascending=False).head(10).reset_index(drop=True)
 top["rank"] = top.index + 1  # 1-based; leaderboards start at #1, not #0.
 top = top[["rank", "car", "year", "ctry_origin", "hp", "trq", "drivetrain", "msrp"]]
 
-(
+gt = (
     GT(top)
     .tab_header(
         title="Top 10 by Horsepower",

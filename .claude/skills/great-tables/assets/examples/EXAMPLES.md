@@ -12,3 +12,11 @@ archetype you need.
 | Summary stats | Aggregations, totals, subtotals | `summary_stats/summary_stats.py` · `summary_stats/summary_stats.png` |
 | Scientific | Measurements with units, sig figs | `scientific/scientific.py` · `scientific/scientific.png` |
 | Heatmap | Color-encoded data cells | `heatmap/heatmap.py` · `heatmap/heatmap.png` |
+
+Every archetype assigns its final chained expression to a top-level `gt = (...)` —
+copy that assignment into your own script too, then add your own `gt.gtsave(
+"table.png")` as a separate final line (Step 7's mandatory render, which these
+distilled examples deliberately leave out to keep the archetype itself
+data-shape-agnostic). Don't leave the final chain as a bare, unassigned expression
+— nothing downstream (your own render call, any later `tab_style` targeting the
+same table, a reviewer's own script) has a name to refer back to it by.
