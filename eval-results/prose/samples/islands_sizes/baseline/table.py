@@ -1,22 +1,13 @@
 import pandas as pd
 from great_tables import GT
 
-df = pd.read_csv('islands.csv')
+df = pd.read_csv("islands.csv")
 
-gt_table = (
+gt = (
     GT(df)
-    .tab_header(
-        title="Islands and Their Sizes",
-        subtitle="Size in thousands of square kilometers"
-    )
-    .cols_label(
-        name="Island",
-        size="Size (1000 km²)"
-    )
-    .fmt_integer(
-        columns='size'
-    )
-    .opt_align_table_header("center")
+    .tab_header(title="Islands and Their Sizes")
+    .cols_label(name="Island Name", size="Size (1000 km²)")
+    .cols_align(align="center")
 )
 
-gt_table.gtsave("table.png")
+gt.gtsave("table.png")

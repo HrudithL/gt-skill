@@ -1,36 +1,36 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080527_house_6prompts/prompts/sp500_monthly_performance/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/sp500_monthly_performance.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260808_102042_house_6prompts/prompts/sp500_monthly_performance/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py
 
-TOTAL: 9/88 (10.2%)
-  Data-compliance:        2/44
-  Formatting-compliance:  7/44
+TOTAL: 22/104 (21.2%)
+  Data-compliance:        9/48
+  Formatting-compliance:  13/56
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 6 canonical measures unverifiable
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/3 canonical colored measures covered by a candidate color call
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
-[FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 0/5 -- 0/1 required instructions satisfied; row_count=72 not satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.15 (candidate-only=['Avg Daily Volume', 'Max Daily Gain', 'Max Daily Loss', 'Month', 'Pct Change'], missing=['avg_volume', 'best_day_gain', 'month_label', 'pct_change', 'worst_day_loss', 'year']); value-matched renamed columns: {'monthly_close': 'Closing', 'monthly_open': 'Opening'}
 [N/A] [MECHANICAL] Grouping existence: 0/0 -- grouping is a discretionary editorial choice here (ground truth groups, but REQUIRED_INSTRUCTIONS has no 'grouping' key) -- judged separately by grouping_choice_quality, not scored as a strict presence match
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [JUDGE] Grouping-choice quality: 1/3 -- judge score 1/5 -- The ground truth groups rows by year (2010, 2011, 2012, 2013, 2014, 2015 as section headers), making the six-year structure visually clear and supporting an analysis of yearly trends. The candidate presents all 72 months in a flat, ungrouped list with only the month-year identifier in the stub, obscuring the year-to-year organization that the prompt and ground truth editorial choice emphasize.
 [FAIL] [MECHANICAL] Column-group spanners existence: 0/2 -- candidate spanner_present=False, truth=True
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- Column labels are mostly correct conceptually, but 'Max Daily Gain' and 'Max Daily Loss' are imprecise synonyms for the ground truth's 'Best Day (gain)' and 'Worst Day (loss)'. More critically, the volume column lacks units ('B sh' or similar), making it unclear that values like '4,786,714,716' represent billions in shares; the ground truth explicitly labels 'Avg Daily Volume (B sh)' for clarity.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 0/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=expected=True (gated on spanners), got=False
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=72, fully_filled=False -> expected striping=True, actual=False
 [FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- ground truth requires a stub but candidate has none; stub tint unverifiable
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=False present=False, source expected=True present=False
-[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/6 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['monthly_open', 'monthly_close', 'pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss']
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=False, source expected=True present=False
+[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- 0/3 canonical hero-uncolored measures are bolded
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Caption doesn't just restate the subtitle: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'S&P 500 Monthly Performance Summary' is accurate and names the dataset and time range correctly. However, the ground truth's title 'S&P 500 Monthly Performance, 2010–2015' captures the same core framing without the generic word 'Summary,' and paired with the subtitle, it matches the prompt's analytical angle more precisely. The candidate's phrasing is not wrong, just slightly less specific.
+[FAIL] [JUDGE] Subtitle quality: 1/3 -- judge score 2/5 -- The candidate's subtitle '2010 - 2015' is purely a date range that partially overlaps with information in the title itself, adding minimal clarifying context. The ground truth's subtitle 'Six full years of trading, grouped by year, with each month's open, close, overall percent change, average daily volume, and the best and worst single trading day within that month' comprehensively describes what is measured and how, providing real orientation a reader needs.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate's column order (Month, Opening, Closing, Pct Change, Avg Daily Volume, Max Daily Gain, Max Daily Loss) is sensible and reads left-to-right naturally: identifier first, then raw prices, then the monthly change, then volume, then the day extremes. The ground truth groups the extremes under a spanner ('Single-day extremes within the month') but uses the same underlying order, which is equally defensible. The candidate's flat order is workable, though the spanner-based grouping in the ground truth adds slightly more organizational clarity.
+[FAIL] [JUDGE] Color theme/palette taste: 1/3 -- judge score 1/5 -- The candidate uses no color at all—all cells are plain black text on white, with no fill or highlighting on any data column. The ground truth applies a tasteful, harmonious palette: green for positive percent changes, red/orange for negative, light purple for best-day gains, and peach/orange for worst-day losses, with a cohesive light header band. The candidate's complete absence of color encoding fails to leverage the visual channel that makes the ground truth's patterns instantly readable.
+[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 1/5 -- The candidate provides no caption or source note at all. The ground truth's caption explicitly explains that the best/worst days use 'continuous day-over-day percent change' that is 'not reset' to zero at each month's start, which is critical context the prompt/metadata flags as essential. Without this clarification, the candidate leaves readers confused about whether the extreme gains/losses are monthly or day-over-day-continuous.

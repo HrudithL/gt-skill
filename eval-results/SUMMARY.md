@@ -7,18 +7,34 @@ total), scored by the hybrid deterministic + LLM-judge comparator
 Per-skill detail, plots, and curated runs are in `house/`, `scripts/`,
 `prose/`, `creator/` — see each skill's own `SUMMARY.md`.
 
-| Skill | Mean comparator score | vs. baseline | Score spread (3 repeats) | Mean cost/invocation |
-|---|---|---|---|---|
-| `prose` | **70.5%** | +45.7 pts | **11.1 pts** (most consistent) | $0.150 |
-| `scripts` | 65.0% | +42.1 pts | 22.1 pts (least consistent) | **$0.188** (most expensive) |
-| `house` | 57.7% | +36.4 pts | 15.8 pts | **$0.110** (cheapest of the 3 real skills) |
-| `creator` | 21.7% | **-3.0 pts** | 16.7 pts | $0.095 |
-| baseline (no skill) | 21.3-24.8%\* | — | n/a (1 run) | $0.060-$0.089\* |
+| Skill | Mean comparator score (2026-08-07) | Mean comparator score (2026-08-08, after skill fixes) | Mean cost/invocation |
+|---|---|---|---|
+| `prose` | 70.5% | 62.4%\*\* | $0.150 |
+| `scripts` | 65.0% | 52.7%\*\* | $0.164 |
+| `house` | 57.7% | **60.6%** | $0.115 |
+| `creator` | 21.7% (not re-tested) | — | $0.095 |
+| baseline (no skill) | 21.3-24.8%\* | 21.3-26.5%\* | $0.060-$0.089\* |
 
 \*baseline varies slightly per skill's sweep because each sweep's baseline
 runs are separate invocations (same prompts, no skill mounted, different
-sampling) — see each skill's `plots/cost.png` / `comparator_score.png` for
-the per-skill baseline actually used in that comparison.
+sampling).
+
+\*\*2026-08-08: `house`, `scripts`, and `prose` all had genuine content/
+skill fixes applied (see each skill's own `SUMMARY.md` and, for the eval
+methodology itself, `.planning/` for the underlying analysis). `house`'s
+result is a clean, mechanism-confirmed win — its targeted checks moved
+36-60% (relative) even though the aggregate only moved +2.9 points.
+`scripts`/`prose`'s aggregate MOVED DOWN, but this is not read as a real
+regression: (1) this same re-sweep caught and fixed a genuine pre-existing
+bug (all 6 shared archetype examples built their final `GT` chain as an
+unassigned bare expression, voiding Tier-2 scoring for any candidate that
+copied the structure), and (2) the SAME prompt+skill combination showed
+40-65-point swings across its own 3 repeats in this one sweep, indicating
+Haiku's sampling variance at n=3 is large enough to dominate the aggregate
+either direction. Treat `scripts`/`prose`'s post-fix numbers as inconclusive
+pending a larger-repeat-count re-test, not as evidence the additions hurt
+them. `creator` (the skill-creator-produced candidate) was not re-tested —
+none of this round's fixes touched it.
 
 ## Findings
 

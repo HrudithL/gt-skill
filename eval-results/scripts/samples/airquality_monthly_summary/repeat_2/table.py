@@ -1,94 +1,66 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, md, style, loc
-from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
+from great_tables import GT, html, style, loc
+from gt_consistency import PALETTE, band, frame, finalize, stripe, stub_tint, heatmap
 
-# Load and clean data
-df = pd.read_csv('airquality.csv')
+df = pd.read_csv("airquality.csv")
 
-# Aggregate by month: calculate mean for each numeric column
-monthly_stats = df.groupby('Month')[['Ozone', 'Wind', 'Temp']].mean()
+# Data cleaning: coerce columns to numeric, handle missing values
+df["Temp"] = pd.to_numeric(df["Temp"], errors="coerce")
+df["Wind"] = pd.to_numeric(df["Wind"], errors="coerce")
+df["Ozone"] = pd.to_numeric(df["Ozone"], errors="coerce")
 
-# Reset index to make Month a column
-monthly_stats = monthly_stats.reset_index()
+# Map numeric Month codes to human labels
+month_name = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
 
-# Map month numbers to names
-month_names = {5: 'May', 6: 'June', 7: 'July', 8: 'August', 9: 'September'}
-monthly_stats['Month'] = monthly_stats['Month'].map(month_names)
+# Aggregate to monthly means
+monthly = df.groupby("Month").agg(
+    temp_mean=("Temp", "mean"),
+    wind_mean=("Wind", "mean"),
+    ozone_mean=("Ozone", "mean"),
+).reset_index()
 
-# Rename columns for display
-monthly_stats.columns = ['Month', 'Ozone (ppb)', 'Wind (mph)', 'Temperature (°F)']
+monthly["month_label"] = monthly["Month"].map(month_name)
+monthly = monthly[["month_label", "temp_mean", "wind_mean", "ozone_mean"]]
 
-# Compute domains for the two colored measures: Temperature and Wind
-# These are the top 2 by prompt priority
-temp_cols = ['Temperature (°F)']
-wind_cols = ['Wind (mph)']
-
-temp_lo = float(np.nanmin(monthly_stats[temp_cols].to_numpy()))
-temp_hi = float(np.nanmax(monthly_stats[temp_cols].to_numpy()))
-wind_lo = float(np.nanmin(monthly_stats[wind_cols].to_numpy()))
-wind_hi = float(np.nanmax(monthly_stats[wind_cols].to_numpy()))
-
-# Build the table
 gt = (
-    GT(monthly_stats, rowname_col='Month')
-    .fmt_number(columns=['Ozone (ppb)', 'Wind (mph)', 'Temperature (°F)'], decimals=1, use_seps=False)
-    .sub_missing(columns=['Ozone (ppb)', 'Wind (mph)', 'Temperature (°F)'], missing_text='—')
-    # Color Temperature (top priority)
-    .data_color(
-        columns='Temperature (°F)',
-        palette='Blues',
-        domain=[temp_lo, temp_hi],
-        truncate=False,
-        na_color='#808080',
-    )
-    # Color Wind (second priority)
-    .data_color(
-        columns='Wind (mph)',
-        palette='Greens',
-        domain=[wind_lo, wind_hi],
-        truncate=False,
-        na_color='#808080',
-    )
-    # Apply heading band with light tint (has Big Color, so light band)
-    .tab_options(
-        table_font_size='14px',
-        column_labels_background_color='#EAF0F6',  # light tint for Blues dominant hue
-        column_labels_border_bottom_color='#CCCCCC',
-        column_labels_border_bottom_width='2px',
-        table_body_hlines_style='solid',
-        table_body_hlines_color='#E8E8E8',
-        table_body_hlines_width='1px',
-        row_striping_background_color='#F6F6F6',
-    )
-    # Apply row striping (≥5 rows, not fully filled by Big Color)
-    .opt_row_striping()
-    # Apply stub tint
-    .tab_style(
-        style=style.fill(color='#EAF0F6'),  # harmonize to Blues tint
-        locations=loc.stub(),
-    )
-    # Apply frame border
-    .tab_options(
-        table_border_top_style='solid',
-        table_border_top_color='#CCCCCC',
-        table_border_top_width='1px',
-        table_border_bottom_style='solid',
-        table_border_bottom_color='#CCCCCC',
-        table_border_bottom_width='1px',
-        table_border_left_style='solid',
-        table_border_left_color='#CCCCCC',
-        table_border_left_width='1px',
-        table_border_right_style='solid',
-        table_border_right_color='#CCCCCC',
-        table_border_right_width='1px',
-    )
-    # Add title and subtitle
+    GT(monthly, rowname_col="month_label")
     .tab_header(
-        title='Air Quality by Month',
-        subtitle=md('Average temperature, wind speed, and ozone levels')
+        title="Air Quality Summary",
+        subtitle="Monthly average temperature, wind speed, and ozone levels (May–September 1973)",
     )
+    .cols_label(
+        temp_mean=html("Temperature (&deg;F)"),
+        wind_mean="Wind Speed (mph)",
+        ozone_mean=html("Ozone (ppb)"),
+    )
+    .fmt_number(columns=["temp_mean", "wind_mean", "ozone_mean"], decimals=1, use_seps=True)
+    .sub_missing(columns=["temp_mean", "wind_mean", "ozone_mean"], missing_text="—")
 )
 
-# Render
-gt.gtsave('table.png', expand=15, zoom=2.0)
+# Apply Big Color to the two colored measures (Temperature: neutral, Wind: growth/"more is better")
+# By prompt priority: temperature first, then wind speed; ozone is third so not colored
+gt = heatmap(gt, columns="temp_mean", kind="sequential", hue="neutral")
+gt = heatmap(gt, columns="wind_mean", kind="sequential", hue="positive")
+
+# Apply heading band (light tint since we have Big Color) with navy hue
+gt = band(gt, shade="light", hue="navy")
+
+# Apply Small Color polish
+gt = stub_tint(gt, hue="navy")
+gt = stripe(gt)
+
+# Apply frame with tab_options
+gt = frame(gt)
+
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color=PALETTE["neutral"]["hairline"],
+    table_body_hlines_width="1px",
+)
+
+gt = gt.tab_source_note(
+    source_note="Source: New York State Department of Conservation, daily measurements May–September 1973."
+)
+
+gt = finalize(gt)

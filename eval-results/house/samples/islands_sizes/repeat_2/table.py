@@ -1,34 +1,32 @@
 import pandas as pd
-from great_tables import GT, md
-from house_table import (
-    PALETTE, frame, finalize, band, heatmap, humanize_labels
-)
+from great_tables import GT, loc, style
+from house_table import PALETTE, frame, finalize, heatmap, humanize_labels
 
-# Read the islands data
-islands = pd.read_csv("islands.csv")
+df = pd.read_csv("islands.csv")
 
-# Create the GT table
-gt = GT(islands).tab_header(
-    title="Islands by Size",
-    subtitle="Geographic area in thousands of square kilometers",
-).tab_source_note(
-    source_note="Source: provided dataset."
-)
-
-# Format columns
 gt = (
-    gt.fmt_number(columns="size", decimals=1, use_seps=True)
-    .cols_label(name="Island", size="Size (1000 km²)")
+    GT(df, rowname_col="name")
+    .tab_header(
+        title="Island Sizes",
+        subtitle="Area in thousands of square kilometers",
+    )
+    .tab_stubhead(label="Island")
+    .fmt_number(columns="size", decimals=0, use_seps=True)
 )
 
-# Apply the sequential heatmap to the size column
+gt = humanize_labels(gt, df)
 gt = heatmap(gt, "size", kind="sequential", hue="neutral")
-
-# Apply the band styling
-gt = band(gt, hue="navy")
-
-# Apply the frame
+gt = gt.tab_options(
+    column_labels_background_color="#C9E0F0",
+    column_labels_border_bottom_color=PALETTE["neutral"]["column_label_rule"],
+    column_labels_border_bottom_width="2px",
+    column_labels_border_bottom_style="solid",
+)
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color=PALETTE["neutral"]["hairline"],
+    table_body_hlines_width="1px",
+)
+gt = gt.tab_source_note(source_note="Source: provided dataset.")
 gt = frame(gt)
-
-# Finalize and save
-finalize(gt)
+finalize(gt, path="table.png", zoom=2.0, expand=15)

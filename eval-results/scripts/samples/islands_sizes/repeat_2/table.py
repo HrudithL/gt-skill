@@ -1,42 +1,35 @@
 import pandas as pd
-import numpy as np
-from great_tables import GT, md
+from great_tables import GT
 from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
 
-# Load and clean data
+# Step 1: Load and clean data
 df = pd.read_csv("islands.csv")
-df = df.sort_values("size", ascending=False).reset_index(drop=True)
+df = df.dropna()
 
-# Step 1: Data is clean (name and size columns, numeric values)
-# Step 2: Island names are the stub, size is the measure
-# Step 3: Size qualifies for Big Color (sequential, ≥5 rows, ordered magnitude)
-# Compute domain for size
-cols = ["size"]
-lo = float(np.nanmin(df[cols].to_numpy()))
-hi = float(np.nanmax(df[cols].to_numpy()))
-
-# Build table
+# Step 2: Organize columns
+# Island name is the stub, size is the measure
 gt = GT(df, rowname_col="name")
 
-# Step 3: Apply gradient fill to size column (Blues for neutral magnitude)
-gt = heatmap(gt, "size", kind="sequential", hue="neutral", domain=[lo, hi])
+# Step 3: Big Color — size column qualifies as ordered magnitude (≥5 rows, neutral semantic)
+# Use sequential Blues palette
+gt = gt.fmt_number(columns="size", decimals=0)
+gt = heatmap(gt, "size", kind="sequential", hue="neutral")
 
-# Step 5: Format the size column
-gt = gt.fmt_number(columns="size", decimals=0, use_seps=True)
+# Step 4: Heading band — with Big Color, use light band with forest hue (matching data semantics)
+gt = band(gt, shade="light", hue="forest")
 
-# Step 5: Apply striping (≥10 rows, body not fully filled by Big Color on stub)
+# Step 5: Small Color polish
 gt = stripe(gt)
-
-# Step 5: Stub tint with grey (no Big Color dominance requiring washed tint)
-gt = stub_tint(gt, hue="grey")
-
-# Step 4: Light band with washed blue tint (Big Color present)
-gt = band(gt, shade="light", hue="navy")
-
-# Add frame and render
+gt = stub_tint(gt, hue="forest")
 gt = frame(gt)
+
+# Step 6: Titles and annotations
 gt = gt.tab_header(
     title="World's Largest Islands",
-    subtitle="Islands ranked by land area (thousand sq km)"
+    subtitle="Area in thousands of square kilometers"
 )
+gt = gt.tab_source_note(
+    "Source: Geographic data"
+)
+
 finalize(gt, "table.png")

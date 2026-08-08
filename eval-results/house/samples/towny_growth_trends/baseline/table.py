@@ -1,68 +1,66 @@
 import pandas as pd
 from great_tables import GT
-import numpy as np
 
-# Read the data
 df = pd.read_csv('towny.csv')
 
-# Calculate total population growth from 1996 to 2021
-df['total_growth_pct'] = ((df['population_2021'] - df['population_1996']) / df['population_1996']) * 100
+# Calculate overall population growth from 1996 to 2021
+df['overall_growth'] = ((df['population_2021'] - df['population_1996']) / df['population_1996'] * 100).round(2)
 
-# Get top 15 fastest-growing towns
-top_15 = df.nlargest(15, 'total_growth_pct')[['name', 'population_1996', 'population_2001',
-                                                'population_2006', 'population_2011',
-                                                'population_2016', 'population_2021',
-                                                'density_1996', 'density_2001', 'density_2006',
-                                                'density_2011', 'density_2016', 'density_2021',
-                                                'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct',
-                                                'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct',
-                                                'pop_change_2016_2021_pct', 'total_growth_pct']].copy()
+# Filter to get top 15 fastest-growing towns
+top_15 = df.nlargest(15, 'overall_growth')
 
-# Calculate density changes between periods
-top_15['density_change_1996_2001'] = ((top_15['density_2001'] - top_15['density_1996']) / top_15['density_1996']) * 100
-top_15['density_change_2001_2006'] = ((top_15['density_2006'] - top_15['density_2001']) / top_15['density_2001']) * 100
-top_15['density_change_2006_2011'] = ((top_15['density_2011'] - top_15['density_2006']) / top_15['density_2006']) * 100
-top_15['density_change_2011_2016'] = ((top_15['density_2016'] - top_15['density_2011']) / top_15['density_2011']) * 100
-top_15['density_change_2016_2021'] = ((top_15['density_2021'] - top_15['density_2016']) / top_15['density_2016']) * 100
+# Build the output dataframe with density and percentage changes
+output_data = []
+for _, row in top_15.iterrows():
+    # Density values for each census year
+    density_1996 = row['density_1996']
+    density_2001 = row['density_2001']
+    density_2006 = row['density_2006']
+    density_2011 = row['density_2011']
+    density_2016 = row['density_2016']
+    density_2021 = row['density_2021']
 
-# Create a clean dataframe for the table
-table_data = pd.DataFrame({
-    'Town': top_15['name'].values,
-    '1996 Density': top_15['density_1996'].values,
-    '1996-01 Change %': top_15['density_change_1996_2001'].values,
-    '2001 Density': top_15['density_2001'].values,
-    '2001-06 Change %': top_15['density_change_2001_2006'].values,
-    '2006 Density': top_15['density_2006'].values,
-    '2006-11 Change %': top_15['density_change_2006_2011'].values,
-    '2011 Density': top_15['density_2011'].values,
-    '2011-16 Change %': top_15['density_change_2011_2016'].values,
-    '2016 Density': top_15['density_2016'].values,
-    '2016-21 Change %': top_15['density_change_2016_2021'].values,
-    '2021 Density': top_15['density_2021'].values,
-    'Total Growth %': top_15['total_growth_pct'].values,
-})
+    # Calculate percentage changes between census periods
+    pct_1996_2001 = ((density_2001 - density_1996) / density_1996 * 100) if density_1996 > 0 else 0
+    pct_2001_2006 = ((density_2006 - density_2001) / density_2001 * 100) if density_2001 > 0 else 0
+    pct_2006_2011 = ((density_2011 - density_2006) / density_2006 * 100) if density_2006 > 0 else 0
+    pct_2011_2016 = ((density_2016 - density_2011) / density_2011 * 100) if density_2011 > 0 else 0
+    pct_2016_2021 = ((density_2021 - density_2016) / density_2016 * 100) if density_2016 > 0 else 0
 
-# Create GT table
+    output_data.append({
+        'Town': row['name'],
+        'Density 1996': density_1996,
+        'Chg 96-01 (%)': pct_1996_2001,
+        'Density 2001': density_2001,
+        'Chg 01-06 (%)': pct_2001_2006,
+        'Density 2006': density_2006,
+        'Chg 06-11 (%)': pct_2006_2011,
+        'Density 2011': density_2011,
+        'Chg 11-16 (%)': pct_2011_2016,
+        'Density 2016': density_2016,
+        'Chg 16-21 (%)': pct_2016_2021,
+        'Density 2021': density_2021,
+        'Overall Growth (%)': row['overall_growth']
+    })
+
+output_df = pd.DataFrame(output_data)
+
+# Create the table
 gt = (
-    GT(table_data)
-    .tab_header(
-        title="Population Growth Trends: Top 15 Fastest-Growing Ontario Towns",
-        subtitle="Population Density (per km²) Across Census Years 1996-2021 with Period-to-Period Changes"
-    )
+    GT(output_df)
     .fmt_number(
-        columns=['1996 Density', '2001 Density', '2006 Density', '2011 Density', '2016 Density', '2021 Density'],
+        columns=['Density 1996', 'Density 2001', 'Density 2006', 'Density 2011', 'Density 2016', 'Density 2021'],
         decimals=2
     )
     .fmt_number(
-        columns=['1996-01 Change %', '2001-06 Change %', '2006-11 Change %', '2011-16 Change %', '2016-21 Change %', 'Total Growth %'],
-        decimals=1,
-        pattern='{x}%'
+        columns=['Chg 96-01 (%)', 'Chg 01-06 (%)', 'Chg 06-11 (%)', 'Chg 11-16 (%)', 'Chg 16-21 (%)', 'Overall Growth (%)'],
+        decimals=1
     )
-    .tab_options(
-        table_width='100%',
-        container_width='100%'
+    .tab_header(
+        title='Population Density Trends for Top 15 Fastest-Growing Ontario Towns (1996-2021)',
+        subtitle='Density values (persons/km²) with percentage changes between census periods'
     )
 )
 
 gt.gtsave('table.png')
-print("Table saved to table.png")
+print('Table saved to table.png')

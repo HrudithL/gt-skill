@@ -1,14 +1,22 @@
 import pandas as pd
-from great_tables import GT
+import great_tables as gt
 
+# Load the air quality data
 df = pd.read_csv("airquality.csv")
 
-monthly_stats = df.groupby("Month").agg({
-    "Temp": "mean",
-    "Wind": "mean",
-    "Ozone": "mean"
-}).round(2)
+# Calculate monthly averages
+monthly_avg = df.groupby("Month")[["Temp", "Wind", "Ozone"]].mean()
 
+# Round to 2 decimal places for cleaner display
+monthly_avg = monthly_avg.round(2)
+
+# Reset index to make Month a column
+monthly_avg = monthly_avg.reset_index()
+
+# Rename columns for better display
+monthly_avg.columns = ["Month", "Avg Temperature (°F)", "Avg Wind Speed (mph)", "Avg Ozone (ppb)"]
+
+# Map month numbers to month names
 month_names = {
     5: "May",
     6: "June",
@@ -16,21 +24,21 @@ month_names = {
     8: "August",
     9: "September"
 }
+monthly_avg["Month"] = monthly_avg["Month"].map(month_names)
 
-monthly_stats.index = monthly_stats.index.map(month_names)
-monthly_stats.columns = ["Avg Temperature (°F)", "Avg Wind Speed (mph)", "Avg Ozone (ppb)"]
-
+# Create the table
 gt_table = (
-    GT(monthly_stats.reset_index().rename(columns={"index": "Month"}))
+    gt.GT(monthly_avg)
     .tab_header(
         title="Air Quality Monthly Summary",
         subtitle="Average Temperature, Wind Speed, and Ozone Levels"
     )
-    .fmt_number(
-        columns=["Avg Temperature (°F)", "Avg Wind Speed (mph)", "Avg Ozone (ppb)"],
-        decimals=2
+    .cols_align(align="center")
+    .tab_options(
+        table_width="600px"
     )
 )
 
+# Save the table as PNG
 gt_table.gtsave("table.png")
 print("Table saved to table.png")

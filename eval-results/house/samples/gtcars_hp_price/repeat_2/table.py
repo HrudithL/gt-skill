@@ -1,38 +1,42 @@
 import pandas as pd
 from great_tables import GT, md
-from house_table import PALETTE, frame, finalize, band, heatmap, humanize_labels
+from house_table import PALETTE, frame, finalize, heatmap, humanize_labels
 
 # Read the GT cars data
 df = pd.read_csv("gtcars.csv")
 
-# Select relevant columns and prepare data
-df = df[["mfr", "model", "hp", "msrp"]].copy()
-df.columns = ["manufacturer", "model", "hp", "msrp"]
+# Select only relevant columns and create a display-friendly version
+display_df = df[["mfr", "model", "hp", "msrp"]].copy()
+display_df.columns = ["manufacturer", "model", "horsepower", "price"]
 
 # Create the GT table
-gt = (
-    GT(df)
-    .tab_header(
-        title="GT Cars Performance",
-        subtitle=md("Horsepower and price for high-performance vehicles"),
-    )
-    .fmt_number(columns="hp", decimals=0)
-    .fmt_currency(columns="msrp", decimals=0)
+gt = GT(display_df).tab_header(
+    title="GT Cars — Horsepower & Price",
+    subtitle=md("Performance cars ranked by power and market value"),
+).fmt_number(
+    columns="horsepower",
+    decimals=0,
+).fmt_currency(
+    columns="price",
+    decimals=0,
 )
 
-# Apply house style helpers
-gt = humanize_labels(gt, df)
+# Humanize column labels
+gt = humanize_labels(gt, display_df)
 
-# Apply heatmap to horsepower (sequential magnitude)
-gt = heatmap(gt, "hp", kind="sequential", hue="neutral")
+# Apply heatmap to price (sequential neutral -> Blues)
+gt = heatmap(gt, "price", kind="sequential", hue="neutral")
 
-# Apply heading band
-gt = band(gt, hue="navy")
+# Add source note
+gt = gt.tab_source_note(source_note="Source: provided dataset.")
 
-# Add source note and frame
-gt = (
-    gt.tab_source_note(source_note="Source: GT Cars dataset.")
+# Row hairlines between body rows
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#E8E8E8",
+    table_body_hlines_width="1px",
 )
 
+# Apply frame and finalize
 gt = frame(gt)
-finalize(gt, path="table.png")
+finalize(gt, path="table.png", zoom=2.0, expand=15)

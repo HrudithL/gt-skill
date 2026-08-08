@@ -1,43 +1,58 @@
 import pandas as pd
 import numpy as np
 from great_tables import GT
-from gt_consistency import frame, finalize, heatmap, band, stripe, stub_tint
 
 # Step 1: Load and clean data
 df = pd.read_csv("gtcars.csv")
+df_display = df[["mfr", "model", "hp", "msrp"]].copy()
+df_display.columns = ["Manufacturer", "Model", "Horsepower", "Price"]
 
-# Select and organize columns
-df = df[["mfr", "model", "hp", "msrp"]].copy()
-df.columns = ["Manufacturer", "Model", "Horsepower", "Price"]
-
-# Ensure numeric columns are properly typed
-df["Horsepower"] = pd.to_numeric(df["Horsepower"], errors="coerce")
-df["Price"] = pd.to_numeric(df["Price"], errors="coerce")
-
-# Step 2: Organize columns with stub (rowname_col for Manufacturer)
-gt = GT(df, rowname_col="Manufacturer")
-
-# Step 3: Big Color - horsepower is the hero column (ordered magnitude ≥5 rows)
-# Blues palette for neutral magnitude (no inherent good/bad direction)
-gt = heatmap(gt, "Horsepower", kind="sequential", hue="positive")
-
-# Step 4: Heading band - light band since we have Big Color
-gt = band(gt, shade="light", hue="navy")
-
-# Step 5: Small color polish
+# Step 2: Create GT table with stub
 gt = (
-    gt
-    .fmt_currency(columns="Price", currency="USD", decimals=0)
-    .fmt_number(columns="Horsepower", decimals=0)
+    GT(df_display, rowname_col="Manufacturer")
+    .cols_hide(columns=["Manufacturer"])
+    .fmt_number(columns="Horsepower", decimals=0, use_seps=True)
+    .fmt_currency(columns="Price", decimals=0, currency="USD")
+    .opt_row_striping()
+    # Step 3: Big Color - price is the hero measure (neutral magnitude → Blues)
+    .data_color(
+        columns="Price",
+        palette="Blues",
+        domain=[float(np.nanmin(df_display["Price"].to_numpy())),
+                float(np.nanmax(df_display["Price"].to_numpy()))],
+        truncate=False,
+        na_color="#808080",
+    )
+    # Step 4: Heading band - light band since we have Big Color
+    .tab_options(
+        column_labels_background_color="#EAF0F6",
+        column_labels_border_bottom_color="#CCCCCC",
+        column_labels_border_bottom_width="2px",
+    )
+    # Step 5: Small Color - borders and frame
+    .tab_options(
+        table_body_hlines_style="solid",
+        table_body_hlines_color="#E8E8E8",
+        table_body_hlines_width="1px",
+        table_border_top_style="solid",
+        table_border_top_color="#CCCCCC",
+        table_border_top_width="1px",
+        table_border_bottom_style="solid",
+        table_border_bottom_color="#CCCCCC",
+        table_border_bottom_width="1px",
+        table_border_left_style="solid",
+        table_border_left_color="#CCCCCC",
+        table_border_left_width="1px",
+        table_border_right_style="solid",
+        table_border_right_color="#CCCCCC",
+        table_border_right_width="1px",
+    )
+    # Step 6: Titles and annotations
     .tab_header(
         title="GT Cars: Horsepower and Price",
-        subtitle="A selection of high-performance vehicles"
+        subtitle="A selection of performance vehicles with their specifications and MSRP"
     )
+    .tab_source_note(source_note="Source: gtcars dataset")
 )
 
-gt = stripe(gt)
-gt = stub_tint(gt, hue="navy")
-
-# Frame and finalize
-gt = frame(gt)
-finalize(gt, path="table.png")
+gt.gtsave("table.png", expand=15, zoom=2.0)
