@@ -1,58 +1,69 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT
+from great_tables import GT, md, style, loc
+from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
 
 # Step 1: Load and clean data
 df = pd.read_csv("gtcars.csv")
-df_display = df[["mfr", "model", "hp", "msrp"]].copy()
-df_display.columns = ["Manufacturer", "Model", "Horsepower", "Price"]
 
-# Step 2: Create GT table with stub
+# Keep only necessary columns
+df = df[["mfr", "model", "hp", "msrp"]].copy()
+df.columns = ["Manufacturer", "Model", "Horsepower", "Price"]
+
+# Sort by horsepower descending for better visual narrative
+df = df.sort_values("Horsepower", ascending=False).reset_index(drop=True)
+
+# Step 2: Organize columns with stub
+# Use Manufacturer + Model as stub (row identifier)
+df.insert(0, "Car", df["Manufacturer"] + " " + df["Model"])
+df = df[["Car", "Horsepower", "Price"]].copy()
+
+# Step 3 & 4: Build table with Big Color (two neutral magnitudes)
+# Horsepower primary (mentioned first) → Blues
+# Price secondary → Greens (fallback from Blues → Greens ladder)
+gt = GT(df, rowname_col="Car")
+
+# Format numbers
 gt = (
-    GT(df_display, rowname_col="Manufacturer")
-    .cols_hide(columns=["Manufacturer"])
-    .fmt_number(columns="Horsepower", decimals=0, use_seps=True)
-    .fmt_currency(columns="Price", decimals=0, currency="USD")
-    .opt_row_striping()
-    # Step 3: Big Color - price is the hero measure (neutral magnitude → Blues)
-    .data_color(
-        columns="Price",
-        palette="Blues",
-        domain=[float(np.nanmin(df_display["Price"].to_numpy())),
-                float(np.nanmax(df_display["Price"].to_numpy()))],
-        truncate=False,
-        na_color="#808080",
-    )
-    # Step 4: Heading band - light band since we have Big Color
-    .tab_options(
-        column_labels_background_color="#EAF0F6",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
-    )
-    # Step 5: Small Color - borders and frame
-    .tab_options(
-        table_body_hlines_style="solid",
-        table_body_hlines_color="#E8E8E8",
-        table_body_hlines_width="1px",
-        table_border_top_style="solid",
-        table_border_top_color="#CCCCCC",
-        table_border_top_width="1px",
-        table_border_bottom_style="solid",
-        table_border_bottom_color="#CCCCCC",
-        table_border_bottom_width="1px",
-        table_border_left_style="solid",
-        table_border_left_color="#CCCCCC",
-        table_border_left_width="1px",
-        table_border_right_style="solid",
-        table_border_right_color="#CCCCCC",
-        table_border_right_width="1px",
-    )
-    # Step 6: Titles and annotations
-    .tab_header(
-        title="GT Cars: Horsepower and Price",
-        subtitle="A selection of performance vehicles with their specifications and MSRP"
-    )
-    .tab_source_note(source_note="Source: gtcars dataset")
+    gt
+    .fmt_number(columns="Horsepower", decimals=0)
+    .fmt_currency(columns="Price", currency="USD", decimals=0)
 )
 
-gt.gtsave("table.png", expand=15, zoom=2.0)
+# Apply Big Color — two gradient fills with heatmap helper
+gt = heatmap(gt, "Horsepower", kind="sequential", hue="neutral")
+gt = heatmap(gt, "Price", kind="sequential", hue="positive")
+
+# Step 4: Apply heading band (light washed tint since Big Color present)
+gt = band(gt, shade="light", hue="navy")
+
+# Step 5: Apply Small Color polish
+# Cell borders
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#E8E8E8",
+    table_body_hlines_width="1px",
+)
+
+# Row striping (≥10 rows with Big Color)
+if len(df) >= 10:
+    gt = stripe(gt)
+
+# Stub tint
+gt = stub_tint(gt, hue="navy")
+
+# Step 6: Add titles and annotations
+gt = (
+    gt
+    .tab_header(
+        title="GT Cars Database",
+        subtitle="Horsepower and Price Comparison",
+    )
+    .tab_source_note(
+        source_note="Data source: gtcars.csv",
+    )
+)
+
+# Step 7: Apply frame and finalize
+gt = frame(gt)
+gt = finalize(gt)

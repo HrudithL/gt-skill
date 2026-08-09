@@ -1,38 +1,52 @@
 # `scripts` skill — eval summary
 
-Sweep: `runs/sweep/20260808_102053_scripts_6prompts` (post skill-content-fix
-re-sweep, 2026-08-08) — 6 corpus prompts x (3 repeats + 1 auto-baseline),
-Haiku, scored by `runner.comparator.compare()` against each prompt's ground
-truth. Full detail in [`metrics.json`](metrics.json); regenerate the plots
-below with `python plots/make_plots.py`.
+Sweeps: `runs/sweep/20260808_102053_scripts_6prompts` (round 2, after the
+archetype `gt=` bug fix) and `runs/sweep/20260808_190400_scripts_6prompts`
+(round 3, independent second sample of the SAME final content — no code
+changed between rounds 2 and 3 for `scripts`) — 6 corpus prompts x (3
+repeats + 1 auto-baseline) each, Haiku, scored by
+`runner.comparator.compare()`. `metrics.json`/`samples/` in this directory
+reflect round 3 only (regenerating overwrites, it doesn't pool); round 2's
+numbers are preserved here as text since they're an equally valid
+independent sample of the same code.
 
-| Metric (mean across 6 prompts) | `scripts` (2026-08-07) | `scripts` (2026-08-08, after fixes) | baseline |
-|---|---|---|---|
-| Comparator total score | 65.0% | 52.7% | 21.3% |
-| Cost per invocation | $0.188 | $0.164 | $0.083 |
+| Metric (mean across 6 prompts) | round 1 (2026-08-07) | round 2 | round 3 | **pooled (rounds 2+3, n=36)** |
+|---|---|---|---|---|
+| Comparator total score | 65.0% | 52.7% | 60.1% | **56.4%** |
+| Cost per invocation | $0.188 | $0.164 | $0.183 | — |
 
-**Read this drop with real skepticism before treating it as a regression.**
-The 2026-08-08 re-sweep also caught and fixed a genuine, PRE-EXISTING bug
-unrelated to any content change: every one of the 6 worked archetype
-examples (`assets/examples/*/*.py`, shared with `prose`) built its final
-`GT(...)` chain as a bare, unassigned expression — never `gt = (...)` — so a
-candidate that closely copied an archetype's structure produced a script
-with no top-level `gt` variable, which fails the comparator's Tier-2
-introspection entirely and voided most of the Data-compliance score for
-that sample. That's fixed now (all 6 examples assign `gt = (...)`). Beyond that
-fix, the SAME prompt+skill combination showed 40-65-point swings across its
-own 3 repeats in this one sweep (e.g. `airquality_monthly_summary`: 90.5% /
-26.4% / 52.4%) — Haiku's per-repeat variance at this sample size is large
-enough to dominate a single 3-repeat mean. The content additions made this
-same day (pinned date-stub format, the continuous/not-reset-per-group
-canonical metric rule, the paired-column-as-one-measure technique, the
-two-call source-note convention, backported ambiguous-measure/ranking
-guidance) are correctness improvements verifiable on their own terms (see
-`house`'s summary for where the SAME additions produced a clean, mechanism-
-confirmed win) — but this single re-sweep's aggregate score is not a
-reliable read of their net effect on `scripts` specifically. A confident
-before/after aggregate for `scripts`/`prose` would need substantially more
-than 3 repeats per prompt to average out Haiku's own sampling variance.
+**Pooling two independent samples of the identical final content still
+lands below round 1's 65.0%, not above it — this is the one result in this
+verification round that does NOT clearly read as an improvement.** Three
+things are true at once here, and none of them cancels the others out:
+
+1. **Genuine noise is real and large.** The SAME prompt+skill combination
+   swung 40-65 points across its own 3 repeats within a single sweep (e.g.
+   round 3's `sp500_monthly_performance`: 77.2% / 71.3% / 21.6%). Pooling to
+   n=36 narrows this but doesn't eliminate it.
+2. **A second, separate comparator-defect finding, discovered during this
+   verification round, is NOT yet fixed in the data these numbers reflect.**
+   `great-tables-ci` has its own `gt_consistency.py` wrapper module (a
+   pre-existing convention, distinct from anything this whole effort had
+   touched until now) whose `finalize()` some candidates reach for — and a
+   bare `finalize(gt, ...)` statement is invisible to the comparator's
+   render-mechanics check for the same reason it was for `house` (see the
+   top-level `SUMMARY.md`'s verification report for the full root-cause).
+   Round 3's "Render mechanics" check reads 27.8% (was 61% originally) —
+   this is now fixed in `references/scripts.md` (commit after this sweep),
+   **not yet re-verified via a fresh sweep** (budget exhausted this round).
+3. The archetype `gt=` bug (fixed before round 2) genuinely was a real,
+   separate improvement — confirmed by `prose`'s render-call failures
+   dropping once fixed.
+
+**Bottom line: `scripts`' net effect from this round's content additions is
+genuinely inconclusive, not confirmed-negative.** The render-mechanics
+defect alone plausibly explains several points of round 3's apparent
+shortfall on its own (it's a 2-point mechanical check that misfires on a
+large fraction of samples, in a 104-point rubric) — but that hypothesis
+itself needs a follow-up sweep to confirm, which this round's budget
+doesn't allow. Recommend re-testing with the render-mechanics fix in place
+before drawing a final conclusion on `scripts` specifically.
 
 See [`plots/cost.png`](plots/cost.png), [`plots/tokens.png`](plots/tokens.png),
 [`plots/consistency.png`](plots/consistency.png),

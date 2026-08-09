@@ -1,36 +1,36 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260808_104911_scripts_6prompts/prompts/gtcars_hp_price/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/skill-quality-fixes/runs/sweep/20260808_190400_scripts_6prompts/prompts/gtcars_hp_price/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/skill-quality-fixes/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 69/99 (69.7%)
-  Data-compliance:        20/43
-  Formatting-compliance:  49/56
+TOTAL: 29/86 (33.7%)
+  Data-compliance:        9/42
+  Formatting-compliance:  20/44
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 2 canonical measures unverifiable
-[PASS] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 6/6 -- ≤2 measures OK; 1/1 canonical colored measures covered by a candidate color call
-[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- candidate failed to execute: no top-level `gt` GT instance in table.py
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.50 (candidate-only=['Model'], missing=['car']); value-matched renamed columns: {'hp': 'Horsepower', 'msrp': 'Price'}
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The ground truth does not use visible row grouping, and REQUIRED_INSTRUCTIONS contains no 'grouping' key. Since neither table groups at all, this discretionary editorial choice dimension does not apply.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate uses fragmented car-model names (e.g., 'LaFerrari' for Ferrari LaFerrari, 'Aventador' for Lamborghini Aventador, 'Continental GT' for Bentley Continental GT) as the row label under 'Model', making it ambiguous which make each car belongs to without explicit manufacturer names. The 'Horsepower' and 'Price' labels are correct, but the stub column's truncation substantially undermines clarity about the underlying concept (which car make and model combination each row represents).
-[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
+[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- candidate failed to execute: no top-level `gt` GT instance in table.py
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
-[PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=47, fully_filled=False -> expected striping=True, actual=True
-[PASS] [MECHANICAL] Stub tint + grey-budget correctness: 5/5 -- stub=True, striped=True -> expected tint=False, actual=False
-[PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; expected hue family 'navy' for palette 'blues', got 'navy'
-[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[PASS] [MECHANICAL] Stub tint + grey-budget correctness: 5/5 -- stub=True, striped=False -> expected tint=True, actual=True
+[FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=unknown; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 2/2, truncate=False correct 2/2, autocolor_text=True correct 2/2
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
-[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- 0/1 canonical hero-uncolored measures are bolded
-[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=False present=True, source expected=True present=False
+[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- gtsave()/finalize() call(s) found, but none targets the required table.png output
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'GT Cars: Horsepower and Price' is identical to the ground truth's title and clearly captures the core framing: a dataset of GT vehicles with their key performance (horsepower) and market (price) characteristics.
-[FAIL] [JUDGE] Subtitle quality: 1/3 -- judge score 2/5 -- The candidate's subtitle reads 'A selection of performance vehicles with their specifications and MSRP', which is generic and does not clarify the crucial detail the ground truth's subtitle provides: 'All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP'. The candidate fails to specify the dataset scope (all 47 records vs. a selection) and omits the sort order, which is essential context for reading the table.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate's column order (Model, Horsepower, Price) is sensible and matches the ground truth's order (Car, Horsepower, Price [MSRP]). The left-to-right flow reads naturally, with the identifying column first and related numeric metrics following. No reordering is needed, though the stub-column naming differs (Model vs. Car).
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 3/5 -- The candidate uses a light blue alternating row tint and a dark blue highlight on the LaFerrari price cell, which is legible and acceptable. However, the color palette is generic and uninspired compared to the ground truth's tasteful light-blue gradient that harmonizes with the heading band. The candidate's dark-blue accent on one cell is visually isolating rather than enhancing the narrative flow, and the overall palette feels more utilitarian than thoughtfully designed.
-[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 1/5 -- The candidate provides only 'Source: gtcars dataset' at the bottom, which is a bare citation. The ground truth includes a substantive caption explaining the key insight ('Price and horsepower don't move together: the Bentley Continental GT costs more than the Chevrolet Corvette Z06 despite having 150 fewer horsepower') and mentioning both Bentley and Corvette specifically—concepts the CAPTION_KEYWORDS indicate should be highlighted. The candidate's source note adds no new analytical information.
+[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Caption doesn't just restate the subtitle: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
