@@ -226,11 +226,15 @@ def finalize(gt, path="table.png", **overrides):
     WHY ``path`` defaults to ``"table.png"``: that's the mandatory renderer
     target this skill (and the harness that runs it) expects — see
     ``SKILL.md``'s "The mandatory renderer" section. A real table script
-    that imports this helper and calls ``finalize(gt)`` with no explicit
-    path should produce the expected file, not silently write something
-    else. The demo below passes an explicit ``path="house_table.png"`` to
-    override this default, since its output is the reference render, not a
-    generated table.
+    that imports this helper and calls ``gt = finalize(gt)`` with no
+    explicit path should produce the expected file, not silently write
+    something else. The demo below passes an explicit
+    ``path="house_table.png"`` to override this default, since its output
+    is the reference render, not a generated table.
+
+    CALL SITE: always ``gt = finalize(gt, ...)``, never a bare
+    ``finalize(gt, ...)`` statement — see ``SKILL.md``/``RULES.md``'s
+    non-negotiable-base item 6 for why the assignment matters.
 
     WHY the other defaults: the default 5px ``gtsave`` margin crowds the
     frame border against the image edge; ``zoom=2.0`` keeps text crisp at
@@ -775,8 +779,9 @@ def build_house_table():
     )
     gt = frame(gt)
     # zoom=/expand= passed explicitly even though they match finalize()'s
-    # own defaults — see RULES.md's non-negotiable base item 6.
-    finalize(gt, path="house_table.png", zoom=2.0, expand=15)
+    # own defaults, and assigned back to `gt` rather than called as a
+    # bare statement — see RULES.md's non-negotiable base item 6.
+    gt = finalize(gt, path="house_table.png", zoom=2.0, expand=15)
     return gt
 
 

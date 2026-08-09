@@ -62,9 +62,13 @@ unconditional, regardless of how simple the request looks:
    supports 2 legitimate measures (including a related pair of columns
    colored together as one measure via a single call), color both —
    don't settle for 1.
-6. **`finalize(gt, path="table.png", zoom=2.0, expand=15)`** as the final
-   call, with `zoom=`/`expand=` passed explicitly even though they match
-   the defaults.
+6. **`gt = finalize(gt, path="table.png", zoom=2.0, expand=15)`** as the
+   final call, with `zoom=`/`expand=` passed explicitly even though they
+   match the defaults, and **assigned back to `gt`** — never a bare
+   `finalize(gt, ...)` statement. `finalize()` returns whatever
+   `gt.gtsave(...)` itself returns, so the assignment changes nothing
+   about what gets rendered; it exists so the render call is legible as
+   part of `gt`'s own definition, not a disconnected side effect.
 
 Full detail and the reasoning for each lives in `references/RULES.md`'s
 "THE NON-NEGOTIABLE BASE" section (read it — this list is the summary, not

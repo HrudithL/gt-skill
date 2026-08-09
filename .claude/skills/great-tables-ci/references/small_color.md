@@ -347,8 +347,8 @@ gt = gt.tab_options(
 ```
 
 **Outer margin.** `gt.gtsave("table.png", expand=15)` — raise from the 5px default to
-**~15–20** so the box has breathing room. (Scripted variant: `finalize(gt)` applies
-this.)
+**~15–20** so the box has breathing room. (Scripted variant: `gt = finalize(gt)` applies
+this — assigned, never a bare `finalize(gt)` statement.)
 
 **Render / fit order.** Keep the default **`zoom=2.0`**. When a table renders too big,
 in order: (1) raise `gtsave(vwidth=…, vheight=…)` to give it room; (2) raise
