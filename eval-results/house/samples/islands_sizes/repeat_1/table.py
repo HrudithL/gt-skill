@@ -1,57 +1,52 @@
 import pandas as pd
-from great_tables import GT, md
-from great_tables import loc, style
+from great_tables import GT, md, loc, style
+from house_table import PALETTE, frame, finalize, stripe, heatmap, humanize_labels
 
-# Import helpers from the house-table reference
-import sys
-sys.path.insert(0, './.claude/skills/great-tables-house/scripts')
-from house_table import PALETTE, frame, finalize, stripe, stub_tint, heatmap, humanize_labels
+# Read the data
+df = pd.read_csv("islands.csv")
 
-# Load the data
-df = pd.read_csv('./islands.csv')
-
-# Create the GT table with island name as the stub
-gt = GT(df, rowname_col='name')
-
-# Add title and subtitle
-gt = gt.tab_header(
-    title='World Islands by Size',
-    subtitle=md('Land area in thousands of square kilometers')
+# Create the GT object
+gt = (
+    GT(df, rowname_col="name")
+    .tab_header(
+        title="World Islands by Size",
+        subtitle=md("Land area in thousands of square kilometers"),
+    )
+    .tab_stubhead(label="Island")
+    .fmt_number(columns="size", decimals=0, use_seps=True)
 )
 
-# Format the size column
-gt = gt.fmt_number(columns='size', decimals=0, use_seps=True)
+# Apply humanize_labels to the remaining columns
+gt = humanize_labels(gt, df, overrides={"size": "Area (1000 km²)"})
 
-# Humanize labels
-gt = humanize_labels(gt, df, overrides={'size': 'Size (1000s km²)'})
+# Apply heatmap coloring to the size column (the hero measure)
+gt = heatmap(gt, "size", kind="sequential", hue="neutral")
 
-# Apply the sequential heatmap for the size measure (neutral/Blues)
-gt = heatmap(gt, 'size', kind='sequential', hue='neutral')
-
-# Heading band - navy accent tint (default for neutral/Blues heatmap)
+# Apply the column label band with accent_tint navy
 gt = gt.tab_options(
-    column_labels_background_color='#C9E0F0',
-    column_labels_border_bottom_color=PALETTE['neutral']['column_label_rule'],
-    column_labels_border_bottom_width='2px',
-    column_labels_border_bottom_style='solid',
+    column_labels_background_color="#C9E0F0",
+    column_labels_border_bottom_color="#CCCCCC",
+    column_labels_border_bottom_width="2px",
+    column_labels_border_bottom_style="solid",
 )
 
-# Striping and stub tint for visual clarity (>= 10 rows and not fully colored)
+# Row striping and stub tint for visual clarity
 gt = stripe(gt)
-gt = stub_tint(gt, hue='navy')
-
-# Row hairlines between body rows (non-negotiable base)
-gt = gt.tab_options(
-    table_body_hlines_style='solid',
-    table_body_hlines_color=PALETTE['neutral']['hairline'],
-    table_body_hlines_width='1px',
+gt = gt.tab_style(
+    style=style.fill(color=PALETTE["washed"]["navy"]),
+    locations=loc.stub(),
 )
 
-# Add frame border (non-negotiable base)
+# Row hairlines between body rows
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#E8E8E8",
+    table_body_hlines_width="1px",
+)
+
+# Add frame and source note
 gt = frame(gt)
+gt = gt.tab_source_note(source_note="Source: provided dataset.")
 
-# Add source note (non-negotiable base)
-gt = gt.tab_source_note(source_note='Source: provided dataset.')
-
-# Finalize with render (non-negotiable base)
-finalize(gt, path='table.png', zoom=2.0, expand=15)
+# Finalize and save
+finalize(gt, path="table.png", zoom=2.0, expand=15)

@@ -1,88 +1,73 @@
 import pandas as pd
 from great_tables import GT, md, style, loc
-import sys
-import os
+from house_table import PALETTE, frame, finalize, band, stripe, stub_tint, humanize_labels, heatmap
 
-# Add the skill helpers to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '.claude/skills/great-tables-house/scripts'))
-from house_table import PALETTE, frame, finalize, band, stripe, stub_tint, heatmap, humanize_labels
+# Read the air quality data
+df = pd.read_csv("airquality.csv")
 
+# Month name mapping
+month_names = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
 
-def build_air_quality_table():
-    """Build a table comparing average temperature, wind speed, and ozone by month."""
+# Calculate monthly averages
+monthly_summary = df.groupby("Month").agg({
+    "Ozone": "mean",
+    "Wind": "mean",
+    "Temp": "mean",
+}).reset_index()
 
-    # Read the air quality data
-    df = pd.read_csv("airquality.csv")
+# Map month numbers to names
+monthly_summary["Month"] = monthly_summary["Month"].map(month_names)
 
-    # Group by month and compute averages
-    monthly = df.groupby("Month").agg({
-        "Temp": "mean",
-        "Wind": "mean",
-        "Ozone": "mean"
-    }).reset_index()
+# Round to 1 decimal place
+monthly_summary = monthly_summary.round(1)
 
-    # Create a month name mapping
-    month_names = {
-        5: "May",
-        6: "June",
-        7: "July",
-        8: "August",
-        9: "September"
-    }
-    monthly["Month_Name"] = monthly["Month"].map(month_names)
-    monthly = monthly[["Month_Name", "Temp", "Wind", "Ozone"]]
-    monthly.columns = ["month", "temperature", "wind_speed", "ozone"]
-
-    # Create the GT table
-    gt = GT(monthly, rowname_col="month")
-
-    # Add title and subtitle
-    gt = gt.tab_header(
-        title="Air Quality Summary by Month",
-        subtitle=md("Average temperature, wind speed, and ozone levels from May to September")
+# Create GT table
+gt = (
+    GT(monthly_summary, rowname_col="Month")
+    .tab_header(
+        title="Monthly Air Quality Summary",
+        subtitle=md("Average temperature, wind speed, and ozone levels by month"),
     )
+    .fmt_number(columns=["Ozone", "Wind", "Temp"], decimals=1)
+)
 
-    # Format columns
-    gt = gt.fmt_number(columns="temperature", decimals=1)
-    gt = gt.fmt_number(columns="wind_speed", decimals=2)
-    gt = gt.fmt_number(columns="ozone", decimals=2)
+# Humanize column labels
+gt = humanize_labels(
+    gt,
+    monthly_summary,
+    overrides={"Ozone": "Ozone (ppb)", "Wind": "Wind Speed (mph)", "Temp": "Temperature (°F)"},
+)
 
-    # Humanize labels (snake_case to Title Case)
-    gt = humanize_labels(gt, monthly)
+# Apply heatmap coloring to the numeric columns
+# Ozone: sequential (Blues, neutral - higher values are worse for air quality)
+gt = heatmap(gt, ["Ozone", "Wind", "Temp"], kind="sequential", hue="neutral")
 
-    # Add two heatmaps: temperature (sequential) and ozone (sequential)
-    gt = heatmap(gt, "temperature", kind="sequential", hue="positive")
-    gt = heatmap(gt, "ozone", kind="sequential", hue="warning")
+# Apply striping
+gt = stripe(gt)
 
-    # Apply band styling with forest hue (environment/air quality theme)
-    gt = gt.tab_options(
-        column_labels_background_color=PALETTE["accent_tint"]["forest"],
-        column_labels_border_bottom_color=PALETTE["neutral"]["column_label_rule"],
-        column_labels_border_bottom_width="2px",
-        column_labels_border_bottom_style="solid",
-    )
+# Apply stub tint
+gt = stub_tint(gt, hue="navy")
 
-    # Apply stub tint to harmonize with forest heatmap
-    gt = stub_tint(gt, hue="forest")
+# Apply heading band
+gt = gt.tab_options(
+    column_labels_background_color="#C9E0F0",
+    column_labels_border_bottom_color="#CCCCCC",
+    column_labels_border_bottom_width="2px",
+    column_labels_border_bottom_style="solid",
+)
 
-    # Row hairlines between body rows
-    gt = gt.tab_options(
-        table_body_hlines_style="solid",
-        table_body_hlines_color=PALETTE["neutral"]["hairline"],
-        table_body_hlines_width="1px",
-    )
+# Add source note
+gt = gt.tab_source_note(source_note="Source: provided dataset.")
 
-    # Apply frame
-    gt = frame(gt)
+# Apply row hairlines
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#E8E8E8",
+    table_body_hlines_width="1px",
+)
 
-    # Add source note
-    gt = gt.tab_source_note("Source: air quality dataset (May-September observations)")
+# Apply frame
+gt = frame(gt)
 
-    # Finalize and save
-    finalize(gt, path="table.png", zoom=2.0, expand=15)
-
-    return gt
-
-
-if __name__ == "__main__":
-    build_air_quality_table()
+# Finalize and save
+finalize(gt, path="table.png", zoom=2.0, expand=15)

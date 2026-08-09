@@ -1,61 +1,68 @@
 import pandas as pd
-from great_tables import GT, loc, style
+from great_tables import GT, loc, md
+import polars as pl
 
-df = pd.read_csv('towny.csv')
+df = pd.read_csv("towny.csv")
 
-# Calculate total population growth from 1996 to 2021
-df['total_growth_pct'] = ((df['population_2021'] - df['population_1996']) / df['population_1996'] * 100)
+df["overall_growth_pct"] = ((df["population_2021"] - df["population_1996"]) / df["population_1996"]) * 100
 
-# Get top 15 fastest-growing towns
-top_15 = df.nlargest(15, 'total_growth_pct')[['name',
-                                                'population_1996', 'density_1996',
-                                                'population_2001', 'density_2001', 'pop_change_1996_2001_pct',
-                                                'population_2006', 'density_2006', 'pop_change_2001_2006_pct',
-                                                'population_2011', 'density_2011', 'pop_change_2006_2011_pct',
-                                                'population_2016', 'density_2016', 'pop_change_2011_2016_pct',
-                                                'population_2021', 'density_2021', 'pop_change_2016_2021_pct',
-                                                'total_growth_pct']].reset_index(drop=True)
+top_15_fastest = df.nlargest(15, "overall_growth_pct")
 
-# Rename columns for clarity
-top_15.columns = ['Town',
-                  'Pop 1996', 'Dens 1996',
-                  'Pop 2001', 'Dens 2001', '% Chg 96-01',
-                  'Pop 2006', 'Dens 2006', '% Chg 01-06',
-                  'Pop 2011', 'Dens 2011', '% Chg 06-11',
-                  'Pop 2016', 'Dens 2016', '% Chg 11-16',
-                  'Pop 2021', 'Dens 2021', '% Chg 16-21',
-                  'Total % Chg 96-21']
+display_df = top_15_fastest[[
+    "name",
+    "density_1996",
+    "density_2001",
+    "density_2006",
+    "density_2011",
+    "density_2016",
+    "density_2021",
+    "pop_change_1996_2001_pct",
+    "pop_change_2001_2006_pct",
+    "pop_change_2006_2011_pct",
+    "pop_change_2011_2016_pct",
+    "pop_change_2016_2021_pct",
+]].copy()
 
-# Format numeric columns
-numeric_cols = {
-    'Pop 1996': 0, 'Pop 2001': 0, 'Pop 2006': 0, 'Pop 2011': 0, 'Pop 2016': 0, 'Pop 2021': 0,
-    'Dens 1996': 2, 'Dens 2001': 2, 'Dens 2006': 2, 'Dens 2011': 2, 'Dens 2016': 2, 'Dens 2021': 2,
-    '% Chg 96-01': 1, '% Chg 01-06': 1, '% Chg 06-11': 1, '% Chg 11-16': 1, '% Chg 16-21': 1,
-    'Total % Chg 96-21': 1
-}
+display_df.columns = [
+    "Town",
+    "Density 1996",
+    "Density 2001",
+    "Density 2006",
+    "Density 2011",
+    "Density 2016",
+    "Density 2021",
+    "Change 1996-2001 %",
+    "Change 2001-2006 %",
+    "Change 2006-2011 %",
+    "Change 2011-2016 %",
+    "Change 2016-2021 %",
+]
 
-for col in numeric_cols:
-    top_15[col] = top_15[col].apply(lambda x: f"{x:.{numeric_cols[col]}f}")
+display_df = display_df.reset_index(drop=True)
 
-# Create GT table
-gt = (GT(top_15)
-      .tab_header(
-          title="Ontario Towns: Population Growth Trends (1996-2021)",
-          subtitle="Top 15 Fastest-Growing Towns - Population, Density & Change Rates"
-      )
-      .cols_label(Town="Town")
-)
-
-# Combine columns into groups for better readability
-gt = (gt
-      .tab_spanner(label="1996", columns=["Pop 1996", "Dens 1996"])
-      .tab_spanner(label="2001", columns=["Pop 2001", "Dens 2001", "% Chg 96-01"])
-      .tab_spanner(label="2006", columns=["Pop 2006", "Dens 2006", "% Chg 01-06"])
-      .tab_spanner(label="2011", columns=["Pop 2011", "Dens 2011", "% Chg 06-11"])
-      .tab_spanner(label="2016", columns=["Pop 2016", "Dens 2016", "% Chg 11-16"])
-      .tab_spanner(label="2021", columns=["Pop 2021", "Dens 2021", "% Chg 16-21"])
-      .tab_spanner(label="Overall Growth", columns=["Total % Chg 96-21"])
-      .opt_row_striping()
+gt = (
+    GT(display_df)
+    .tab_header(
+        title="Population Growth Trends: Top 15 Fastest-Growing Ontario Towns",
+        subtitle="Population Density Changes (persons/km²) and Percentage Changes Across Census Years (1996-2021)"
+    )
+    .fmt_number(
+        columns=["Density 1996", "Density 2001", "Density 2006", "Density 2011", "Density 2016", "Density 2021"],
+        decimals=2
+    )
+    .fmt_percent(
+        columns=["Change 1996-2001 %", "Change 2001-2006 %", "Change 2006-2011 %", "Change 2011-2016 %", "Change 2016-2021 %"],
+        decimals=2
+    )
+    .tab_spanner(
+        label="Population Density (persons/km²)",
+        columns=["Density 1996", "Density 2001", "Density 2006", "Density 2011", "Density 2016", "Density 2021"]
+    )
+    .tab_spanner(
+        label="Population % Change Between Periods",
+        columns=["Change 1996-2001 %", "Change 2001-2006 %", "Change 2006-2011 %", "Change 2011-2016 %", "Change 2016-2021 %"]
+    )
+    .opt_stylize(style=2, color="blue")
 )
 
 gt.gtsave("table.png")

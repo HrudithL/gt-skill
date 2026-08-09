@@ -1,29 +1,37 @@
 import pandas as pd
-from great_tables import GT
+from great_tables import GT, style, loc
 
-# Read the data
-df = pd.read_csv('gtcars.csv')
+df = pd.read_csv("gtcars.csv")
 
-# Get top 10 most expensive cars
-top_10 = df.nlargest(10, 'msrp')
+# Get the top 10 most expensive cars
+top_10 = df.nlargest(10, "msrp")[["mfr", "model", "year", "msrp", "ctry_origin", "drivetrain", "trsmn"]].copy()
 
 # Sort by country, then by price descending
-top_10 = top_10.sort_values(['ctry_origin', 'msrp'], ascending=[True, False])
+top_10 = top_10.sort_values(["ctry_origin", "msrp"], ascending=[True, False])
 
-# Select and rename columns for display
-display_df = top_10[['mfr', 'model', 'ctry_origin', 'msrp', 'drivetrain', 'trsmn']].copy()
-display_df.columns = ['Manufacturer', 'Model', 'Country', 'MSRP', 'Drivetrain', 'Transmission']
+# Rename columns for display
+top_10 = top_10.rename(columns={
+    "mfr": "Manufacturer",
+    "model": "Model",
+    "year": "Year",
+    "msrp": "MSRP",
+    "ctry_origin": "Country",
+    "drivetrain": "Drivetrain",
+    "trsmn": "Transmission"
+})
 
-# Create the GT table with grouping by country
+# Create GT table
 gt_table = (
-    GT(display_df, rowname_col='Country')
+    GT(top_10)
     .tab_header(
-        title='Top 10 Most Expensive GT Cars by Country',
-        subtitle='Includes drivetrain and transmission details'
+        title="Top 10 Most Expensive GT Cars",
+        subtitle="Grouped by Country of Origin"
     )
-    .fmt_currency(columns='MSRP', currency='USD')
+    .fmt_currency(columns="MSRP", currency="USD")
+    .tab_style(
+        style=style.fill(color="#f0f0f0"),
+        locations=loc.body()
+    )
 )
 
-# Save the table
-gt_table.gtsave('table.png')
-print("Table saved to table.png")
+gt_table.gtsave("table.png")

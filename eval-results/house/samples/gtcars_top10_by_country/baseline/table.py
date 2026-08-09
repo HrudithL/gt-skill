@@ -1,34 +1,40 @@
 import pandas as pd
-from great_tables import GT, style, loc
+from great_tables import GT
 
+# Read the CSV file
 df = pd.read_csv('gtcars.csv')
 
-df_sorted = df.nlargest(10, 'msrp')
+# Get top 10 most expensive cars
+top_10 = df.nlargest(10, 'msrp')[['mfr', 'model', 'year', 'ctry_origin', 'drivetrain', 'trsmn', 'msrp']].copy()
 
-df_display = df_sorted[['ctry_origin', 'mfr', 'model', 'year', 'drivetrain', 'trsmn', 'msrp']].copy()
-df_display = df_display.sort_values(['ctry_origin', 'msrp'], ascending=[True, False])
-df_display = df_display.reset_index(drop=True)
+# Sort by country and price within country
+top_10_sorted = top_10.sort_values(['ctry_origin', 'msrp'], ascending=[True, False])
 
-df_display.columns = ['Country', 'Manufacturer', 'Model', 'Year', 'Drivetrain', 'Transmission', 'MSRP']
-
-df_display['MSRP'] = '$' + df_display['MSRP'].apply(lambda x: f'{x:,.0f}')
-
+# Create the GT table
 gt_table = (
-    GT(df_display)
+    GT(top_10_sorted)
     .tab_header(
         title="Top 10 Most Expensive GT Cars",
-        subtitle="Grouped by Country of Origin"
+        subtitle="Grouped by Country of Origin with Drivetrain & Transmission"
     )
     .cols_label(
-        Country="Country",
-        Manufacturer="Manufacturer",
-        Model="Model",
-        Year="Year",
-        Drivetrain="Drivetrain",
-        Transmission="Transmission",
-        MSRP="MSRP"
+        mfr="Manufacturer",
+        model="Model",
+        year="Year",
+        ctry_origin="Country",
+        drivetrain="Drivetrain",
+        trsmn="Transmission",
+        msrp="MSRP"
+    )
+    .fmt_currency(
+        columns=["msrp"],
+        currency="USD"
+    )
+    .cols_width({"mfr": "100px", "model": "100px", "year": "60px", "ctry_origin": "120px", "drivetrain": "90px", "trsmn": "80px", "msrp": "120px"})
+    .tab_options(
+        table_body_hlines_style="solid",
+        table_body_hlines_color="lightgray"
     )
 )
 
-gt_table.gtsave('table.png')
-print("Table saved to table.png")
+gt_table.gtsave("table.png")

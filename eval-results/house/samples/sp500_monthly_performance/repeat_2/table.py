@@ -1,84 +1,110 @@
 import pandas as pd
-import numpy as np
-from great_tables import GT, md, loc, style
-from house_table import frame, finalize, heatmap, PALETTE
+from datetime import datetime
+from great_tables import GT, loc, md, style
+from house_table import PALETTE, frame, finalize, heatmap
 
-# Load data
+# Load the S&P 500 data
 df = pd.read_csv("sp500.csv")
 df["date"] = pd.to_datetime(df["date"])
 
 # Filter for 2010-2015
 df = df[(df["date"].dt.year >= 2010) & (df["date"].dt.year <= 2015)]
-df = df.sort_values("date").reset_index(drop=True)
+df = df.sort_values("date")
 
-# Calculate daily gains/losses for each day
-df["daily_return_pct"] = ((df["close"] - df["open"]) / df["open"] * 100)
-
-# Group by year-month
+# Extract year and month
 df["year_month"] = df["date"].dt.to_period("M")
 
-monthly_data = []
-for period, group in df.groupby("year_month"):
-    group = group.sort_values("date")
+# Group by month and calculate summary statistics
+monthly_stats = []
+for year_month, group in df.groupby("year_month"):
+    # Get first and last row for the month
+    first_row = group.iloc[0]
+    last_row = group.iloc[-1]
 
-    open_price = group.iloc[0]["open"]
-    close_price = group.iloc[-1]["close"]
-    pct_change = (close_price - open_price) / open_price * 100
-    avg_volume = group["volume"].mean()
+    # Calculate metrics
+    opening_price = first_row["open"]
+    closing_price = last_row["close"]
+    percent_change = (closing_price - opening_price) / opening_price  # As decimal for fmt_percent
+    avg_daily_volume = group["volume"].mean() / 1_000_000  # Convert to millions
 
-    # Highest single-day gain and loss
-    daily_returns = ((group["close"] - group["open"]) / group["open"] * 100)
-    max_daily_gain = daily_returns.max()
-    max_daily_loss = daily_returns.min()
+    # Find highest single-day gain and loss
+    group["daily_change"] = group["close"] - group["open"]
+    highest_gain = group["daily_change"].max()
+    highest_loss = group["daily_change"].min()
 
-    monthly_data.append({
-        "Month": str(period),
-        "Opening": open_price,
-        "Closing": close_price,
-        "Monthly % Change": pct_change,
-        "Avg Daily Volume": avg_volume,
-        "Highest Daily Gain %": max_daily_gain,
-        "Highest Daily Loss %": max_daily_loss,
+    monthly_stats.append({
+        "Month": str(year_month),
+        "Open": opening_price,
+        "Close": closing_price,
+        "% Change": percent_change,
+        "Avg Daily Vol (M)": avg_daily_volume,
+        "Highest Gain": highest_gain,
+        "Highest Loss": highest_loss,
     })
 
-result_df = pd.DataFrame(monthly_data)
+# Create DataFrame with monthly data
+monthly_df = pd.DataFrame(monthly_stats)
 
 # Create GT table
-gt = GT(result_df)
+gt = GT(monthly_df)
 
-# Format numeric columns
-gt = gt.fmt_number(
-    columns=["Opening", "Closing"],
-    decimals=2
-)
-gt = gt.fmt_number(
-    columns=["Monthly % Change", "Highest Daily Gain %", "Highest Daily Loss %"],
-    decimals=2
-)
-gt = gt.fmt_number(
-    columns=["Avg Daily Volume"],
-    decimals=0
-)
-
-# Style the title and subtitle
+# Add title and subtitle
 gt = gt.tab_header(
     title="S&P 500 Monthly Performance Summary",
-    subtitle="2010–2015 Monthly Statistics"
+    subtitle="2010 – 2015 monthly opening/closing prices, percent change, volume, and daily extremes"
 )
 
-# Color the monthly % change (diverging measure: negative=bad, positive=good)
-gt = heatmap(gt, "Monthly % Change", kind="diverging", hue="default")
+# Format columns
+gt = gt.fmt_number(
+    columns=["Open", "Close"],
+    decimals=2
+)
 
-# Add hairlines between rows
-gt = gt.tab_options(table_body_hlines_style="solid")
+gt = gt.fmt_percent(
+    columns=["% Change"],
+    decimals=2
+)
+
+gt = gt.fmt_number(
+    columns=["Avg Daily Vol (M)"],
+    decimals=1
+)
+
+gt = gt.fmt_number(
+    columns=["Highest Gain", "Highest Loss"],
+    decimals=2
+)
+
+# Apply heatmap to percent change column (diverging, centered at 0)
+gt = heatmap(
+    gt,
+    columns=["% Change"],
+    kind="diverging",
+    hue="default",
+)
+
+# Apply heatmap to average daily volume (sequential)
+gt = heatmap(
+    gt,
+    columns=["Avg Daily Vol (M)"],
+    kind="sequential",
+    hue="neutral",
+)
 
 # Add source note
 gt = gt.tab_source_note(
-    source_note=md("**Source:** S&P 500 daily price and volume data (2010–2015). "
-                   "Highest daily gain/loss represents the maximum single-day percentage change "
-                   "within each month, calculated as (close − open) / open × 100%.")
+    source_note="Source: provided dataset. Daily extremes represent the highest single-day intraday gain and loss within each month."
 )
 
-# Apply frame and finalize
+# Add frame
 gt = frame(gt)
-gt = finalize(gt, path="table.png", zoom=2.0, expand=15)
+
+# Add row hairlines
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#E8E8E8",
+    table_body_hlines_width="1px",
+)
+
+# Finalize and save
+finalize(gt, path="table.png", zoom=2.0, expand=15)

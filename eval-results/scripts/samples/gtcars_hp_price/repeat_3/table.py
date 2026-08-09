@@ -1,55 +1,97 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT
-from gt_consistency import heatmap, band, stripe, stub_tint, frame, finalize
+from great_tables import GT, style, loc
+from gt_consistency import frame, finalize
 
-# Step 1: Load and clean data
 df = pd.read_csv("gtcars.csv")
 
-# Select relevant columns and rename for display
-df = df[["mfr", "model", "hp", "msrp"]].copy()
-df["car"] = df["mfr"] + " " + df["model"]
-df = df[["car", "hp", "msrp"]]
-df = df.rename(columns={"car": "Car"})
+# Step 1: Clean and prepare data
+# Select and rename columns for clarity
+df_display = df[["mfr", "model", "hp", "msrp"]].copy()
+df_display.columns = ["manufacturer", "model", "hp", "price"]
 
-# Step 2: Organize columns - Car is the stub, hp and msrp are measures
+# Combine manufacturer and model for the stub
+df_display["car"] = df_display["manufacturer"] + " " + df_display["model"]
+df_display = df_display[["car", "hp", "price"]]
+
+# Ensure numeric types are correct
+df_display["hp"] = pd.to_numeric(df_display["hp"], errors="coerce")
+df_display["price"] = pd.to_numeric(df_display["price"], errors="coerce")
+
+# Sort by price descending for better readability
+df_display = df_display.sort_values("price", ascending=False).reset_index(drop=True)
+
+# Step 2: Organize columns with stub
+gt = GT(df_display, rowname_col="car")
+
+# Step 3: Big Color - two neutral magnitudes
+# Price is primary (Blues), HP is secondary (Greens fallback)
+hp_lo = float(np.nanmin(df_display[["hp"]].to_numpy()))
+hp_hi = float(np.nanmax(df_display[["hp"]].to_numpy()))
+price_lo = float(np.nanmin(df_display[["price"]].to_numpy()))
+price_hi = float(np.nanmax(df_display[["price"]].to_numpy()))
+
 gt = (
-    GT(df, rowname_col="Car")
-    .cols_label(hp="Horsepower", msrp="Price (MSRP)")
-    .fmt_number(columns="hp", decimals=0, use_seps=True)
-    .fmt_currency(columns="msrp", decimals=0)
-    .sub_missing(columns=["hp", "msrp"], missing_text="—")
+    gt
+    .fmt_integer(columns="hp", use_seps=True)
+    .fmt_currency(columns="price", currency="USD", decimals=0, use_seps=True)
+    .data_color(
+        columns="price",
+        palette="Blues",
+        domain=[price_lo, price_hi],
+        truncate=False,
+        na_color="#808080",
+    )
+    .data_color(
+        columns="hp",
+        palette="Greens",
+        domain=[hp_lo, hp_hi],
+        truncate=False,
+        na_color="#808080",
+    )
 )
 
-# Step 3: Color the two measures - both are neutral magnitudes
-# Primary: hp (mentioned first in prompt) → Blues (sequential)
-# Secondary: msrp → Greens (sequential, per tie-breaker rule for two neutral measures)
-gt = heatmap(gt, columns="hp", kind="sequential", hue="neutral")
-gt = heatmap(gt, columns="msrp", kind="sequential", hue="positive")
+# Step 4: Heading band - light band with washed-DA tint (Blues → #EAF0F6)
+gt = gt.tab_options(
+    column_labels_background_color="#EAF0F6",
+    column_labels_font_weight="bold",
+)
 
-# Step 4: Heading band - light band with Blues tint (navy hue)
-gt = band(gt, shade="light", hue="navy")
+# Step 5: Small Color polish checklist
 
-# Step 5: Small Color polish
-# (a) Cell borders - hairlines
+# (a) Cell borders
 gt = gt.tab_options(
     table_body_hlines_style="solid",
     table_body_hlines_color="#E8E8E8",
     table_body_hlines_width="1px",
+    column_labels_border_bottom_color="#CCCCCC",
+    column_labels_border_bottom_width="2px",
 )
 
-# (c) Row striping - 30+ rows
-gt = stripe(gt)
+# (c) Row striping - enable since ≥10 rows and not fully filled
+gt = gt.opt_row_striping()
+gt = gt.tab_options(row_striping_background_color="#F6F6F6")
 
-# (d) Stub tint - harmonized to Blues tint (navy)
-gt = stub_tint(gt, hue="navy")
-
-# (f) Titles - Step 6
-gt = gt.tab_header(
-    title="GT Cars: Horsepower and Price",
-    subtitle="Performance and value across premium sports cars",
+# (d) Stub tint - harmonize to washed-DA tint for Blues table
+gt = gt.tab_style(
+    style=style.fill(color="#EAF0F6"),
+    locations=loc.stub(),
 )
 
-# Step 7: Frame and finalize
+# (e) Frame border and margin
 gt = frame(gt)
-gt = finalize(gt)
+
+# Step 6: Titles and annotations
+gt = (
+    gt
+    .tab_header(
+        title="GT Performance Vehicles",
+        subtitle="Horsepower and Market Price Comparison",
+    )
+    .tab_source_note(
+        source_note="Source: gtcars dataset."
+    )
+)
+
+# Step 7: Render
+finalize(gt)

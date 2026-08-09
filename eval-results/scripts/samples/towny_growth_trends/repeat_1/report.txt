@@ -1,36 +1,36 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260808_104911_scripts_6prompts/prompts/towny_growth_trends/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/skill-quality-fixes/runs/sweep/20260808_190400_scripts_6prompts/prompts/towny_growth_trends/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/skill-quality-fixes/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 57/105 (54.3%)
-  Data-compliance:        22/49
-  Formatting-compliance:  35/56
+TOTAL: 27/91 (29.7%)
+  Data-compliance:        7/47
+  Formatting-compliance:  20/44
 
-[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[(None, 'ajax'), (None, 'barrie'), (None, 'bradford west gwillimbury'), (None, 'brampton'), (None, 'caledon')], extra=[(None, '1'), (None, '10'), (None, '11'), (None, '12'), (None, '13')]
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/13 canonical measures have a value-matching candidate column; unmatched: ['density_1996', 'density_2001', 'density_2006', 'density_2011', 'density_2016', 'density_2021', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct', 'rank', 'total_growth_pct']
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/11 canonical colored measures covered by a candidate color call
-[FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 3/5 -- 6/11 colored measures use an encoding matching their data shape; ['pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']: data is diverging but palette 'Greens' is sequential; ['pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']: data is diverging but palette 'Greens' is sequential; ['pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']: data is diverging but palette 'Greens' is sequential; ['pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']: data is diverging but palette 'Greens' is sequential; ['pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']: data is diverging but palette 'Greens' is sequential
-[PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 0.93 (candidate-only=[], missing=['total_growth_pct'])
+[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
+[FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
+[FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 0/5 -- 0/1 required instructions satisfied; row_count=15 not satisfied
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The REQUIRED_INSTRUCTIONS metadata contains no 'grouping' key, and neither the ground truth nor the candidate table uses row grouping. Grouping choice is not discretionary editorial choice being tested here.
-[PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=True, truth=True
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [MECHANICAL] Column-group spanners existence: 0/2 -- candidate spanner_present=False, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 1/1 -- colored-measure palettes: ['Blues', 'Greens']
+[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 1/5 -- The candidate includes 'Cockburn Island' as row 1, which by the metadata must be excluded because it has near-zero/missing population for all census years. The ground truth correctly excludes it and ranks Milton first. This is a fundamental data-integrity error that misconstrues which towns are actually 'fastest-growing'.
-[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 11/11 colored measures have a shape-appropriate domain
-[PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=15, fully_filled=True -> expected striping=False, actual=True
-[FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- stub=True, striped=True -> expected tint=False, actual=True
-[PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
-[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 11/11, truncate=False correct 11/11, autocolor_text=True correct 11/11
+[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
+[FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=OK; dividers=expected=True (gated on spanners), got=False
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
+[PASS] [MECHANICAL] Stub tint + grey-budget correctness: 5/5 -- stub=True, striped=True -> expected tint=False, actual=False
+[FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=unknown; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 6/6, truncate=False correct 6/6, autocolor_text=True correct 6/6
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct', 'density_1996', 'density_2001', 'density_2006', 'density_2011', 'density_2016', 'density_2021', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']
-[PASS] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 3/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=True
-[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- 0/2 canonical hero-uncolored measures are bolded
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=False present=True, source expected=True present=False
+[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Top 15 Fastest-Growing Ontario Towns' is clear and accurate. It captures the core subject (fastest-growing Ontario towns). The ground truth's more specific title 'Ontario's Fastest-Growing Towns, 1996–2021' more explicitly frames the time period as central to the story. Both convey the same basic framing, with ground truth being slightly more complete.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 4/5 -- The candidate's subtitle 'Population density and growth rates across census years (1996–2021)' adds useful scope-setting context distinct from the title. The ground truth's subtitle provides more detail ('Density at each Census year and the percent change between consecutive Censuses, ranked by total population growth over the full period'), which is somewhat more informative about the ranking criterion. Both are non-redundant, but ground truth is slightly more precise.
-[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate's column order (Town, rank, Density 1996–2021, then Population Growth % for each period) is workable but differs from the ground truth. The candidate places all density years together, then all growth-rate periods, which is logical for scanning within each concept. However, the ground truth interleaves density and growth data to show both metrics together for each year, which is arguably more intuitive for seeing the story of growth alongside density change. The candidate's approach is defensible but less seamless for connecting cause and effect.
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a blue gradient for density columns and a green-to-yellow diverging palette for growth rates, which is harmonious and tasteful. The ground truth employs a similar blue-to-teal gradient for density and green-to-yellow for growth, with more intensity in the green (darker tones). The candidate's palette is legible and sensible but slightly more muted and less visually dramatic than the ground truth's bolder green hues for high growth rates.
-[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 2/5 -- The candidate's caption ('Towns ranked by overall population growth rate from 1996 to 2021. Percentage changes computed as period-over-period growth...') adds some methodology detail. However, it omits the ground truth's critical clarification that 'fastest-growing' means highest percent change in total population (not the average of the five inter-Census windows) and omits the important note that municipalities with missing data are excluded. The caption is less informative than the ground truth's.
+[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Caption doesn't just restate the subtitle: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source

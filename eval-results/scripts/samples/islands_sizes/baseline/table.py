@@ -1,17 +1,18 @@
 import pandas as pd
 from great_tables import GT
 
+# Read the island data
 df = pd.read_csv('islands.csv')
 
+# Create the table
 gt = (
     GT(df)
     .tab_header(
-        title="Islands by Size",
-        subtitle="World's largest islands (in thousands of square miles)"
+        title="World Islands by Size",
+        subtitle="Area in thousands of square kilometers"
     )
-    .cols_label(name="Island", size="Size (thousands of sq mi)")
-    .fmt_number(columns="size", decimals=0)
-    .cols_align(align="center", columns="size")
+    .fmt_integer(columns="size")
 )
 
+# Render to PNG
 gt.gtsave("table.png")

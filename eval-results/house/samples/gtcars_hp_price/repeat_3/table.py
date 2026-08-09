@@ -1,52 +1,58 @@
 import pandas as pd
 from great_tables import GT, md, style, loc
-import sys
-sys.path.insert(0, '.claude/skills/great-tables-house/scripts')
-from house_table import PALETTE, frame, finalize, band, stripe, stub_tint, humanize_labels, heatmap
+from house_table import PALETTE, frame, finalize, humanize_labels, heatmap, stub_tint, stripe
 
-df = pd.read_csv('gtcars.csv')
+# Read the data
+df = pd.read_csv("gtcars.csv")
 
-# Select only GT cars and keep model, hp, and msrp
-gt_cars = df[df['model'] == 'GT'].copy()
-gt_cars = gt_cars[['mfr', 'model', 'hp', 'msrp']].reset_index(drop=True)
-gt_cars.columns = ['manufacturer', 'model', 'horsepower', 'price']
+# Select relevant columns and create display name
+df_display = df[["mfr", "model", "hp", "msrp"]].copy()
+df_display["car"] = df["mfr"] + " " + df["model"]
+df_display = df_display[["car", "hp", "msrp"]].reset_index(drop=True)
 
-# Create GT table with manufacturer as stub (row identifier)
+# Build the table
 gt = (
-    GT(gt_cars, rowname_col='manufacturer')
+    GT(df_display, rowname_col="car")
     .tab_header(
-        title="GT Performance Cars",
-        subtitle=md("Horsepower and price specifications"),
+        title="GT Cars: Horsepower and Price",
+        subtitle=md("High-performance vehicles ranked by horsepower and MSRP"),
     )
-    .tab_stubhead(label="Manufacturer")
-    .fmt_integer(columns='horsepower')
-    .fmt_currency(columns='price', decimals=0)
-    .sub_missing(columns=['horsepower', 'price'], missing_text="—")
+    .fmt_number(columns="hp", decimals=0, use_seps=True)
+    .fmt_currency(columns="msrp", decimals=0)
 )
 
-gt = humanize_labels(gt, gt_cars)
+# Apply house style formatting
+gt = humanize_labels(
+    gt,
+    df_display,
+    overrides={"hp": "Horsepower", "msrp": "MSRP"},
+)
 
-# Apply color to price (sequential/neutral — just showing the magnitude)
-gt = heatmap(gt, 'price', kind='sequential', hue='neutral')
+# Color the two measures: horsepower (sequential/neutral) and price (sequential/neutral)
+gt = heatmap(gt, "hp", kind="sequential", hue="neutral")
+gt = heatmap(gt, "msrp", kind="sequential", hue="neutral")
 
-# Heading band with light tint
+# Apply band styling with navy accent_tint
 gt = gt.tab_options(
-    column_labels_background_color=PALETTE['accent_tint']['navy'],
-    column_labels_border_bottom_color=PALETTE['neutral']['column_label_rule'],
-    column_labels_border_bottom_width='2px',
-    column_labels_border_bottom_style='solid',
+    column_labels_background_color="#C9E0F0",
+    column_labels_border_bottom_color="#CCCCCC",
+    column_labels_border_bottom_width="2px",
+    column_labels_border_bottom_style="solid",
 )
 
-# Polish: stub tint, row hairlines
-gt = stub_tint(gt, hue='navy')
-gt = gt.tab_options(
-    table_body_hlines_style='solid',
-    table_body_hlines_color=PALETTE['neutral']['hairline'],
-    table_body_hlines_width='1px',
+# Apply small-color polish
+gt = stripe(gt)
+gt = stub_tint(gt, hue="navy")
+
+# Add source note and hairlines
+gt = (
+    gt.tab_source_note(source_note="Source: provided dataset.")
+    .tab_options(
+        table_body_hlines_style="solid",
+        table_body_hlines_color="#E8E8E8",
+        table_body_hlines_width="1px",
+    )
 )
+
 gt = frame(gt)
-
-# Add source note
-gt = gt.tab_source_note(source_note="Source: provided dataset.")
-
 finalize(gt, path="table.png", zoom=2.0, expand=15)

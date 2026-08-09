@@ -1,54 +1,56 @@
 import pandas as pd
 import numpy as np
 from great_tables import GT, md
-from gt_consistency import PALETTE, frame, finalize, band, stripe, stub_tint, heatmap
+from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe
 
-# Load and clean the data
+# Step 1: Read and clean the data
 df = pd.read_csv("airquality.csv")
 
-# Map month numbers to month names
-month_names = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
-df["Month"] = df["Month"].map(month_names)
+# Coerce numeric columns to float, handling missing values
+for col in ["Ozone", "Solar_R", "Wind", "Temp"]:
+    df[col] = pd.to_numeric(df[col], errors="coerce")
 
-# Calculate monthly averages
-monthly = df.groupby("Month", as_index=False)[["Ozone", "Wind", "Temp"]].mean()
-
-# Round to 1 decimal place
-monthly = monthly.round(1)
-
-# Reorder months in calendar order
-month_order = ["May", "June", "July", "August", "September"]
-monthly["Month"] = pd.Categorical(monthly["Month"], categories=month_order, ordered=True)
-monthly = monthly.sort_values("Month").reset_index(drop=True)
-
-# Create the table with Month as stub
-gt = (
-    GT(monthly, rowname_col="Month")
-    .fmt_number(columns=["Ozone", "Wind", "Temp"], decimals=1)
+# Group by Month and calculate mean values
+monthly_stats = (
+    df.groupby("Month")[["Temp", "Wind", "Ozone"]]
+    .mean()
+    .round(1)
+    .reset_index()
 )
 
-# Apply colors to the two main measures
-# Priority: Ozone (air quality metric) and Temp (environmental factor)
-# Wind is shown uncolored for reference
-gt = heatmap(gt, "Ozone", kind="sequential", hue="neutral")
-gt = heatmap(gt, "Temp", kind="sequential", hue="positive")
+# Create month labels (May through September)
+month_names = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
+monthly_stats["Month_Label"] = monthly_stats["Month"].map(month_names)
 
-# Apply light heading band (because we have colored measures)
+# Rename columns for display
+display_df = monthly_stats[["Month_Label", "Temp", "Wind", "Ozone"]].copy()
+display_df.columns = ["Month", "Temperature (°F)", "Wind Speed (mph)", "Ozone (ppb)"]
+
+# Step 2: Create GT table with Month as stub
+gt = GT(display_df, rowname_col="Month")
+
+# Step 3: Apply gradient coloring to all three measures (sequential)
+# All three are neutral magnitude measures
+gt = heatmap(gt, ["Temperature (°F)", "Wind Speed (mph)", "Ozone (ppb)"],
+             kind="sequential", hue="neutral")
+
+# Step 4: Apply heading band
 gt = band(gt, shade="light", hue="navy")
 
-# Apply small-color polish
-gt = stripe(gt)
-gt = stub_tint(gt, hue="navy")
+# Step 5: Small-color polish
 gt = frame(gt)
+gt = stripe(gt)
+
+# Format the numbers
+gt = gt.fmt_number(columns=["Temperature (°F)", "Wind Speed (mph)", "Ozone (ppb)"],
+                   decimals=1)
 
 # Add titles and annotations
 gt = gt.tab_header(
-    title="Air Quality by Month",
-    subtitle="Average monthly temperature, wind speed, and ozone levels"
+    title="Monthly Air Quality Statistics",
+    subtitle="Average Temperature, Wind Speed, and Ozone Levels (May–September)"
 )
 
-gt = gt.tab_source_note(
-    "Source: New York air quality measurements (May–September 1973)"
-)
+gt = gt.tab_source_note("Data source: Air Quality Dataset")
 
 finalize(gt, "table.png")

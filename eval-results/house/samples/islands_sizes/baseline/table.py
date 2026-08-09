@@ -1,20 +1,20 @@
 import pandas as pd
 from great_tables import GT
 
-df = pd.read_csv("islands.csv")
+df = pd.read_csv('islands.csv')
 
 gt = (
     GT(df)
     .tab_header(
-        title="World Islands by Size",
-        subtitle="Area in thousands of square kilometers"
+        title="Island Sizes",
+        subtitle="Land area in thousands of square miles"
     )
     .cols_label(
         name="Island",
-        size="Size (1000 km²)"
+        size="Size"
     )
     .fmt_number(
-        columns="size",
+        columns='size',
         decimals=0
     )
 )
