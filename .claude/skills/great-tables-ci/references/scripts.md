@@ -194,9 +194,14 @@ gt = stub_tint(gt, hue="forest")
 - `finalize(gt, path="table.png", **overrides)` — `gt.gtsave(path, expand=15,
   zoom=2.0)`, letting any override (e.g. `vwidth`/`vheight`) win. These values
   satisfy the `render-params` check. You may instead call `gt.gtsave(...)`
-  directly with `expand`/`zoom` at or above those defaults.
+  directly with `expand`/`zoom` at or above those defaults. **Always
+  `gt = finalize(gt, ...)`, never a bare `finalize(gt, ...)` statement** —
+  `gt.gtsave(...)` returns the same `GT` object, so the assignment changes
+  nothing about what renders, but a bare statement leaves the render call
+  looking like a disconnected side effect rather than part of `gt`'s own
+  definition.
 
 ```python
 gt = frame(gt)
-finalize(gt, "table.png")            # or: gt.gtsave("table.png", expand=15, zoom=2.0)
+gt = finalize(gt, "table.png")       # or: gt.gtsave("table.png", expand=15, zoom=2.0)
 ```

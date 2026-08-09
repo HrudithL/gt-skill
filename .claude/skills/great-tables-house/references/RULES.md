@@ -48,12 +48,18 @@ unchecked, the table isn't done yet.
    second legitimate measure is sitting right there is the same kind of
    error as coloring a 3rd. See "A related PAIR of columns can be ONE
    measure" below for the case where a second measure is easy to miss.
-6. **`finalize(gt, path="table.png", zoom=2.0, expand=15)`** — the mandatory
-   render, always last, with `zoom=`/`expand=` passed **explicitly** at the
-   call site even though they match `finalize()`'s own defaults. Relying on
-   the hidden default means nothing in your own script records what was
-   actually rendered with; typing them out costs nothing and makes the
-   script self-documenting.
+6. **`gt = finalize(gt, path="table.png", zoom=2.0, expand=15)`** — the
+   mandatory render, always last, with `zoom=`/`expand=` passed
+   **explicitly** at the call site even though they match `finalize()`'s
+   own defaults, and **assigned back to `gt`**, never called as a bare
+   statement. Relying on the hidden default means nothing in your own
+   script records what was actually rendered with; typing them out costs
+   nothing and makes the script self-documenting. The assignment isn't
+   stylistic — `finalize(gt, ...)` written as a bare statement (no `gt =`)
+   doesn't change what renders, but it changes nothing else either;
+   writing it as `gt = finalize(...)` costs nothing and keeps the render
+   call visibly part of `gt`'s own definition rather than a disconnected
+   trailing statement.
 
 Everything else in this file — a stub, a group, a spanner, a status chip,
 a summary row, the striping/tint hierarchy — is genuinely conditional on
