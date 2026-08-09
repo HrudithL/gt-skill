@@ -250,10 +250,10 @@ separate deterministic mechanism elsewhere in the harness -- self-report \
 not group at all, this is not a discretionary editorial choice being \
 tested here either -- self-report `applicable=false`.
 - For every OTHER dimension, self-report `applicable=false` only when the \
-dimension genuinely cannot be assessed from what's rendered (e.g. there is \
-no caption/source-note region on EITHER table at all, so caption quality \
-has nothing to compare). Do not use `applicable=false` to avoid a hard \
-call -- when in doubt, score it.
+dimension genuinely cannot be assessed from what's rendered (e.g. a table \
+has only one non-stub column on EITHER side, so `column_order_quality` has \
+nothing to compare). Do not use `applicable=false` to avoid a hard call -- \
+when in doubt, score it.
 - Applicability filtering for what a SPECIFIC ground truth requires, \
 beyond the grouping rule above, is handled elsewhere in the harness, not \
 by you.
