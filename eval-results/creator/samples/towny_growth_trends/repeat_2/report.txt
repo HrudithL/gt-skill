@@ -1,36 +1,33 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080537_creator_6prompts/prompts/towny_growth_trends/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/towny_growth_trends.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/eval-results/creator/samples/towny_growth_trends/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 18/91 (19.8%)
+TOTAL: 18/84 (21.4%)
   Data-compliance:        7/47
-  Formatting-compliance:  11/44
+  Formatting-compliance:  11/37
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'
+[FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'
 [FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 0/5 -- 0/1 required instructions satisfied; row_count=15 not satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'); its PNG (if any) can't be trusted to reflect this source
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=True, truth=True
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 0/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=expected=True (gated on spanners), got=False
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- ground truth requires a stub but candidate has none; stub tint unverifiable
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 6/6, truncate=False correct 6/6, autocolor_text=True correct 6/6
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'
 [FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=False present=True, source expected=True present=False
-[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- candidate failed to execute: no top-level `gt` GT instance in table.py
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Caption doesn't just restate the subtitle: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'towny.csv'); its PNG (if any) can't be trusted to reflect this source

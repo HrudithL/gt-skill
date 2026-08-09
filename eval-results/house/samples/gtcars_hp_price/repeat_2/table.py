@@ -1,38 +1,44 @@
 import pandas as pd
-from great_tables import GT, md
-from house_table import PALETTE, frame, finalize, band, heatmap, humanize_labels
+from great_tables import GT, loc, md, style
+from house_table import PALETTE, frame, hairlines, finalize, band, humanize_labels, heatmap
 
-# Read the GT cars data
+# Load data
 df = pd.read_csv("gtcars.csv")
 
-# Select relevant columns and prepare data
-df = df[["mfr", "model", "hp", "msrp"]].copy()
-df.columns = ["manufacturer", "model", "hp", "msrp"]
+# Create car identifier as stub column
+df["car"] = df["mfr"] + " " + df["model"]
 
-# Create the GT table
+# Select and sort columns
+gt_cars = df[["car", "hp", "msrp"]].copy()
+gt_cars.columns = ["car", "horsepower", "price"]
+
+# Create table
 gt = (
-    GT(df)
+    GT(gt_cars, rowname_col="car")
     .tab_header(
-        title="GT Cars Performance",
-        subtitle=md("Horsepower and price for high-performance vehicles"),
+        title="GT Sports Cars",
+        subtitle="Horsepower and price for performance vehicles"
     )
-    .fmt_number(columns="hp", decimals=0)
-    .fmt_currency(columns="msrp", decimals=0)
+    .fmt_number(columns="horsepower", decimals=0)
+    .fmt_currency(columns="price", decimals=0)
 )
 
-# Apply house style helpers
-gt = humanize_labels(gt, df)
+# Apply labels with overrides
+gt = humanize_labels(
+    gt,
+    gt_cars,
+    overrides={"horsepower": "Horsepower", "price": "Price (USD)"}
+)
 
-# Apply heatmap to horsepower (sequential magnitude)
-gt = heatmap(gt, "hp", kind="sequential", hue="neutral")
+# Single colored measure: price (sequential, neutral palette for currency)
+gt = heatmap(gt, "price", kind="sequential", hue="neutral")
 
-# Apply heading band
+# Apply styling
 gt = band(gt, hue="navy")
-
-# Add source note and frame
-gt = (
-    gt.tab_source_note(source_note="Source: GT Cars dataset.")
-)
-
+gt = hairlines(gt)
 gt = frame(gt)
+
+# Add source note
+gt = gt.tab_source_note(source_note="Source: gtcars dataset")
+
 finalize(gt, path="table.png")

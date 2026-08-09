@@ -1,36 +1,39 @@
 import pandas as pd
 from great_tables import GT, md
-from house_table import PALETTE, frame, finalize, band, heatmap, humanize_labels
+from house_table import PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap
 
-# Read the islands data
+# Read the data
 df = pd.read_csv("islands.csv")
 
 # Create the GT table
-gt = GT(df, rowname_col="name")
-
-# Add title and subtitle
-gt = gt.tab_header(
-    title="Island Sizes",
-    subtitle=md("Surface area of the world's largest islands in thousands of square kilometers"),
+gt = (
+    GT(df, rowname_col="name")
+    .tab_header(
+        title="Island Sizes",
+        subtitle="Land area by island",
+    )
+    .tab_stubhead(label="Island")
+    .fmt_number(columns="size", decimals=0, use_seps=True)
 )
 
-# Format the size column with thousands separator
-gt = gt.fmt_number(columns="size", decimals=0, use_seps=True)
-
-# Humanize labels
-gt = humanize_labels(gt, df)
-
-# Apply the sequential heatmap to size column (Blues for neutral magnitude)
+# Color the size column with a sequential heatmap
 gt = heatmap(gt, "size", kind="sequential", hue="neutral")
 
-# Apply heading band
+# Apply heading band with navy accent
 gt = band(gt, hue="navy")
+
+# Apply striping (>= 10 rows and not fully colored)
+gt = stripe(gt)
+
+# Apply stub tint
+gt = stub_tint(gt, hue="navy")
+
+# Apply structural elements
+gt = hairlines(gt)
+gt = frame(gt)
 
 # Add source note
 gt = gt.tab_source_note(source_note="Source: provided dataset.")
 
-# Apply the frame
-gt = frame(gt)
-
-# Finalize and save
+# Finalize and render
 finalize(gt, path="table.png")

@@ -1,63 +1,67 @@
 import pandas as pd
 from great_tables import GT, md
-import sys
-sys.path.insert(0, './.claude/skills/great-tables-house/scripts')
-from house_table import PALETTE, frame, finalize, band, stripe, stub_tint, heatmap
+from house_table import PALETTE, frame, hairlines, finalize, band, heatmap, humanize_labels
 
-# Load and aggregate data
-df = pd.read_csv('airquality.csv')
+# Load the air quality data
+df = pd.read_csv("airquality.csv")
 
-# Map month numbers to names
-month_names = {5: 'May', 6: 'June', 7: 'July', 8: 'August', 9: 'September'}
+# Create a mapping for month numbers to names
+month_names = {
+    5: "May",
+    6: "June",
+    7: "July",
+    8: "August",
+    9: "September"
+}
 
-# Calculate monthly averages
-monthly_stats = df.groupby('Month').agg({
-    'Temp': 'mean',
-    'Wind': 'mean',
-    'Ozone': 'mean',
+# Group by month and calculate averages
+monthly_data = df.groupby("Month").agg({
+    "Temp": "mean",
+    "Wind": "mean",
+    "Ozone": "mean"
 }).reset_index()
 
-# Add month names
-monthly_stats['Month_Name'] = monthly_stats['Month'].map(month_names)
+# Map month numbers to month names
+monthly_data["Month"] = monthly_data["Month"].map(month_names)
 
-# Reorder columns and round values
-monthly_stats = monthly_stats[['Month_Name', 'Temp', 'Wind', 'Ozone']].copy()
-monthly_stats = monthly_stats.round(1)
+# Rename columns for display
+monthly_data = monthly_data.rename(columns={
+    "Month": "month",
+    "Temp": "temp",
+    "Wind": "wind",
+    "Ozone": "ozone"
+})
 
-# Create GT table
-gt = GT(monthly_stats, rowname_col='Month_Name')
+# Create the GT table
+gt = GT(monthly_data, rowname_col="month")
 gt = gt.tab_header(
-    title='Air Quality Monthly Summary',
-    subtitle=md('Average temperature, wind speed, and ozone levels by month')
-)
-gt = gt.tab_stubhead(label='Month')
-
-# Format columns
-gt = gt.fmt_number(columns='Temp', decimals=1)
-gt = gt.fmt_number(columns='Wind', decimals=1)
-gt = gt.fmt_number(columns='Ozone', decimals=1)
-
-# Add column labels
-from great_tables import loc, style
-gt = gt.cols_label(
-    Temp='Avg Temp (°F)',
-    Wind='Avg Wind (mph)',
-    Ozone='Avg Ozone (ppb)'
+    title="Monthly Air Quality Summary",
+    subtitle=md("Average temperature, wind speed, and ozone levels by month")
 )
 
-# Apply the two heatmaps (max allowed): Temperature (sequential) and Wind (sequential)
-# Temperature uses Greens hue since it represents heat/intensity
-gt = heatmap(gt, 'Temp', kind='sequential', hue='warning')
-# Wind uses Blues hue for a neutral magnitude
-gt = heatmap(gt, 'Wind', kind='sequential', hue='neutral')
+# Format numeric columns
+gt = gt.fmt_number(columns=["temp", "wind", "ozone"], decimals=1)
 
-# Apply house styling
-gt = band(gt, hue='forest')
-gt = stub_tint(gt, hue='forest')
+# Apply humanized labels
+gt = humanize_labels(
+    gt,
+    monthly_data,
+    overrides={
+        "temp": "Avg Temperature (°F)",
+        "wind": "Avg Wind Speed (mph)",
+        "ozone": "Avg Ozone (ppb)"
+    }
+)
 
-# Add source note
-gt = gt.tab_source_note('Source: provided dataset.')
+# Apply band with light navy tint
+gt = band(gt, hue="navy")
 
-# Apply frame and finalize
+# Apply one heatmap for the hero measure (temperature)
+gt = heatmap(gt, "temp", kind="sequential", hue="neutral")
+
+# Add hairlines, frame, and finalize
+gt = hairlines(gt)
 gt = frame(gt)
-finalize(gt, path='table.png')
+
+gt.tab_source_note(source_note="Source: Air Quality Dataset (May–September)")
+finalize(gt, path="table.png")

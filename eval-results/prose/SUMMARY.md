@@ -1,15 +1,24 @@
 # `prose` skill — eval summary
 
-Sweep: `runs/sweep/20260807_080533_prose_6prompts` — 6 corpus prompts x (3
+Sweep: `runs/sweep/20260809_124545_prose_6prompts` — 6 corpus prompts x (3
 repeats + 1 auto-baseline), Haiku, scored by `runner.comparator.compare()`
 against each prompt's ground truth. Full detail in [`metrics.json`](metrics.json);
 regenerate the plots below with `python plots/make_plots.py`.
 
+**Comparator methodology (2026-08-09):** 3 checks (hero-column formatting,
+stub tint/grey-budget, caption-not-restating-subtitle) were removed from
+`runner/comparator.py` — field data across house/prose/scripts showed
+every skill variant scoring near-zero on them regardless of quality (7.5%,
+14.8%, 24.1% average), meaning they measured something no current skill
+achieves rather than a real quality gap between skills. Scores below are
+**not comparable** to this file's pre-2026-08-09 numbers (denominator
+shrank 114 -> 106 pts).
+
 | Metric (mean across 6 prompts) | `prose` skill | baseline (no skill) |
 |---|---|---|
-| Comparator total score | **70.5%** | 24.8% |
-| Cost per invocation | $0.150 | $0.082 |
-| Score spread across 3 repeats | 11.1 points | n/a (1 run) |
+| Comparator total score | **74.8%** | 27.9% |
+| Cost per invocation | $0.167 | $0.077 |
+| Score spread across 3 repeats | 10.4 points | n/a (1 run) |
 
 See [`plots/cost.png`](plots/cost.png), [`plots/tokens.png`](plots/tokens.png),
 [`plots/consistency.png`](plots/consistency.png),

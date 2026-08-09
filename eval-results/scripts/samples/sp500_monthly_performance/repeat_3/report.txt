@@ -1,36 +1,33 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080530_scripts_6prompts/prompts/sp500_monthly_performance/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/sp500_monthly_performance.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124542_scripts_6prompts/prompts/sp500_monthly_performance/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/sp500_monthly_performance.py
 
-TOTAL: 19/88 (21.6%)
-  Data-compliance:        4/44
-  Formatting-compliance:  15/44
+TOTAL: 55/96 (57.3%)
+  Data-compliance:        17/48
+  Formatting-compliance:  38/48
 
-[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
-[FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
-[FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 0/5 -- 0/1 required instructions satisfied; row_count=72 not satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
+[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[(None, 'apr 2010'), (None, 'apr 2011'), (None, 'apr 2012'), (None, 'apr 2013'), (None, 'apr 2014')], extra=[(None, '2010-01'), (None, '2010-02'), (None, '2010-03'), (None, '2010-04'), (None, '2010-05')]
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/6 canonical measures have a value-matching candidate column; unmatched: ['pct_change', 'best_day_gain', 'worst_day_loss', 'monthly_open', 'monthly_close', 'avg_volume']
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/3 canonical colored measures covered by a candidate color call
+[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
+[PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- visible-column overlap 0.00 (candidate-only=['Avg Daily Volume', 'Close', 'Highest Single-Day Gain', 'Highest Single-Day Loss', 'Open', 'Percent Change', 'Period'], missing=['avg_volume', 'best_day_gain', 'month_label', 'monthly_close', 'monthly_open', 'pct_change', 'worst_day_loss', 'year'])
 [N/A] [MECHANICAL] Grouping existence: 0/0 -- grouping is a discretionary editorial choice here (ground truth groups, but REQUIRED_INSTRUCTIONS has no 'grouping' key) -- judged separately by grouping_choice_quality, not scored as a strict presence match
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
+[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- Both the ground truth and candidate group rows by year as a structural choice, with year headers visibly separating each annual block. The grouping is equally sensible and serves the narrative of tracking performance across six distinct trading years without any mandate to do so in REQUIRED_INSTRUCTIONS.
 [FAIL] [MECHANICAL] Column-group spanners existence: 0/2 -- candidate spanner_present=False, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
-[FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate's column labels for 'Highest Single-Day Gain' and 'Highest Single-Day Loss' are fundamentally incorrect. These labels indicate raw price changes (with values like 26.74, 34.47, etc. that are not percentages), but the ground truth's labels 'Best Day (gain)' and 'Worst Day (loss)' clearly indicate percentage gains/losses (shown as +1.6%, -2.2%, etc.). The candidate's caption confirms this misinterpretation: 'highest single-day gain is the maximum intraday range (high - low)' rather than percent change. The other five labels (Open, Close, Percent Change, Avg Daily Volume) correctly name their concepts.
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=OK; dividers=expected=True (gated on spanners), got=False
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
-[FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- stub=True, striped=True -> expected tint=False, actual=True
-[FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=light; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
+[PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=72, fully_filled=False -> expected striping=True, actual=True
+[PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=False present=False, source expected=True present=False
-[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- candidate failed to execute: AttributeError: 'NoneType' object has no attribute 'gtsave'
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/6 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['monthly_open', 'monthly_close', 'pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss']
+[PASS] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 3/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=True
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Caption doesn't just restate the subtitle: 0/0 -- judge unavailable: candidate failed Tier-2 execution (AttributeError: 'NoneType' object has no attribute 'gtsave'); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'S&P 500 Monthly Performance Summary (2010-2015)' is clear and accurate, matching the core subject and date range as the ground truth's 'S&P 500 Monthly Performance, 2010-2015'. The word 'Summary' adds a slight variation in framing but does not significantly diminish clarity or accuracy. Both titles establish the same core subject.
+[FAIL] [JUDGE] Subtitle quality: 1/3 -- judge score 2/5 -- The candidate's subtitle 'Opening/closing prices, percent change, volume, and daily extremes by month' is descriptive but fails to clarify a critical point flagged in the caption: that the daily extremes use 'continuous day-over-day percent change' and are 'not reset' at month boundaries. The ground truth's subtitle and caption together explicitly address this counterintuitive methodology. The candidate's caption mentions this ('Highest single-day gain is the maximum intraday range'), but the subtitle remains vague and does not truly prepare the reader for the discontinuity.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate's column order (Open, Close, Percent Change, Avg Daily Volume, Highest Single-Day Gain, Highest Single-Day Loss) is logical and sensible: raw prices first, then the derived monthly performance metric, then volume context, then extremes. This matches the ground truth's order closely. The left-to-right flow is natural and related concepts sit adjacent. No meaningful disadvantage is present.
+[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a green-yellow-orange-red diverging palette for the Percent Change column and a blue-to-orange palette for the gain/loss columns, which is harmonious and appropriate for representing positive/negative performance. The color choices are tasteful and legible. However, compared to the ground truth's more nuanced and cohesive palette (with softer greens for gains, warmer oranges for losses, and complementary purple-blue tones for the gains/losses columns), the candidate's palette is slightly more generic and less refined in its overall harmony with the table's heading and stub.

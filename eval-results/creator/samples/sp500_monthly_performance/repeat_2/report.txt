@@ -1,36 +1,33 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080537_creator_6prompts/prompts/sp500_monthly_performance/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/sp500_monthly_performance.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/eval-results/creator/samples/sp500_monthly_performance/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/sp500_monthly_performance.py
 
-TOTAL: 26/104 (25.0%)
-  Data-compliance:        11/48
-  Formatting-compliance:  15/56
+TOTAL: 9/81 (11.1%)
+  Data-compliance:        2/44
+  Formatting-compliance:  7/37
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 6 canonical measures unverifiable
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/3 canonical colored measures covered by a candidate color call
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
-[PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.15 (candidate-only=['Avg Daily Vol', 'Best Day', 'Month', 'Monthly %', 'Worst Day'], missing=['avg_volume', 'best_day_gain', 'month_label', 'pct_change', 'worst_day_loss', 'year']); value-matched renamed columns: {'monthly_close': 'Close', 'monthly_open': 'Open'}
+[FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 0/5 -- 0/1 required instructions satisfied; row_count=72 not satisfied
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'
 [N/A] [MECHANICAL] Grouping existence: 0/0 -- grouping is a discretionary editorial choice here (ground truth groups, but REQUIRED_INSTRUCTIONS has no 'grouping' key) -- judged separately by grouping_choice_quality, not scored as a strict presence match
-[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by year (2010, 2011, etc.) just as the ground truth does, with no grouping instruction in REQUIRED_INSTRUCTIONS. This structure naturally organizes 72 months of data into six logical sections, making it easy to scan performance by year. The grouping choice serves the analytical goal equally well in both tables.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'); its PNG (if any) can't be trusted to reflect this source
 [FAIL] [MECHANICAL] Column-group spanners existence: 0/2 -- candidate spanner_present=False, truth=True
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- Most labels are correct in concept (Open, Close, Avg Daily Vol, Best Day, Worst Day), but 'Monthly %' is incomplete and ambiguous. The ground truth uses 'Monthly % Change', which makes the concept of percent-change immediately clear; the candidate's abbreviated 'Monthly %' could be misread as a monthly indicator or count rather than specifically a percent change. This requires inference from context.
+[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'); its PNG (if any) can't be trusted to reflect this source
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 0/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=expected=True (gated on spanners), got=False
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=72, fully_filled=False -> expected striping=True, actual=False
-[FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- ground truth requires a stub but candidate has none; stub tint unverifiable
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 1/4 -- 2/6 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss']
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
-[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- 0/3 canonical hero-uncolored measures are bolded
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=False present=True, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title is 'S&P 500 Monthly Performance Summary' with subtitle '2010 through 2015', capturing the core subject and time span. The ground truth's title is 'S&P 500 Monthly Performance, 2010–2015'. Both are accurate and framed similarly; the candidate's use of 'Summary' is slightly less specific than the ground truth's simpler phrasing, but both convey the essential story clearly.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 3/5 -- The candidate's subtitle '2010 through 2015' restates the time scope already implied in the main title, adding minimal clarification beyond what 'S&P 500 Monthly Performance Summary' already conveys. The ground truth's subtitle adds substantive context: 'Six full years of trading, grouped by year, with each month's open, close, overall percent change, average daily volume, and the best and worst single trading day within that month'—describing what's measured and how it's organized. The candidate's subtitle is functional but overlaps too much with the title.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate's order (Month, Open, Close, Monthly %, Avg Daily Vol, Best Day, Worst Day) is logical and sensible. The ground truth uses the same order (Month, Open, Close, Monthly % Change, Avg Daily Volume, Best Day Gain, Worst Day Loss). Both arrange related price columns together (Open/Close), followed by the aggregate metric (percent change and volume), then the extremes. The column orders are essentially identical and equally sensible.
-[FAIL] [JUDGE] Color theme/palette taste: 1/3 -- judge score 2/5 -- The candidate uses no background coloring for any columns—all cells appear in plain white/light gray. The ground truth applies a thoughtful color palette: diverging orange-to-green for Monthly % Change (red for negative, green for positive), light blue-purple for Best Day gain, and light orange for Worst Day loss. The candidate's plain styling is legible but misses entirely the visual encoding that helps readers grasp the sign and magnitude of performance at a glance. The absence of color theme makes the table harder to scan.
-[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 1/5 -- The candidate's caption is 'Data source: S&P 500 historical prices' which only provides a bare source citation. The ground truth's caption contains crucial explanatory information: it clarifies that best/worst days use continuous day-over-day percent change that is 'not reset' at month boundaries, which is essential for understanding why the data is structured as it is. The candidate provides no such clarifying insight.
+[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'sp500.csv'); its PNG (if any) can't be trusted to reflect this source
