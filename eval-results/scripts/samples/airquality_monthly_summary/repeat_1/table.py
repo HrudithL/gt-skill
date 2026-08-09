@@ -1,81 +1,92 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, style, loc
+from great_tables import GT, md
 from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
 
-# Step 1: Load and clean data
+# STEP 1: Understand and clean the data
 df = pd.read_csv("airquality.csv")
 
-# Coerce columns to correct types
+# Ensure numeric columns are properly typed
 df["Ozone"] = pd.to_numeric(df["Ozone"], errors="coerce")
 df["Solar_R"] = pd.to_numeric(df["Solar_R"], errors="coerce")
 df["Wind"] = pd.to_numeric(df["Wind"], errors="coerce")
 df["Temp"] = pd.to_numeric(df["Temp"], errors="coerce")
-df["Month"] = pd.to_numeric(df["Month"], errors="coerce")
+df["Month"] = df["Month"].astype(int)
 
-# Create month names for display
-month_names = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
-df["Month_Name"] = df["Month"].map(month_names)
-
-# Group by month and calculate averages
-agg_df = df.groupby("Month_Name")[["Temp", "Wind", "Ozone"]].mean().round(1).reset_index()
-
-# Step 2: Organize columns
-# Stub is Month_Name (row identifier)
-agg_df = agg_df.rename(columns={"Month_Name": "Month"})
-
-# Step 3: Big Color - color 2 measures (Temp and Wind, both ordered magnitudes)
-# Temp is primary (temperature measurement), Wind is secondary
-lo_temp = float(np.nanmin(agg_df[["Temp"]].to_numpy()))
-hi_temp = float(np.nanmax(agg_df[["Temp"]].to_numpy()))
-
-lo_wind = float(np.nanmin(agg_df[["Wind"]].to_numpy()))
-hi_wind = float(np.nanmax(agg_df[["Wind"]].to_numpy()))
-
-# Step 4: Build the table with formatting
-gt = (
-    GT(agg_df, rowname_col="Month")
-    # Step 3: Big Color - heatmaps for the ordered measures
-    .fmt_number(columns=["Temp", "Wind", "Ozone"], decimals=1, use_seps=True)
+# Compute monthly averages
+monthly_avg = (
+    df.groupby("Month")[["Temp", "Wind", "Ozone"]]
+    .mean()
+    .reset_index()
+    .round(2)
 )
 
-# Apply heatmaps using the consistency helper
-gt = heatmap(gt, ["Temp"], kind="sequential", hue="neutral", domain=[lo_temp, hi_temp])
-gt = heatmap(gt, ["Wind"], kind="sequential", hue="positive", domain=[lo_wind, hi_wind])
+# Create month name mapping
+month_names = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
+monthly_avg["Month_Name"] = monthly_avg["Month"].map(month_names)
 
-# Step 4: Heading band - light band because Big Color is present
+# Organize final dataframe: Month Name as stub, then the three measures
+display_df = monthly_avg[["Month_Name", "Temp", "Wind", "Ozone"]].copy()
+display_df.columns = ["Month", "Temperature (°F)", "Wind Speed (mph)", "Ozone (ppb)"]
+
+# STEP 2: Organize columns - Month as stub
+# STEP 3: Determine Big Color - 3 measures qualify (≥5 rows), cap at 2
+# Priority: Temperature (mentioned first), Ozone (pollutant measure), Wind (secondary)
+# Color Temperature (neutral magnitude → Blues) and Ozone (magnitude → Greens = "more is worse")
+
+# STEP 4, 5, 3: Build the table with coloring
+gt = GT(display_df, rowname_col="Month")
+
+# Format numeric columns to 1 decimal place
+gt = gt.fmt_number(
+    columns=["Temperature (°F)", "Wind Speed (mph)", "Ozone (ppb)"],
+    decimals=1,
+    use_seps=False
+)
+
+# Apply sub_missing for NA cells
+gt = gt.sub_missing(columns=["Temperature (°F)", "Wind Speed (mph)", "Ozone (ppb)"], missing_text="—")
+
+# STEP 3: Apply Big Color - heatmap for the two colored measures
+# Temperature (neutral magnitude → Blues), Ozone (warning/risk → Reds)
+gt = heatmap(gt, "Temperature (°F)", kind="sequential", hue="neutral")
+gt = heatmap(gt, "Ozone (ppb)", kind="sequential", hue="warning")
+
+# Wind Speed stays uncolored (third measure, outside the 2-color ceiling)
+
+# STEP 4: Apply heading band - light band since we have Big Color
 gt = band(gt, shade="light", hue="navy")
 
-# Step 5: Small-Color polish
-# (a) Cell borders - hairlines
+# STEP 5: Small Color polish - apply checklist items
+# (a) Cell borders - handled by defaults
 gt = gt.tab_options(
     table_body_hlines_style="solid",
     table_body_hlines_color=PALETTE["neutral"]["hairline"],
     table_body_hlines_width="1px",
+    column_labels_border_bottom_color=PALETTE["neutral"]["column_label_rule"],
+    column_labels_border_bottom_width="2px",
 )
 
-# (c) Row striping - apply since >= 5 rows and not fully color-filled
+# (c) Row striping - we have 5 rows, and body is not fully filled by Big Color
 gt = stripe(gt)
 
 # (d) Stub tint
 gt = stub_tint(gt, hue="navy")
 
-# Frame
+# Frame (global constant)
 gt = frame(gt)
 
-# Step 6: Titles & annotations
+# STEP 6: Titles & Annotations
 gt = (
-    gt.tab_header(
-        title="Air Quality Summary Statistics",
-        subtitle="Average temperature, wind speed, and ozone levels by month"
+    gt
+    .tab_header(
+        title="Monthly Air Quality Summary",
+        subtitle="Average Temperature, Wind Speed, and Ozone Levels"
     )
     .tab_source_note(
-        source_note="Monthly averages computed from daily measurements across all observation days in each month."
-    )
-    .tab_source_note(
-        source_note="Source: airquality.csv"
+        md("Data: New York Air Quality Measurements (May–September 1973)")
     )
 )
 
-# Step 7: Render
+# STEP 7: Render
 finalize(gt, "table.png")

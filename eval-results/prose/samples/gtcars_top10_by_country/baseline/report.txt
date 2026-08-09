@@ -1,33 +1,33 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124545_prose_6prompts/prompts/gtcars_top10_by_country/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/medium/ground_truth/gtcars_top10_by_country.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/gtcars_top10_by_country/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
-TOTAL: 13/84 (15.5%)
-  Data-compliance:        4/47
-  Formatting-compliance:  9/37
+TOTAL: 22/96 (22.9%)
+  Data-compliance:        7/48
+  Formatting-compliance:  15/48
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 1 canonical measures unverifiable
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/1 canonical colored measures covered by a candidate color call
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
-[FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 0/5 -- 0/3 required instructions satisfied; row_count=10 not satisfied; grouping=True not satisfied; sort=('msrp', 'desc', 'within_group') not satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 2/5 -- 1/3 required instructions satisfied; grouping=True not satisfied; sort=('msrp', 'desc', 'within_group') not satisfied
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.22 (candidate-only=['Drivetrain', 'MSRP', 'Manufacturer', 'Transmission'], missing=['drivetrain', 'msrp', 'trsmn']); value-matched renamed columns: {'ctry_origin': 'Country', 'model': 'Model'}
 [FAIL] [MECHANICAL] Grouping existence: 0/3 -- candidate grouping_present=False, truth=True
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- REQUIRED_INSTRUCTIONS explicitly includes 'grouping: true', making grouping a mandated instruction rather than a discretionary editorial choice. This dimension is therefore not applicable per the system rule.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate's column labels are technically present but use abbreviated or imprecise notation. 'rwd', 'awd', '7a', '8a', '8am' are shorthand that obscure the concepts compared to the ground truth's explicit 'Drivetrain' (with RWD/AWD spelled out) and 'Transmission' (with full 'X-speed automatic' descriptions). A reader must decode abbreviations rather than instantly recognizing the underlying concepts.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=10, fully_filled=False -> expected striping=True, actual=False
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=False present=False, source expected=True present=False
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/1 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['msrp']
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=False, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- Both titles capture the core story: 'Top 10 Most Expensive GT Cars' (candidate) vs. 'The 10 Priciest GT Cars, by Country of Origin' (ground truth). The candidate's title is clear and accurate, though it omits the 'by country of origin' framing that the ground truth emphasizes. Both are strong, but the ground truth slightly more explicitly signals the grouping structure.
+[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 3/5 -- The candidate's subtitle 'Grouped by Country of Origin with Drivetrain & Transmission Details' adds structural context. The ground truth's subtitle 'MSRP, drivetrain, and transmission for the ten most expensive cars in the gtcars dataset' names the measures and scope more explicitly. The candidate's approach is workable but less specific about what is being measured (it says what the grouping is and what details are included, but doesn't emphasize MSRP as the metric being displayed).
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate's left-to-right order is Manufacturer, Model, Country, Drivetrain, Transmission, MSRP. This splits the price (MSRP, the most important metric for 'most expensive' ranking) to the far right, making it harder to read the story at a glance. The ground truth places Model first (the car identifier), then MSRP prominently in the second column, then supporting details—a much more natural reading order where price leads as the hero metric.
+[FAIL] [JUDGE] Color theme/palette taste: 1/3 -- judge score 1/5 -- The candidate uses a minimal white/gray stripe pattern with no color highlighting on the MSRP column, despite the ground truth showing a clear dark-blue sequential color encoding on MSRP values (the canonical colored measure). The candidate loses the visual emphasis on price comparison entirely, making the table visually flat and less effective at highlighting which cars are most expensive.

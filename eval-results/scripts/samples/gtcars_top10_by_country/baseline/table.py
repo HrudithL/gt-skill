@@ -1,40 +1,41 @@
 import pandas as pd
 from great_tables import GT
 
+# Read the CSV file
 df = pd.read_csv('gtcars.csv')
 
-# Sort by MSRP descending and get top 10
-top10 = df.nlargest(10, 'msrp')[['mfr', 'model', 'year', 'drivetrain', 'trsmn', 'msrp', 'ctry_origin']].copy()
+# Get top 10 most expensive cars
+top_10 = df.nlargest(10, 'msrp')[['mfr', 'model', 'year', 'ctry_origin', 'msrp', 'drivetrain', 'trsmn']].copy()
 
-# Sort by country, then by MSRP descending
-top10 = top10.sort_values(['ctry_origin', 'msrp'], ascending=[True, False]).reset_index(drop=True)
+# Sort by country, then by price descending
+top_10_sorted = top_10.sort_values(['ctry_origin', 'msrp'], ascending=[True, False])
 
-# Create display columns
-top10['Car'] = top10['mfr'] + ' ' + top10['model'] + ' (' + top10['year'].astype(int).astype(str) + ')'
-top10['Drivetrain'] = top10['drivetrain'].str.upper()
-top10['Transmission'] = top10['trsmn']
-top10['Price'] = '$' + (top10['msrp'] / 1000).round(1).astype(str) + 'K'
-top10['Country'] = top10['ctry_origin']
+# Rename columns for display
+top_10_sorted = top_10_sorted.rename(columns={
+    'mfr': 'Manufacturer',
+    'model': 'Model',
+    'year': 'Year',
+    'ctry_origin': 'Country',
+    'msrp': 'Price',
+    'drivetrain': 'Drivetrain',
+    'trsmn': 'Transmission'
+})
 
-display_df = top10[['Country', 'Car', 'Drivetrain', 'Transmission', 'Price']]
+# Format the price column as currency
+top_10_sorted['Price'] = top_10_sorted['Price'].apply(lambda x: f'${x:,.0f}')
 
+# Create the GT table
 gt = (
-    GT(display_df)
+    GT(top_10_sorted)
     .tab_header(
         title='Top 10 Most Expensive GT Cars',
-        subtitle='Grouped by Country of Origin'
+        subtitle='Grouped by Country of Origin with Drivetrain & Transmission Details'
     )
     .tab_options(
-        container_width='900px',
-        table_layout='auto'
-    )
-    .cols_label(
-        Country='Country',
-        Car='Car',
-        Drivetrain='Drivetrain',
-        Transmission='Transmission',
-        Price='Price'
+        container_width='100%'
     )
 )
 
+# Save as PNG
 gt.gtsave('table.png')
+print("Table saved to table.png")

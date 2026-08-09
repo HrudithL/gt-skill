@@ -1,33 +1,33 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/eval-results/creator/samples/gtcars_top10_by_country/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/medium/ground_truth/gtcars_top10_by_country.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080537_creator_6prompts/prompts/gtcars_top10_by_country/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
-TOTAL: 13/84 (15.5%)
-  Data-compliance:        4/47
-  Formatting-compliance:  9/37
+TOTAL: 28/96 (29.2%)
+  Data-compliance:        7/48
+  Formatting-compliance:  21/48
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 1 canonical measures unverifiable
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/1 canonical colored measures covered by a candidate color call
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
-[FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 0/5 -- 0/3 required instructions satisfied; row_count=10 not satisfied; grouping=True not satisfied; sort=('msrp', 'desc', 'within_group') not satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'
+[FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 2/5 -- 1/3 required instructions satisfied; grouping=True not satisfied; sort=('msrp', 'desc', 'within_group') not satisfied
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.33 (candidate-only=['Drivetrain', 'Manufacturer', 'Transmission', 'Year'], missing=['drivetrain', 'trsmn']); value-matched renamed columns: {'ctry_origin': 'Country', 'model': 'Model', 'msrp': 'MSRP'}
 [FAIL] [MECHANICAL] Grouping existence: 0/3 -- candidate grouping_present=False, truth=True
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The REQUIRED_INSTRUCTIONS metadata explicitly includes 'grouping': true, meaning row grouping is a mandated instruction already verified by deterministic checking elsewhere in the harness, not a discretionary editorial choice.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate labels are conceptually wrong or misleading in key ways. 'Drivetrain' is labeled as 'rwd'/'awd'—lowercase abbreviations that name the specific type rather than the concept itself (should be 'Drivetrain'); similarly, 'Transmission' is labeled as '7a'/'8a'/'8am'—cryptic shorthand that obscures the actual transmission type ('7-speed automatic' vs '8-speed automatic') shown in the ground truth.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=10, fully_filled=False -> expected striping=True, actual=False
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=False present=False, source expected=True present=False
+[PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=False, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
+[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' directly mirrors the core framing of the ground truth's 'The 10 Priciest GT Cars, by Country of Origin'—both emphasize the top-10 most-expensive angle and GT cars clearly and accurately.
+[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 4/5 -- The candidate's subtitle 'Grouped by Country of Origin' adds context about the grouping structure, which is non-redundant with the title. However, it is notably less detailed than the ground truth's subtitle ('MSRP, drivetrain, and transmission for the ten most expensive cars in the gtcars dataset'), which explicitly names the three columns being shown, giving readers clearer advance context.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate's column order is confusing and scattered. The candidate places Manufacturer and Model first, then Year, MSRP, Country, Drivetrain, Transmission. This separates the key identifying car column (Model) from its manufacturer and splits the related transmission/drivetrain pair away from MSRP, whereas the ground truth's order (Model alone as stub, then MSRP, Drivetrain, Transmission) groups related columns naturally and makes the reader follow the story coherently.
+[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 3/5 -- The candidate's table appears to use a minimal grayscale or near-white palette with horizontal row separators, which is legible and clean. However, the ground truth employs a light-blue header band and subtle blue highlighting on the MSRP cells (the colored measure per CANONICAL_MEASURES), creating visual emphasis and hierarchy that the candidate's flat design lacks; the candidate's palette is acceptable but uninspired compared to the ground truth's more purposeful use of color.

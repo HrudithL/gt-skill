@@ -1,33 +1,33 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124540_house_6prompts/prompts/gtcars_top10_by_country/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/medium/ground_truth/gtcars_top10_by_country.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080527_house_6prompts/prompts/gtcars_top10_by_country/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
-TOTAL: 33/99 (33.3%)
-  Data-compliance:        16/51
-  Formatting-compliance:  17/48
+TOTAL: 82/99 (82.8%)
+  Data-compliance:        49/51
+  Formatting-compliance:  33/48
 
-[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[('italy', '458 speciale'), ('italy', 'aventador'), ('italy', 'f12berlinetta'), ('italy', 'ff'), ('italy', 'gtc4lusso')], extra=[('italy', 'ferrari 458 speciale'), ('italy', 'ferrari f12berlinetta'), ('italy', 'ferrari ff'), ('italy', 'ferrari gtc4lusso'), ('italy', 'ferrari laferrari')]
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/1 canonical measures have a value-matching candidate column; unmatched: ['msrp']
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/1 canonical colored measures covered by a candidate color call
-[FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
-[FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 2/5 -- 1/3 required instructions satisfied; grouping=True not satisfied; sort=('msrp', 'desc', 'within_group') not satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.25 (candidate-only=['car', 'country', 'transmission'], missing=['ctry_origin', 'model', 'trsmn'])
+[PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
+[PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 1/1 canonical measures have a value-matching candidate column
+[PASS] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 6/6 -- ≤2 measures OK; 1/1 canonical colored measures covered by a candidate color call
+[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
+[PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 3/3 required instructions satisfied
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 3/4 -- visible-column overlap 0.83 (candidate-only=['mfr'], missing=[])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=True, truth=True
-[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by country of origin exactly as the ground truth does, and the REQUIRED_INSTRUCTIONS mandate grouping=true. The grouping structure (Italy, United Kingdom, United States) serves the prompt's goal of showing country of origin as the primary organizational principle, matching the ground truth's effective strategy.
+[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by country of origin exactly as required by the REQUIRED_INSTRUCTIONS 'grouping': true mandate. The grouping structure (Italy, United Kingdom, United States) clearly reveals the analytical story.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- All column labels correctly name their concepts: 'Car' for the model name, 'Drivetrain' (matches LABEL_SYNONYMS), 'Transmission' (matches LABEL_SYNONYMS), and 'Msrp' which clearly represents price. Each label is unambiguous and directly conveys the underlying concept.
-[FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate's labels are mostly correct (Model, MSRP, Drivetrain, Transmission), but the new 'Mfr' (manufacturer) column introduces confusing data — it duplicates/overlaps with the car model identity and adds information not requested in the prompt. The drivetrain and transmission labels are correct but abbreviated inconsistently (rwd/awd vs. 7a/8a), making the concept less clear.
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=MISSING (Step 5a, always required); dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=10, fully_filled=False -> expected striping=True, actual=False
-[FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=unknown; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
-[FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
+[FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=light actual=unknown; expected hue family 'navy' for palette 'blues', got 'navy'
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/1 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['msrp']
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
+[PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=False, source expected=True present=False
 [FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The title 'Top 10 Most Expensive GT Cars' is clear and accurate, capturing the core subject. However, it is slightly less specific than the ground truth's 'The 10 Priciest GT Cars, by Country of Origin,' which explicitly highlights country grouping in the title itself. The candidate's title is strong but relegates the grouping detail to the subtitle.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 4/5 -- The subtitle 'Ranked by MSRP, grouped by country of origin with drivetrain and transmission details' adds useful clarifying context about what's measured (MSRP) and how it's structured. However, it slightly overlaps with the title by using 'Top 10' and 'Ranked' concepts in quick succession, and per CAPTION_KEYWORDS it should avoid saying 'sorted by price' — though 'Ranked by MSRP' is similar in intent.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate's order (Car, Drivetrain, Transmission, Msrp) is logical and readable, keeping the identifying column (Car model) first. The ground truth places MSRP second and Drivetrain/Transmission to the right, which emphasizes price as the key sorting/ranking measure more prominently. Both orders are sensible, but the ground truth's prioritization of MSRP closer to the stub makes the price-ranking story slightly clearer.
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a light blue header band and subtle alternating row tints that are legible and professional. The MSRP column appears to lack color-coding that the ground truth includes (a darker blue bar behind the highest price). The palette is tasteful and harmonious but misses the opportunity for visual emphasis on the price column via color, which the ground truth deploys effectively.
+[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' matches the core framing and subject of the ground truth's 'The 10 Priciest GT Cars, by Country of Origin' — both capture the same core story (top-10 expensive GTs), and the emphasis on 'expensive' / 'most expensive' is consistent.
+[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 3/5 -- The candidate's subtitle 'Ranked by MSRP, grouped by country of origin — includes drivetrain and transmission details' adds useful context but overlaps significantly with the title; it also explicitly mentions 'Ranked by MSRP / sorted by price', which the CAPTION_KEYWORDS metadata flags as information that should not be duplicated between title and subtitle.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate reorders columns to Model, Mfr, MSRP, Drivetrain, Transmission, inserting a manufacturer column not present in the ground truth. This breaks the natural reading flow; the extra column (Mfr) is poorly motivated and pushes the key numeric value (MSRP) further right, making it harder to scan prices side-by-side.
+[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 3/5 -- The candidate uses a dark blue bar for the highest MSRP value (LaFerrari at $1,416,362), which is appropriately applied to the most salient numeric value. However, the overall palette is more muted/flat compared to the ground truth's light blue group headers and light background differentiation; the color choice is legible but less visually harmonious.

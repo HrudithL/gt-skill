@@ -2,17 +2,24 @@ import pandas as pd
 import numpy as np
 from great_tables import GT, style, loc
 
-# Step 1: Read and clean the data
+# Step 1: Load and clean data
 df = pd.read_csv("airquality.csv")
 
-# Aggregate by month: calculate average temperature, wind speed, and ozone
-agg_df = df.groupby("Month").agg(
-    Avg_Temp=("Temp", "mean"),
-    Avg_Wind=("Wind", "mean"),
-    Avg_Ozone=("Ozone", "mean"),
-).reset_index()
+# Coerce numeric columns to ensure proper typing
+df["Ozone"] = pd.to_numeric(df["Ozone"], errors="coerce")
+df["Solar_R"] = pd.to_numeric(df["Solar_R"], errors="coerce")
+df["Wind"] = pd.to_numeric(df["Wind"], errors="coerce")
+df["Temp"] = pd.to_numeric(df["Temp"], errors="coerce")
+df["Month"] = pd.to_numeric(df["Month"], errors="coerce")
 
-# Create month names for clarity
+# Group by month and calculate means
+monthly = df.groupby("Month").agg({
+    "Temp": "mean",
+    "Wind": "mean",
+    "Ozone": "mean"
+}).reset_index()
+
+# Map month numbers to month names
 month_names = {
     5: "May",
     6: "June",
@@ -20,84 +27,103 @@ month_names = {
     8: "August",
     9: "September"
 }
-agg_df["Month"] = agg_df["Month"].map(month_names)
+monthly["Month"] = monthly["Month"].map(month_names)
 
-# Step 2: Organize columns — Month is the stub (row identifiers)
-agg_df = agg_df.rename(columns={"Month": "Month"})
+# Rename for clarity
+monthly.columns = ["Month", "Avg Temp (°F)", "Avg Wind (mph)", "Avg Ozone (ppb)"]
 
-# Step 3: Big Color — Two ordered magnitude measures qualify (≥5 rows each)
-# Temperature and Ozone are colored; Wind is bold uncolored
-# Temperature: neutral magnitude → Blues
-# Ozone: environmental/growth context → Greens
+# Step 2: Organize columns with Month as stub
+# Step 3: Big Color — three numeric measures qualify (≥5 rows). Pick top 2 by prompt order.
+#         "temperature, wind speed, and ozone levels" = Temp first, Wind second, Ozone uncolored.
+#         Temp = neutral magnitude → Blues
+#         Wind = neutral magnitude (volume) → Greens (secondary per tie-breaker)
 
-temp_cols = ["Avg_Temp"]
-ozone_cols = ["Avg_Ozone"]
+# Compute domains for the two colored measures
+temp_cols = ["Avg Temp (°F)"]
+wind_cols = ["Avg Wind (mph)"]
 
-# Compute domains for gradients
-temp_lo = float(np.nanmin(agg_df[temp_cols].to_numpy()))
-temp_hi = float(np.nanmax(agg_df[temp_cols].to_numpy()))
-ozone_lo = float(np.nanmin(agg_df[ozone_cols].to_numpy()))
-ozone_hi = float(np.nanmax(agg_df[ozone_cols].to_numpy()))
+temp_lo = float(np.nanmin(monthly[temp_cols].to_numpy()))
+temp_hi = float(np.nanmax(monthly[temp_cols].to_numpy()))
 
-# Build the table
+wind_lo = float(np.nanmin(monthly[wind_cols].to_numpy()))
+wind_hi = float(np.nanmax(monthly[wind_cols].to_numpy()))
+
+# Step 4: Heading band — Big Color present, so use LIGHT band (washed tint for Blues)
+# Step 5: Small Color polish checklist
+
 gt = (
-    GT(agg_df, rowname_col="Month")
-    .tab_header(
-        title="Air Quality Summary by Month",
-        subtitle="Average temperature, wind speed, and ozone levels across summer 2024",
-    )
-    .cols_label(
-        Avg_Temp="Avg. Temperature (°F)",
-        Avg_Wind="Avg. Wind Speed (mph)",
-        Avg_Ozone="Avg. Ozone (ppb)",
-    )
-    # Format the measures
-    .fmt_number(columns=["Avg_Temp", "Avg_Wind", "Avg_Ozone"], decimals=1)
-    # Step 3: Big Color — gradient fills for two measures
+    GT(monthly, rowname_col="Month")
+
+    # Formatting per column (semantic type)
+    .fmt_number(columns=["Avg Temp (°F)", "Avg Wind (mph)", "Avg Ozone (ppb)"], decimals=1, use_seps=False)
+    .sub_missing(columns=["Avg Temp (°F)", "Avg Wind (mph)", "Avg Ozone (ppb)"], missing_text="—")
+
+    # Step 3: Big Color — gradient fills for Temp (Blues, primary) and Wind (Greens, secondary)
     .data_color(
-        columns=["Avg_Temp"],
+        columns=["Avg Temp (°F)"],
         palette="Blues",
         domain=[temp_lo, temp_hi],
         truncate=False,
         na_color="#808080",
     )
     .data_color(
-        columns=["Avg_Ozone"],
+        columns=["Avg Wind (mph)"],
         palette="Greens",
-        domain=[ozone_lo, ozone_hi],
+        domain=[wind_lo, wind_hi],
         truncate=False,
         na_color="#808080",
     )
-    # Bold the uncolored secondary measure (Wind)
-    .tab_style(
-        style=style.text(weight="bold"),
-        locations=loc.body(columns=["Avg_Wind"]),
-    )
-    # Step 4: Heading band — light band with washed tints (Big Color present)
-    # Use pale blue as the dominant tint (matching Blues gradient)
+
+    # Step 4: Heading band — light washed-DA tint (pale-blue for Blues table)
     .tab_options(
-        column_labels_background_color="#EAF0F6",
+        column_labels_background_color="#EAF0F6",  # washed Navy tint (from palettes.md §2)
         column_labels_font_weight="bold",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
     )
-    # Step 5: Small Color polish
-    # (a) Cell borders — hairlines between rows
+
+    # Step 5: Small Color polish checklist
+
+    # (a) Cell borders — hairline between all rows
     .tab_options(
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
     )
-    # (d) Stub tint — no striping, so stub gets light tint
+
+    # (c) Row striping — ≥10 rows check; this table has 5, so skip striping
+    # .opt_row_striping()  # Skipped: <10 body rows
+
+    # (d) Stub tint — light grey (grey-budget default with Big Color present)
     .tab_style(
-        style=style.fill(color="#EAF0F6"),
+        style=style.fill(color="#EAF0F6"),  # washed Navy tint to harmonize with band
         locations=loc.stub(),
     )
-    # Add footer: two separate notes (analytical caption + source provenance)
-    .tab_source_note("Temperature and ozone show clear seasonal patterns, with peaks in July and August.")
-    .tab_source_note("Source: Air quality measurements from daily observations.")
+
+    # Frame — light border on all four sides
+    .tab_options(
+        table_border_top_style="solid",
+        table_border_top_color="#CCCCCC",
+        table_border_top_width="1px",
+        table_border_bottom_style="solid",
+        table_border_bottom_color="#CCCCCC",
+        table_border_bottom_width="1px",
+        table_border_left_style="solid",
+        table_border_left_color="#CCCCCC",
+        table_border_left_width="1px",
+        table_border_right_style="solid",
+        table_border_right_color="#CCCCCC",
+        table_border_right_width="1px",
+    )
+
+    # Titles and annotations
+    .tab_header(
+        title="Air Quality: Monthly Averages",
+        subtitle="Average temperature, wind speed, and ozone levels by month",
+    )
+    .tab_source_note("Source: Daily air quality measurements aggregated by month")
 )
 
-# Step 7: Render
-gt.gtsave("table.png")
-print("Table rendered successfully: table.png")
+# Render to PNG
+gt.gtsave("table.png", expand=15)
+print("Table rendered successfully to table.png")

@@ -1,33 +1,31 @@
 import pandas as pd
-from great_tables import GT, loc, style
+from great_tables import GT, md
+from house_table import PALETTE, frame, finalize, band, heatmap, humanize_labels
 
-from pathlib import Path
-skill_path = Path(__file__).parent / ".claude/skills/great-tables-house/scripts"
-import sys
-sys.path.insert(0, str(skill_path))
-from house_table import PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap
-
+# Load data
 df = pd.read_csv("islands.csv")
 
-gt = (
-    GT(df, rowname_col="name")
-    .tab_header(
-        title="Island Sizes",
-        subtitle="Area in thousands of square kilometers"
-    )
-    .tab_stubhead(label="Island")
-    .fmt_number(columns="size", decimals=0, use_seps=True)
-    .cols_label(size="Area (1000 km²)")
-)
+# Sort by size descending for better readability
+df = df.sort_values("size", ascending=False).reset_index(drop=True)
 
+# Create GT table
+gt = GT(df).tab_header(
+    title="World Islands by Size",
+    subtitle=md("Land area in thousands of square kilometers"),
+).fmt_number(columns="size", decimals=1, use_seps=False)
+
+# Apply humanize_labels
+gt = humanize_labels(gt, df)
+
+# Apply single heatmap for size (sequential, neutral = Blues)
 gt = heatmap(gt, "size", kind="sequential", hue="neutral")
+
+# Apply band and frame
 gt = band(gt, hue="navy")
-
-if len(df) >= 10:
-    gt = stripe(gt)
-gt = stub_tint(gt, hue="navy")
-
-gt = gt.tab_source_note(source_note="Source: provided dataset.")
-gt = hairlines(gt)
 gt = frame(gt)
-finalize(gt)
+
+# Add source note
+gt = gt.tab_source_note(source_note="Source: provided dataset.")
+
+# Render
+finalize(gt, path="table.png")

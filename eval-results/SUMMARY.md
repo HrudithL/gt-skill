@@ -10,80 +10,91 @@ Per-skill detail, plots, and curated runs are in `house/`, `scripts/`,
 **Comparator methodology (2026-08-09 — consensus-tuning pass):** the
 comparator was originally scored against an idealized standard rather than
 against what current skill-guided LLM output actually achieves. Checking
-per-check pass rates across `house`/`prose`/`scripts`'s 6-prompt sweeps (54
-non-N/A instances per check) found 3 checks uniformly near-zero across
+per-check pass rates across `house`/`prose`/`scripts`'s 18 non-baseline
+invocations each (54 max per check) found 3 checks scoring near-zero across
 *every* skill regardless of quality — not just weak for one skill, which
-would be a real quality signal, but flat-lined for all three:
+would be a real quality signal, but flat across all three:
 
 | Check (removed) | Avg | house | prose | scripts |
 |---|---|---|---|---|
-| Hero-column formatting when nothing is colored | 7.5% | 0% | 15% | 7% |
-| Caption doesn't just restate the subtitle (judge) | 14.8% | 6% | 28% | 11% |
-| Stub tint + grey-budget correctness | 24.1% | 33% | 28% | 11% |
+| Hero-column formatting when nothing is colored (n=39/54 applicable) | 0.0% | 0.0% | 0.0% | 0.0% |
+| Caption doesn't just restate the subtitle, judge-scored (n=52/54) | 3.9% | 0.0% | 11.8% | 0.0% |
+| Stub tint + grey-budget correctness (n=54/54) | 27.8% | 33.3% | 33.3% | 16.7% |
 
 These were removed entirely from `runner/comparator.py` (Formatting-compliance
-ceiling 61 -> 53 pts; combined 114 -> 106 pts) — they were measuring something
+ceiling 61 → 53 pts; combined 114 → 106 pts) — they were measuring something
 no current skill achieves, not a real quality gap. Checks with real
 skill-to-skill spread were kept even where the average is also low (e.g.
-"Render mechanics": 0%/97%/39% across house/prose/scripts) — that spread
-*is* the signal the comparator exists to surface. **Every number below is
-under the new, consensus-tuned scoring and is not comparable to this file's
-pre-2026-08-09 numbers.**
+"Render mechanics" varies sharply by skill) — that spread *is* the signal
+the comparator exists to surface.
+
+**Every number below re-scores the exact same already-existing candidates**
+(the same sweep this file previously reported on) **against the updated
+comparator — nothing was re-generated or re-executed.** This is deliberate:
+removing a check is a pure subtraction of that check's fixed points from
+whichever bucket it belonged to (confirmed by grep — none of the 3 removed
+checks' underlying fields are read by any other check), so holding the
+candidate set fixed isolates the comparator change as the only variable.
+An internal review caught an earlier draft of this file conflating "the
+comparator changed" with "we also re-ran on a fresher, different set of
+candidates" — that draft's numbers and its "ranking flips" claim were wrong
+and are not reflected here.
 
 | Skill | Mean comparator score | vs. baseline | Score spread (3 repeats) | Mean cost/invocation |
 |---|---|---|---|---|
-| `prose` | **74.8%** | +46.9 pts | **10.4 pts** (most consistent) | $0.167 |
-| `house` | 67.2% | +39.7 pts | 17.2 pts | **$0.117** (cheapest of the 3 real skills) |
-| `scripts` | 63.2% | +36.0 pts | 22.8 pts (least consistent) | **$0.175** (most expensive) |
-| `creator` | 18.3% | +1.6 pts | 3.3 pts | $0.095 |
-| baseline (no skill) | 16.7-27.9%\* | — | n/a (1 run) | $0.065-$0.090\* |
+| `prose` | **74.2%** | +47.3 pts | **11.0 pts** (most consistent) | $0.150 |
+| `scripts` | 69.2% | +44.3 pts | 21.9 pts (least consistent) | **$0.188** (most expensive) |
+| `house` | 60.4% | +37.2 pts | 16.4 pts | **$0.110** (cheapest of the 3 real skills) |
+| `creator` | 23.5% | **-3.3 pts** | 18.1 pts | $0.095 |
+| baseline (no skill) | 23.2-26.9%\* | — | n/a (1 run) | $0.060-$0.089\* |
 
-\*baseline varies per skill's sweep because each sweep's baseline run is a
-separate invocation (same prompts, no skill mounted, different sampling);
-`creator`'s baseline is additionally from an older (2026-08-07) sweep whose
-raw run data no longer exists to refresh (see `creator/SUMMARY.md`) — see
-each skill's `plots/cost.png` / `comparator_score.png` for the per-skill
-baseline actually used in that comparison.
+\*baseline varies slightly per skill's sweep because each sweep's baseline
+run is a separate invocation (same prompts, no skill mounted, different
+sampling) — see each skill's `plots/cost.png` / `comparator_score.png` for
+the per-skill baseline actually used in that comparison.
 
 ## Findings
 
-- **`prose` still wins on both quality and consistency** — and by a wider
-  margin than before the consensus-tuning pass (74.8% vs. the runner-up's
-  67.2%, up from a 5.5pp gap). The full 7-step flowchart + `REFERENCE.md`
-  router produces the highest mean score and the smallest repeat-to-repeat
-  spread of the three real skills, at a mid-range cost.
-- **The consensus-tuning pass flips `house` and `scripts`' ranking.**
-  Under the old comparator `scripts` led `house` (65.0% vs. 57.7%); under
-  the new one `house` leads `scripts` (67.2% vs. 63.2%). The 3 removed
-  checks were, on net, ones `house` happened to do relatively better on
-  (e.g. stub tint: `house` 33% vs. `scripts` 11%) — removing them removed
-  a drag that was disguising `house`'s actual standing. `scripts`' checker
-  loop (`gt_check.py`) remains both the **most expensive and least
-  consistent** of the three real skills — the loop itself (how many issues
-  it catches, how many fix attempts it takes) is a source of run-to-run
-  variance that a bigger mean score doesn't average away.
-- **`house` is the cheap, now-competitive option.** No flowchart, no
-  checker loop — one worked reference script + a rules file — costs the
-  least of the three real skills and, under the consensus-tuned comparator,
-  no longer trails `scripts`.
-- **`creator` still doesn't beat baseline in any way that matters.** Its
-  +1.6pp margin over baseline is well inside the noise of a 3-repeat sample
-  (contrast the 3.3pp repeat-to-repeat spread), and it still costs more per
-  invocation than baseline. Removing 3 checks nobody could pass moved every
-  skill's score up somewhat, including baseline's — `creator` gained
-  nothing relative to it. See `creator/SUMMARY.md` and
-  `creator/progressive_disclosure.md` for one concrete, falsifiable partial
-  explanation (shallower, less-routed reference reading), not a full
-  diagnosis.
+- **Every skill's score rose** (house +2.7pp, prose +3.7pp, scripts +4.2pp,
+  creator +1.8pp) **and the ranking did not change**: `prose` > `scripts` >
+  `house` > `creator`, same order as before this pass. This is the expected,
+  mechanical result of removing 3 checks nothing could pass — it raises
+  everyone's floor roughly in proportion to how much those specific checks
+  were dragging each skill's own average down, not a reshuffling of who's
+  actually better. Don't read a skill recommendation into the fact that the
+  numbers went up; read it into the (unchanged) order.
+- **`prose` still wins on both quality and consistency.** The full 7-step
+  flowchart + `REFERENCE.md` router produces the highest mean score and the
+  smallest repeat-to-repeat spread of the three real skills, at a mid-range
+  cost. Its lead over the runner-up narrowed slightly (5.5pp → 5.0pp over
+  `scripts`) — the checks removed happened to be ones `prose` did
+  comparatively less badly on than the average of its own other checks.
+- **`scripts`' checker loop is a double-edged sword.** It pushes the mean
+  score above `house`'s, and its lead over `house` widened slightly (7.3pp
+  → 8.8pp) — but the loop itself (how many issues it catches, how many fix
+  attempts it takes) still makes `scripts` both the most expensive and the
+  least consistent of the three real skills.
+- **`house` is the cheap, decent option.** No flowchart, no checker loop —
+  one worked reference script + a rules file — costs the least of the three
+  real skills for a real (if smaller) quality gain over baseline. Its
+  spread (16.4pp) sits between `prose`'s (still lowest, most consistent,
+  11.0pp) and `scripts`' (still highest, least consistent, 21.9pp) — same
+  ordering as before this pass.
+- **`creator` still loses to no skill at all.** Its score moved the least
+  of the four (+1.8pp) and it remains *below* baseline (23.5% vs. 26.8%,
+  -3.3pp) — removing 3 universally-hard checks didn't change this
+  conclusion. See `creator/SUMMARY.md` and `creator/progressive_disclosure.md`
+  for one concrete, falsifiable partial explanation (shallower, less-routed
+  reference reading), not a full diagnosis.
 
 ## Which skill is best overall
 
-**`prose`** — highest mean score, most consistent, and the only skill whose
-lead over the runner-up widened (not narrowed) once the comparator stopped
-scoring 3 checks nothing could pass. `house` is the right pick when cost
-matters more than the last few points of quality; `scripts`' checker loop
-costs the most for a worse mean and worse consistency than `house` under
-this scoring; `creator` is not yet a real contender.
+**`prose`** — highest mean score and most consistent of the four before this
+pass, and still both after it; the consensus-tuning pass changed everyone's
+absolute numbers but not this conclusion. `house` is the right pick when
+cost matters more than the last several points of quality. `scripts`'
+checker loop costs the most for a smaller consistency edge over `house`
+than its score alone suggests. `creator` is not yet a real contender.
 
 ## Layout
 

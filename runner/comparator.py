@@ -179,13 +179,6 @@ def _classify_hue_extended(hexstr: str | None) -> str:
     return best_family
 
 
-# Flattened, upper-cased hex membership set for "is this quiet-surface fill
-# one of the recognized neutral/washed reference colors" -- derived from the
-# EXTENDED table above (base + accent tier), same reasoning as
-# `_classify_hue_extended`: a literal accent-tier hex used as a stub tint
-# must be recognized too, not just the base washed tier.
-_ALLOWED_TINT_HEXES = {h.upper() for hexes in _EXTENDED_FAMILY_HEXES.values() for h in hexes}
-
 # A whole-string literal (optionally string-prefixed, `b`/`r`/`u`/`f` in any
 # combination/case) -- single or triple quoted. Ported from the closed
 # branch, with an added capturing group around the prefix (see
@@ -2759,7 +2752,7 @@ class CheckResult:
     # "mechanical" (regex/AST/execution -- provably correct) or "judge" (the
     # LLM call scored this dimension). Defaults to "mechanical" so every
     # pre-existing positional `CheckResult(...)` call site in this file
-    # (there are dozens) needs no change -- only the 2 moved checks and 5
+    # (there are dozens) needs no change -- only the 1 moved check and 5
     # new judge-backed checks pass `tier="judge"` explicitly.
     tier: str = "mechanical"
 
@@ -2777,7 +2770,7 @@ def _na(name: str, detail: str, tier: str = "mechanical") -> CheckResult:
 
 
 def _judge_dimension_check(meta: dict, dimension_key: str, name: str, points: int) -> CheckResult:
-    """Shared body for every judge-backed check (the 2 moved checks + 5 new
+    """Shared body for every judge-backed check (the 1 moved check + 5 new
     ones): look up ``dimension_key`` in the single combined judge result
     ``compare()`` stashes in ``meta["_judge_result"]`` (a
     ``dict[str, judge_module.JudgeDimension]``, see that function), convert

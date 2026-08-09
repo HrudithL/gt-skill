@@ -1,59 +1,107 @@
 import pandas as pd
 from great_tables import GT, style, loc
-from gt_consistency import frame, finalize, PALETTE
 
-# Step 1: Load and clean the data
 df = pd.read_csv("gtcars.csv")
 
-# Select top 10 most expensive cars overall, then group by country
-top_10 = df.nlargest(10, "msrp")[["mfr", "model", "ctry_origin", "drivetrain", "trsmn", "msrp"]]
+# Step 1: Data cleaning
+df["msrp"] = pd.to_numeric(df["msrp"], errors="coerce")
+df["ctry_origin"] = df["ctry_origin"].str.strip()
 
-# Sort by country for grouping, then by MSRP descending within country
-top_10_sorted = top_10.sort_values(["ctry_origin", "msrp"], ascending=[True, False]).reset_index(drop=True)
+# Get top 10 most expensive cars
+top_10 = df.nlargest(10, "msrp")[["model", "mfr", "ctry_origin", "msrp", "drivetrain", "trsmn"]].reset_index(drop=True)
 
 # Rename columns for display
-top_10_sorted = top_10_sorted.rename(columns={
-    "mfr": "Manufacturer",
+top_10 = top_10.rename(columns={
     "model": "Model",
+    "mfr": "Manufacturer",
     "ctry_origin": "Country",
+    "msrp": "Price",
     "drivetrain": "Drivetrain",
-    "trsmn": "Transmission",
-    "msrp": "Price"
+    "trsmn": "Transmission"
 })
 
-# Step 2: Organize columns and create GT table
-gt = (
-    GT(top_10_sorted, rowname_col="Manufacturer", groupname_col="Country")
-    .cols_hide(columns=["Country"])
-    # Step 5: Format columns
-    .fmt_currency(columns="Price", currency="USD", decimals=0)
-    # Add title and subtitle (Step 6)
-    .tab_header(
-        title="Top 10 Most Expensive GT Cars",
-        subtitle="Grouped by Country of Origin"
-    )
-    # Add footer notes (Step 6)
-    .tab_source_note(source_note="Prices shown are manufacturer suggested retail prices (MSRP).")
-    .tab_source_note(source_note="Source: gtcars.csv")
-    # Step 4: Heading band (dark band since no Big Color)
-    .tab_options(
-        column_labels_background_color=PALETTE["solid"]["navy"],
-        column_labels_border_bottom_color=PALETTE["neutral"]["column_label_rule"],
-        column_labels_border_bottom_width="2px",
-    )
-    # Small Color polish (Step 5)
-    .tab_options(
-        table_body_hlines_style="solid",
-        table_body_hlines_color=PALETTE["neutral"]["hairline"],
-        table_body_hlines_width="1px",
-    )
-    .opt_row_striping()
-    .tab_style(
-        style=style.fill(color=PALETTE["neutral"]["label_band"]),
-        locations=loc.stub(),
-    )
+# Sort by price descending for consistent display
+top_10 = top_10.sort_values("Price", ascending=False).reset_index(drop=True)
+
+# Step 2: Organize columns - use country as groupname_col, manufacturer as stub
+gt = GT(
+    top_10,
+    rowname_col="Manufacturer",
+    groupname_col="Country"
 )
 
-# Apply frame and finalize
-gt = frame(gt)
-finalize(gt)
+# Step 3: Big Color — highlight top 3 rows
+top_3_indices = [0, 1, 2]
+gt = gt.tab_style(
+    style=[style.fill(color="#9A7B33"), style.text(color="#ffffff", weight="bold")],
+    locations=loc.body(rows=top_3_indices),
+)
+
+# Step 4: Column labels and header band
+gt = gt.cols_label(
+    Model="Model",
+    Manufacturer="Manufacturer",
+    Country="Country",
+    Price="Price (USD)",
+    Drivetrain="Drivetrain",
+    Transmission="Transmission"
+)
+
+gt = gt.tab_header(
+    title="Top 10 Most Expensive GT Cars",
+    subtitle="Grouped by Country of Origin with Drivetrain & Transmission Details"
+)
+
+# Step 5: Small Color polish - formatting
+gt = gt.fmt_currency(
+    columns="Price",
+    currency="USD",
+    decimals=0,
+    use_seps=True
+)
+
+# Cell borders
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#E8E8E8",
+    table_body_hlines_width="1px",
+    column_labels_border_bottom_color="#CCCCCC",
+    column_labels_border_bottom_width="2px",
+)
+
+# Stub tint
+gt = gt.tab_style(
+    style=style.fill(color="#F0F0F0"),
+    locations=loc.stub(),
+)
+
+# Row group styling
+gt = gt.tab_options(
+    row_group_background_color="#F0F0F0",
+    row_group_font_weight="bold",
+    row_group_border_top_color="#BDBDBD",
+    row_group_border_bottom_color="#BDBDBD",
+    row_group_padding="6px",
+)
+
+# Row striping
+gt = gt.opt_row_striping()
+
+# Frame and border
+gt = gt.tab_options(
+    table_border_top_style="solid",
+    table_border_top_color="#CCCCCC",
+    table_border_top_width="1px",
+    table_border_bottom_style="solid",
+    table_border_bottom_color="#CCCCCC",
+    table_border_bottom_width="1px",
+    table_border_left_style="solid",
+    table_border_left_color="#CCCCCC",
+    table_border_left_width="1px",
+    table_border_right_style="solid",
+    table_border_right_color="#CCCCCC",
+    table_border_right_width="1px",
+)
+
+# Render
+gt.gtsave("table.png", expand=15)

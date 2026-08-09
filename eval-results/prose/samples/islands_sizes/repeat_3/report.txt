@@ -1,8 +1,8 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124545_prose_6prompts/prompts/islands_sizes/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/easy/ground_truth/islands_sizes.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/islands_sizes/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/islands_sizes.py
 
-TOTAL: 83/91 (91.2%)
-  Data-compliance:        43/43
-  Formatting-compliance:  40/48
+TOTAL: 79/91 (86.8%)
+  Data-compliance:        42/43
+  Formatting-compliance:  37/48
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 1/1 canonical measures have a value-matching candidate column
@@ -11,12 +11,12 @@ TOTAL: 83/91 (91.2%)
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
 [PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The REQUIRED_INSTRUCTIONS metadata contains no 'grouping' key, and neither the ground truth nor candidate uses row grouping—both simply list islands/continents in a flat, sorted order. Since grouping is not being applied by either table, this dimension is not applicable.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The REQUIRED_INSTRUCTIONS metadata contains no 'grouping' key, but the ground truth itself does not use row grouping—it presents a flat, ranked list ordered from largest to smallest. Since neither the ground truth nor the candidate uses grouping, this dimension is not applicable.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 3/5 -- The candidate column label is simply 'size' (lowercase, unqualified), whereas the ground truth uses 'Size (thousand sq. mi.)' which explicitly states both the unit and scale. The candidate's subtitle mentions 'thousands of km²' but the column label itself is vague and requires the subtitle to disambiguate—this violates the principle that labels should stand independently. This is technically correct but not as clear and self-contained as the ground truth's explicit labeling.
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate's size column header is simply 'size' with a subtitle 'Land area in thousands of square kilometers,' but the data values are actually in thousands of SQUARE MILES (as shown by '11,506' for Africa, '5,500' for Antarctica, and '16,988' for Asia matching the ground truth). The unit mismatch between the subtitle's claim of 'square kilometers' and the actual data in square miles creates a fundamental labeling error that would mislead a reader.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=48, fully_filled=True -> expected striping=False, actual=True
@@ -24,10 +24,10 @@ TOTAL: 83/91 (91.2%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
-[PASS] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 3/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=True
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=False, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate title 'Island Sizes' is accurate and technically correct, but it is generic and flat compared to the ground truth's 'Islands of the World, by Size,' which adds the framing of global scope and sorting direction. The candidate's title names what is shown but lacks the narrative angle that the ground truth captures.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 3/5 -- The candidate subtitle 'Land area of major islands worldwide (thousands of km²)' provides useful clarification about units (km² rather than sq. mi.) and scope ('major islands worldwide'). However, it overlaps somewhat with the title 'Island Sizes,' and the ground truth's subtitle explicitly mentions 'largest to smallest' as a contextual detail, which the candidate's subtitle does not. The candidate adds context but is less complete than the ground truth's richer framing.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate presents a single stub column (island/landmass name) followed immediately by the size column, which is the natural and only sensible reading order for a two-column table. This matches the ground truth's left-to-right flow and supports the analytical story directly.
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a blue sequential palette (dark blue at the high end for Asia at 16,988, fading to pale blue for smaller values like Vancouver at 12) that harmonizes reasonably well with the light blue header band and maintains good legibility. The ground truth uses a very similar blue sequential palette. The candidate's choice is tasteful and well-suited to a sequential measure, though it is essentially identical to the ground truth rather than offering any distinct aesthetic refinement.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Islands by Size' is accurate and clear, capturing the core subject. The ground truth's title 'Islands of the World, by Size' adds geographic scope ('of the World') and is slightly more specific. Both convey the same analytical framing—a ranking by size—so the candidate's title is only marginally less complete.
+[FAIL] [JUDGE] Subtitle quality: 1/3 -- judge score 2/5 -- The candidate's subtitle 'Land area in thousands of square kilometers' is non-redundant with the title but contains a factual error: the data is actually in thousands of SQUARE MILES, not kilometers. The ground truth's subtitle 'Land area in thousands of square miles, continents and smaller islands together' correctly identifies the unit and clarifies the scope of the data.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate sorts rows alphabetically (Africa, Antarctica, Asia, Australia, Axel Heiberg...) rather than by descending size as shown in both the title 'by Size' and the ground truth's ordering (largest to smallest: Asia 16,988 → Africa 11,506 → North America 9,390...). This alphabetical order directly contradicts the analytical story of ranking by size, forcing readers to hunt across the table rather than reading top-to-bottom.
+[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 3/5 -- The candidate uses a sequential blue color scheme for the size column, which is appropriate for a magnitude measure. The palette is legible and harmonizes reasonably with the light gray stub and header band. However, it lacks the tasteful sophistication of the ground truth's palette, which uses a darker navy for the maximum value (Asia: 16,988) and progressively lighter blues for smaller values, creating a more refined visual hierarchy.

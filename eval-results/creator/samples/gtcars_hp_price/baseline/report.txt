@@ -1,33 +1,33 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/eval-results/creator/samples/gtcars_hp_price/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/easy/ground_truth/gtcars_hp_price.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080537_creator_6prompts/prompts/gtcars_hp_price/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 15/79 (19.0%)
-  Data-compliance:        7/42
-  Formatting-compliance:  8/37
+TOTAL: 29/91 (31.9%)
+  Data-compliance:        10/43
+  Formatting-compliance:  19/48
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 2 canonical measures unverifiable
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/1 canonical colored measures covered by a candidate color call
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.40 (candidate-only=['Manufacturer', 'Model'], missing=['car']); value-matched renamed columns: {'hp': 'Horsepower', 'msrp': 'Price'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The ground truth does not use row grouping (all rows are ungrouped within the continuous table), and no 'grouping' key exists in REQUIRED_INSTRUCTIONS, so this dimension does not apply to this comparison. Neither table employs grouping mechanics.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- Both the candidate and ground truth clearly label 'Horsepower' and 'Price' columns correctly. The candidate further clarifies by splitting the car name into 'Manufacturer' and 'Model' columns, which accurately represent the underlying concept of vehicle identity decomposed by brand.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=47, fully_filled=False -> expected striping=True, actual=False
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 1/3 -- title=OK, subtitle=MISSING, caption expected=False present=False, source expected=True present=False
+[PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
+[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 1/3 -- title=OK, subtitle=MISSING, caption expected=True present=False, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (FileNotFoundError: [Errno 2] No such file or directory: 'gtcars.csv'); its PNG (if any) can't be trusted to reflect this source
+[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- Both the candidate ('GT Cars: Horsepower and Price') and ground truth ('GT Cars: Horsepower and Price') use identical titles that clearly and accurately capture the core framing: a presentation of GT cars with their horsepower and price attributes.
+[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 3/5 -- The ground truth subtitle 'All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP' provides concrete context (scope, count, sort order). The candidate has no subtitle, so it loses the clarifying information about the dataset scope, sort order, and completeness that a reader would benefit from understanding.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate places Manufacturer–Model–Horsepower–Price, which is logically workable and groups related identifiers (manufacturer/model) at the left. However, the ground truth uses a single unified 'Car' column, which consolidates the full name and avoids visual fragmentation. The candidate's split structure is not wrong, but it's slightly less elegant than collapsing car identity into one comprehensible stub column.
+[FAIL] [JUDGE] Color theme/palette taste: 1/3 -- judge score 2/5 -- The candidate uses a plain black-on-white design with no color highlighting on the data cells, whereas the ground truth applies a tasteful light-blue background to most rows and a darker navy bar highlighting the top price (Ferrari LaFerrari). The candidate's lack of any color encoding makes it flatter and less visually engaging for a table with key quantitative measures that benefit from color emphasis on the price column.

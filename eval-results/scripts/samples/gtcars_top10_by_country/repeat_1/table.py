@@ -1,76 +1,70 @@
 import pandas as pd
+import numpy as np
 from great_tables import GT, style, loc
 
 # Step 1: Load and clean data
 df = pd.read_csv("gtcars.csv")
 
-# Filter to get top 10 most expensive cars overall
-top_10 = df.nlargest(10, "msrp")[["mfr", "model", "ctry_origin", "drivetrain", "trsmn", "msrp"]].copy()
+# Ensure MSRP is numeric
+df["msrp"] = pd.to_numeric(df["msrp"], errors="coerce")
 
-# Rename columns for clarity
-top_10.columns = ["Manufacturer", "Model", "Country", "Drivetrain", "Transmission", "Price"]
+# Get top 10 by MSRP
+df_top10 = df.nlargest(10, "msrp").copy()
 
-# Ensure Price is numeric and properly formatted
-top_10["Price"] = pd.to_numeric(top_10["Price"], errors="coerce")
+# Create display columns
+df_top10["car"] = df_top10["mfr"] + " " + df_top10["model"]
 
-# Sort by Country, then by Price descending within each country
-top_10 = top_10.sort_values(by=["Country", "Price"], ascending=[True, False]).reset_index(drop=True)
+# Select and rename columns for display
+display_cols = ["ctry_origin", "car", "drivetrain", "trsmn", "msrp"]
+df_display = df_top10[display_cols].copy()
+df_display.columns = ["Country", "Car", "Drivetrain", "Transmission", "MSRP"]
 
-# Create the GT table
+# Sort by country, then by MSRP descending within each country
+df_display = df_display.sort_values(["Country", "MSRP"], ascending=[True, False]).reset_index(drop=True)
+
+# Step 2: Calculate domain for Big Color
+cols = ["MSRP"]
+lo = float(np.nanmin(df_display[cols].to_numpy()))
+hi = float(np.nanmax(df_display[cols].to_numpy()))
+
+# Step 3 & 4 & 5: Build table with Big Color (Blues gradient) and Light band
 gt = (
-    GT(top_10, groupname_col="Country", rowname_col="Manufacturer")
-    .tab_header(
-        title="Top 10 Most Expensive GT Cars",
-        subtitle="Grouped by Country of Origin"
+    GT(df_display, rowname_col="Car", groupname_col="Country")
+    .fmt_currency(columns="MSRP", currency="USD", decimals=0)
+    .data_color(
+        columns="MSRP",
+        palette="Blues",
+        domain=[lo, hi],
+        truncate=False,
+        na_color="#808080",
     )
-    # Step 4: Heading band (dark since no Big Color)
+    # Step 4: Light band (Big Color present) with washed Navy tint
     .tab_options(
-        column_labels_background_color="#2C3E50",
+        column_labels_background_color="#EAF0F6",
         column_labels_font_weight="bold",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
     )
-    .tab_style(
-        style=style.text(color="white"),
-        locations=loc.column_labels(),
-    )
-    # Step 5(a): Cell borders
+    # Step 5: Cell borders and striping
     .tab_options(
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
-        table_border_top_style="solid",
-        table_border_top_color="#CCCCCC",
-        table_border_top_width="1px",
-        table_border_bottom_style="solid",
-        table_border_bottom_color="#CCCCCC",
-        table_border_bottom_width="1px",
-        table_border_left_style="solid",
-        table_border_left_color="#CCCCCC",
-        table_border_left_width="1px",
-        table_border_right_style="solid",
-        table_border_right_color="#CCCCCC",
-        table_border_right_width="1px",
+        row_striping_background_color="#F6F6F6",
     )
-    # Step 5(d): Stub tint
-    .tab_style(
-        style=style.fill(color="#F0F0F0"),
-        locations=loc.stub(),
+    .opt_row_striping()
+    # Titles and subtitle
+    .tab_header(
+        title="Top 10 Most Expensive GT Cars by Country",
+        subtitle="Organized by country of origin with drivetrain and transmission details"
     )
-    # Step 5: Row group styling
-    .tab_options(
-        row_group_background_color="#F0F0F0",
-        row_group_font_weight="bold",
-        row_group_border_top_color="#BDBDBD",
-        row_group_border_bottom_color="#BDBDBD",
-        row_group_padding="6px",
-    )
-    # Step 5(e): Format Price column as currency
-    .fmt_currency(columns="Price", decimals=0, currency="USD")
-    # Step 6: Annotations
-    .tab_source_note(source_note="Top 10 vehicles by MSRP price. Table groups cars by their country of manufacturing origin.")
-    .tab_source_note(source_note="Source: gtcars.csv")
+    # Frame and finalization
 )
 
-# Render to PNG
-gt.gtsave("table.png", expand=15)
+# Add subtle frame via borders
+gt = gt.tab_style(
+    style=style.borders(sides="all", color="#CCCCCC", weight="1px"),
+    locations=loc.body(),
+)
+
+gt.gtsave("table.png")
