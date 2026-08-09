@@ -21,9 +21,16 @@ dimension doesn't apply to this comparison — nothing ever silently passes
 or fails. ``CheckResult.tier`` ("mechanical" or "judge") makes the
 distinction visible in the printed report, not just in code comments.
 
-Report shape: a 0–114 total = Data-compliance (0–53) + Formatting-compliance
-(0–61), plus one line per check naming its tier, what passed/failed, its
+Report shape: a 0–106 total = Data-compliance (0–53) + Formatting-compliance
+(0–53), plus one line per check naming its tier, what passed/failed, its
 point value, and why (§7).
+
+Per ``.planning/12-consensus-tuning.md``: 3 Formatting-compliance checks
+(hero-column formatting, stub tint/grey-budget, caption-not-restating-
+subtitle) were removed entirely -- field data across every real skill
+variant in the eval corpus showed near-zero scores on all three regardless
+of skill quality, meaning they measured something no current skill-guided
+output achieves rather than a real quality gap between skills.
 """
 
 from __future__ import annotations
@@ -312,138 +319,6 @@ def _normalize_css_color(value: str | None) -> str | None:
             return None
         return "#{:02X}{:02X}{:02X}".format(r, g, b)
     return None
-
-
-def _find_stub_tint_hue_local(source: str) -> str | None:
-    """AST-based replacement for `convergence._find_stub_tint_hue`'s
-    detection of a runtime `stub_tint(gt, *, hue)` call -- same `hue`
-    extraction (first matching call, `_unquote`d, `"unknown"` fallback
-    when the call exists but `hue=` itself doesn't resolve), different
-    call-site DETECTION.
-
-    Codex round-10 finding: `convergence._find_stub_tint_hue` (off-limits
-    -- see this file's Tier-1 compatibility-shim section) scans via
-    `convergence._bare_call_blocks`, a source-wide regex with no comment
-    or string stripping at all -- the exact same bug class already fixed
-    here for color-mechanics (`_ast_call_blocks`), frame/finalize
-    (`_has_real_call`), and formatter-call (`_ast_fmt_calls`) detection:
-    `# stub_tint(gt, hue="navy")` sitting in a comment or docstring is
-    misdetected as a real call. Reuses `_ast_call_blocks` (already scoped
-    to top-level-only calls via the round-9 `_walk_top_level` fix) with
-    `allow_bare=True` (matching `_bare_call_blocks`'s own "bare OR one
-    level of attribute-qualified" convention -- `ast.Attribute` handles
-    any receiver expression, a strict superset of the regex's single-
-    identifier qualifier).
-    """
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        return None
-    # `_ast_call_blocks` doesn't itself guarantee source-order output (its
-    # other callers sort by the returned position when order matters) --
-    # sorted here so `blocks[0]` is genuinely the FIRST call, matching
-    # `convergence._bare_call_blocks`'s own left-to-right scan order.
-    blocks = sorted(_ast_call_blocks(source, tree, "stub_tint", allow_bare=True), key=lambda b: b[0])
-    if not blocks:
-        return None
-    _, first_block = blocks[0]
-    return convergence._unquote(convergence._kwarg_value(first_block, "hue")) or "unknown"
-
-
-def _stub_tint_present(source: str) -> bool:
-    """True if a VISIBLE stub tint is applied, by EITHER accepted mechanism.
-
-    The `stub_tint(gt, *, hue)` runtime helper is one way (detected via
-    the local `_find_stub_tint_hue_local` AST-based shim, not convergence.
-    py's own regex-based version -- see that function's docstring); a
-    literal
-    `tab_style(style=style.fill(color=...), locations=loc.stub())` call is
-    the other (what `towny_growth_trends.py` actually uses) -- both are
-    equally valid per the outcome-only scoring rule. A `style.fill(color=...)`
-    call only counts if its color is genuinely visible and is one of the
-    recognized neutral/washed reference hexes (`_ALLOWED_TINT_HEXES`) when
-    it's a literal hex -- ported verbatim from the closed branch (the
-    combined `stub_tint_present` field itself doesn't exist in the version
-    of `convergence.py` merged to `gtc/root` today; only the narrower
-    `stub_tint_hue` does).
-
-    Sweep-A finding (round 8): this returned True on the FIRST `loc.stub(
-    )`-scoped `tab_style(...)` call that resolved to a visible, approved
-    color, without checking whether a LATER `loc.stub()`-scoped call
-    overrides it with a different (possibly invisible/unapproved) one --
-    `tab_style` calls targeting the SAME location apply in order, so only
-    the LAST one actually determines the stub's final rendered fill.
-    Every stub-scoped call is now collected first, in source order, and
-    only the LAST one is evaluated.
-
-    Codex round-12 finding (comprehensive sweep): scanned via `convergence.
-    _call_arg_blocks` (a source-wide regex with no comment/string
-    stripping) -- the same recurring bug class already fixed for stub_
-    tint_hue/color-mechanics/frame/fmt_*/tab_options-band-color/
-    opt_row_striping/hairlines-dividers-options detection elsewhere in
-    this file. Switched to `_ast_call_arg_blocks` (AST-based).
-    """
-    if _find_stub_tint_hue_local(source) is not None:
-        return True
-    stub_blocks: list[str] = []
-    for block in _ast_call_arg_blocks(source, "tab_style"):
-        loc_val = convergence._kwarg_value(block, "locations")
-        if loc_val is None:
-            positionals = [
-                p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
-            ]
-            loc_val = positionals[1] if len(positionals) >= 2 else None
-        if loc_val is None or not re.search(r"loc\s*\.\s*stub\s*\(", loc_val):
-            continue
-        stub_blocks.append(block)
-    if not stub_blocks:
-        return False
-    block = stub_blocks[-1]
-    style_val = convergence._kwarg_value(block, "style")
-    if style_val is None:
-        positionals = [
-            p for p in convergence._split_top_level(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
-        ]
-        style_val = positionals[0] if positionals else None
-    if not style_val:
-        return False
-    fm = re.search(r"style\s*\.\s*fill\s*\(", style_val)
-    if not fm:
-        return False
-    close_idx = convergence._scan_balanced_paren(style_val, fm.end() - 1)
-    fill_block = style_val[fm.end():close_idx] if close_idx is not None else ""
-    color_val = convergence._kwarg_value(fill_block, "color")
-    if color_val is None:
-        fill_positionals = [
-            p for p in convergence._split_top_level(fill_block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
-        ]
-        color_val = fill_positionals[0] if fill_positionals else None
-    unquoted_color = convergence._unquote(color_val) if color_val else None
-    if unquoted_color is not None:
-        stripped = unquoted_color.strip()
-        if _is_effectively_transparent(stripped):
-            return False
-        # Codex round-6 finding: this only ever validated a color
-        # literal that starts with "#", so a named CSS color like
-        # `style.fill(color="red")` bypassed the approved-color check
-        # entirely (a saturated color, never one of palettes.md §2's
-        # neutral/washed tints, silently treated as approved). Reuses
-        # `_normalize_css_color` (the SAME normalizer already built
-        # for `na_color`, per Codex's own suggestion) so hex, `rgb()`/
-        # `rgba()`, and the small recognized named-color spellings all
-        # get resolved equally before checking `_ALLOWED_TINT_HEXES`.
-        # Only a genuinely UNRESOLVABLE expression (a bare variable
-        # reference, not a quoted literal at all) keeps the benefit of
-        # the doubt below -- a real, statically-known literal that
-        # isn't transparent and doesn't normalize to an approved hex
-        # is a real, visible, non-approved color and must fail here,
-        # whether or not it happens to be spelled as a "#..." string.
-        literal_color = _quoted_string_literal_value(color_val) if color_val else None
-        if literal_color is not None:
-            normalized = _normalize_css_color(literal_color.strip())
-            if normalized is None or normalized not in _ALLOWED_TINT_HEXES:
-                return False
-    return True
 
 
 def _render_target_var_literals(source: str, tree: ast.Module) -> dict[tuple[int, int], str]:
@@ -834,9 +709,9 @@ def _frame_present(source: str) -> bool:
       that side's own style/width/color (whichever are set) are all
       non-disabling -- style not "none"/"hidden", width not a zero
       length, color not effectively transparent. Reuses `_is_zero_length`/
-      `_is_effectively_transparent`, the same visibility tests
-      `_stub_tint_present` already applies elsewhere in this file. Codex
-      round-10 finding: this returned `True` as soon as ONE side (left OR
+      `_is_effectively_transparent`, the same visibility tests applied
+      elsewhere in this file. Codex round-10 finding: this returned `True`
+      as soon as ONE side (left OR
       right) was visible, but this repo's own authoritative `gt_check.py`
       (already cited correctly in round 8's finding #4) requires BOTH a
       visible left AND a visible right border style for a genuine
@@ -2405,7 +2280,7 @@ def build_fingerprint(py_path: Path) -> dict:
     truth — both are built identically, per the spec's "computed the same
     way" instruction).
 
-    Overrides/adds Tier-1 fields (`color_mechanics`, `stub_tint_present`,
+    Overrides/adds Tier-1 fields (`color_mechanics`,
     `render_call_present`, `heading_band_hue` when a hex exists,
     `title_present`, `caption_present`) via the compatibility shim just
     above, immediately after `convergence.parse_design_choices()` runs.
@@ -2418,7 +2293,7 @@ def build_fingerprint(py_path: Path) -> dict:
     differently-scoped branch) and doesn't carry those additions --
     discovered by running this comparator against the real corpus (self-
     comparison silently mis-scored `check_colored_measure_selection`/
-    `check_hue_collision`/`check_domain_computation`/`check_stub_tint`/
+    `check_hue_collision`/`check_domain_computation`/
     `check_render_mechanics`/`check_band_hue_harmonization` without this
     shim). `title_present`/`caption_present` were separately found (Codex
     round-1) to have their own, unrelated bugs (keyword-only, all-calls-not-
@@ -2442,7 +2317,6 @@ def build_fingerprint(py_path: Path) -> dict:
     tier2 = execution_tier.exec_table(py_path)
     visible_columns = set(tier2.get("columns", {}).keys()) - set(tier2.get("hidden_columns") or [])
     tier1["color_mechanics"] = _enrich_color_mechanics(source)
-    tier1["stub_tint_present"] = _stub_tint_present(source)
     tier1["render_call_present"] = _render_call_present(source)
     # Codex round-12 finding: convergence.py's own `render_params` can
     # only recognize a call as "targeting table.png" via a literal-text
@@ -2855,9 +2729,8 @@ def _round_points_covered(covered: int, total: int, possible: int) -> int:
     `_effective_mechanics_units`, easily reaching a denominator of 10+
     for a real table) and plausible for `check_fmt_semantic_type` (a
     ground truth with 13 semantic-typed columns already exists in this
-    corpus) and `check_hero_column_formatting` (`round(1.5) == 2` at just
-    4 hero measures, via Python's round-half-to-even) -- applied
-    consistently across every "N of M required items covered" check
+    corpus) -- applied consistently across every "N of M required items
+    covered" check
     rather than leaving the identical gap in checks that simply hadn't
     hit an unlucky total yet. Coverage that's ACTUALLY complete (`covered
     == total`) still earns the full `possible` points, unaffected -- this
@@ -4389,9 +4262,9 @@ def check_frame_hairlines_dividers(cand: dict, truth: dict, meta: dict) -> Check
     hairlines_ok = bool(t1.get("hairlines_present"))
     # Round-5 proactive sweep finding (same "expected gated on the
     # CANDIDATE's own state, not what the ground truth requires" shape as
-    # check_stub_tint's round-5 fix, and round-4 #10's striping-gate fix
-    # before that): gating purely on the CANDIDATE's own `spanner_present`
-    # let a candidate that omits BOTH required spanners AND their dividers
+    # round-4 #10's striping-gate fix): gating purely on the CANDIDATE's
+    # own `spanner_present` let a candidate that omits BOTH required
+    # spanners AND their dividers
     # look self-consistent (no spanners -> no dividers "expected" -> a
     # trivial match) and dodge this 2-point sub-check entirely, on top of
     # the separate penalty `check_spanner_existence` already applies for
@@ -4470,29 +4343,6 @@ def check_striping_gate(cand: dict, truth: dict, meta: dict) -> CheckResult:
     actual = bool(t1.get("striping_present"))
     ok = expected == actual
     return CheckResult(name, 5, 5 if ok else 0, ok, f"n_rows={n}, fully_filled={fully_filled} -> expected striping={expected}, actual={actual}")
-
-
-def check_stub_tint(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    name = "Stub tint + grey-budget correctness"
-    t1 = cand["tier1"]
-    stub = bool(t1.get("stub_present"))
-    # Codex round-5 finding: `expected_on` was derived purely from the
-    # CANDIDATE's own stub presence -- if the candidate simply omitted a
-    # stub the ground truth requires, `stub=False` made `expected_on=
-    # False` trivially match `actual_on=False` (no stub tint is possible
-    # without a stub at all), earning full 5/5 credit for a table that
-    # dodged the stub requirement entirely, on TOP of the separate
-    # (smaller) penalty `check_stub_existence` already applies. Gate on
-    # whether the GROUND TRUTH actually requires a stub first: a required-
-    # but-missing stub is a graded failure HERE too, not a free pass.
-    truth_requires_stub = bool(truth["tier1"].get("stub_present"))
-    if truth_requires_stub and not stub:
-        return CheckResult(name, 5, 0, False, "ground truth requires a stub but candidate has none; stub tint unverifiable")
-    striped = bool(t1.get("striping_present"))
-    expected_on = stub and not striped
-    actual_on = bool(t1.get("stub_tint_present"))
-    ok = expected_on == actual_on
-    return CheckResult(name, 5, 5 if ok else 0, ok, f"stub={stub}, striped={striped} -> expected tint={expected_on}, actual={actual_on}")
 
 
 _SEQ_PALETTE_TO_DA_FAMILY = {"blues": "navy", "greens": "forest", "reds": "oxblood", "oranges": "oxblood"}
@@ -4954,12 +4804,12 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # renamed column. Resolves each semantic-typed measure to its VALUE-
     # matched candidate column instead, via `execution_tier.match_measure_
     # by_value` -- the same value-based matching `check_colored_measure_
-    # selection`/`check_hero_column_formatting` already use elsewhere in
-    # this file, rather than assuming the candidate preserved the name.
+    # selection` already uses elsewhere in this file, rather than assuming
+    # the candidate preserved the name.
     #
     # Round-5 proactive sweep finding (same "expected/applicable gated on
-    # the CANDIDATE's own state" shape as check_stub_tint/check_frame_
-    # hairlines_dividers's round-5 fixes): the denominator here was every
+    # the CANDIDATE's own state" shape as check_frame_
+    # hairlines_dividers's round-5 fix): the denominator here was every
     # semantic-typed column the candidate happened to still have VISIBLE
     # -- so a candidate that HID every semantic-typed column (via `cols_
     # hide(...)`) shrank `applicable` to empty and the whole 4-point check
@@ -5056,69 +4906,6 @@ def check_title_subtitle_caption_source(cand: dict, truth: dict, meta: dict) -> 
         name, 3, pts, pts == 3,
         f"title={'OK' if title_pts else 'MISSING'}, subtitle={'OK' if subtitle_pts else 'MISSING'}, "
         f"caption expected={caption_expected} present={caption_present}, source expected={source_expected} present={source_present}",
-    )
-
-
-def check_hero_column_formatting(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    name = "Hero-column formatting when nothing is colored"
-    hero_measures = meta["CANONICAL_MEASURES"].get("hero_uncolored", [])
-    if not hero_measures:
-        # No canonical hero measure declared to target -- fall back to the
-        # original "some column is bold" signal (there's nothing more
-        # specific to check against). Step 3's rule is bold-hero-text as
-        # the ALTERNATIVE to a third color fill, so with no specific
-        # measure declared, this weaker heuristic only makes sense to
-        # apply when the candidate has no colored measures at all --
-        # unlike the declared-hero-measure branch below, there's nothing
-        # concrete here to check independently of that context.
-        if cand["tier1"].get("color_mechanics"):
-            return _na(name, "candidate has colored measures and no canonical hero-uncolored measure is declared")
-        bolded = bool(cand["tier1"].get("bold_columns"))
-        return CheckResult(
-            name, 2, 2 if bolded else 0, bolded,
-            f"bold_columns={cand['tier1'].get('bold_columns')} (no canonical hero measure declared)",
-        )
-    # Codex round-2 finding: this whole check previously bailed to N/A
-    # whenever the candidate had ANY colored measure at all -- but all 4
-    # checked-in ground truths that declare `hero_uncolored` measures ALSO
-    # declare and render colored measures (a hero column is precisely the
-    # column that DOESN'T get a third color fill alongside the ≤2 that
-    # do), so that early return made this check N/A for every one of
-    # them, never actually exercised. A ground truth that DECLARES
-    # specific hero_uncolored measures must have them checked directly,
-    # regardless of whether other measures happen to be colored -- this
-    # also catches a candidate that colors the supposed hero column
-    # INSTEAD of bolding it (that measure's value-matched candidate
-    # column then simply won't be in `bold_cols` below).
-    if not cand["tier2"].get("ok"):
-        return CheckResult(name, 2, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
-    # Bolding is only meaningful when it targets the ACTUAL declared hero
-    # measure(s), matched by VALUE (not name) like every other measure
-    # check here -- bolding an unrelated identifier or secondary metric
-    # previously earned full credit just for being nonempty.
-    #
-    # Codex round-6 finding (important): this never checked that the
-    # bold, "hero_uncolored" column ISN'T *also* colored -- but the whole
-    # design intent (per the metadata's own name, and Step 3's rule
-    # elsewhere in this file: bold text is the ALTERNATIVE to a third
-    # color fill, not an addition to it) is that a hero measure is
-    # uncolored. Concretely, on `gtcars_hp_price`: a candidate could color
-    # BOTH `msrp` and the supposedly-uncolored `hp` hero, bold `hp` too,
-    # stay within the ≤2 colored-measure ceiling, and get full credit on
-    # both check_colored_measure_selection AND this check simultaneously.
-    # Excluding any column that's also colored-matched from hero coverage
-    # closes that gap.
-    bold_cols = set(cand["tier1"].get("bold_columns") or [])
-    colored_cols = {c for m in cand["tier1"].get("color_mechanics", []) for c in _mechanics_columns(m, cand)}
-    covered = 0
-    for m in hero_measures:
-        matched_col = _match_measure_by_value(cand, truth, m)
-        if matched_col and matched_col in bold_cols and matched_col not in colored_cols:
-            covered += 1
-    pts = _round_points_covered(covered, len(hero_measures), 2)
-    return CheckResult(
-        name, 2, pts, covered == len(hero_measures),
-        f"{covered}/{len(hero_measures)} canonical hero-uncolored measures are bolded",
     )
 
 
@@ -5298,15 +5085,6 @@ def check_summary_row_visual_distinction(cand: dict, truth: dict, meta: dict) ->
     return CheckResult(name, 1, 1 if distinct else 0, distinct, "checked for an active bold/border/fill style scoped to the summary row (not a bare token search)")
 
 
-def check_caption_not_restating_subtitle(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    # Moved to the judge per .planning/10-hybrid-comparator.md §3: a
-    # CAPTION_KEYWORDS lookup can't handle all valid phrasings for "does the
-    # caption add real information beyond the subtitle" -- same name/points/
-    # slot as before, computation only moved. CAPTION_KEYWORDS itself is
-    # still passed to the judge as grounding context, just no longer gates.
-    return _judge_dimension_check(meta, "caption_quality", "Caption doesn't just restate the subtitle", 1)
-
-
 def check_title_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # New per .planning/10-hybrid-comparator.md §3: the prior
     # check_title_subtitle_caption_source above is presence-only ("does a
@@ -5342,20 +5120,17 @@ FORMAT_CHECKS: list[CheckFn] = [
     check_domain_computation,
     check_frame_hairlines_dividers,
     check_striping_gate,
-    check_stub_tint,
     check_band_hue_harmonization,
     check_color_mechanics,
     check_summary_row_formatting,
     check_fmt_semantic_type,
     check_title_subtitle_caption_source,
-    check_hero_column_formatting,
     check_render_mechanics,
     check_summary_row_visual_distinction,
     check_title_quality,
     check_subtitle_quality,
     check_column_order_quality,
     check_color_theme_quality,
-    check_caption_not_restating_subtitle,
 ]
 
 
@@ -5442,7 +5217,7 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
 
     The judge is invoked exactly ONCE per comparison (§4 of
     ``.planning/10-hybrid-comparator.md``: "one batched call... scoring all
-    7 dimensions together"), and its single combined result is stashed in
+    6 dimensions together"), and its single combined result is stashed in
     ``meta["_judge_result"]`` before any check function runs, so every
     judge-backed check (see ``_judge_dimension_check``) reads from the same
     call rather than each triggering its own.
@@ -5458,7 +5233,7 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
     `candidate_path.with_suffix(".png")` -- the candidate SCRIPT's own
     filename stem -- so a candidate invoked as `/tmp/submission.py` that
     correctly writes `/tmp/table.png` (exactly as required) had the judge
-    looking for `/tmp/submission.png` instead: either degrading all 7
+    looking for `/tmp/submission.png` instead: either degrading all 6
     judge-backed checks to unavailable for a perfectly correct candidate,
     or worse, silently judging a stale, unrelated PNG that happened to
     already exist at that wrong path. `candidate_path.parent /
@@ -5504,7 +5279,7 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
     elif _judge_png_is_stale(candidate_png, candidate_path):
         # Codex round-4 finding: see `_judge_png_is_stale`'s docstring --
         # degrade exactly like `judge()`'s own documented "unavailable"
-        # contract (all 7 keys, applicable=False, rationale prefixed with
+        # contract (all 6 keys, applicable=False, rationale prefixed with
         # the literal "judge unavailable: " string) rather than scoring a
         # PNG that predates the source it's supposed to represent.
         judge_unavailable_reason = f"judge unavailable: candidate PNG is older than its source .py ({candidate_png} predates {candidate_path})"
