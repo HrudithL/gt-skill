@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080537_creator_6prompts/prompts/gtcars_hp_price/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 52/100 (52.0%)
+TOTAL: 48/83 (57.8%)
   Data-compliance:        20/44
-  Formatting-compliance:  32/56
+  Formatting-compliance:  28/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 2 canonical measures unverifiable
@@ -20,17 +20,11 @@ TOTAL: 52/100 (52.0%)
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 2/2 colored measures have a shape-appropriate domain
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=47, fully_filled=False -> expected striping=True, actual=False
-[FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- ground truth requires a stub but candidate has none; stub tint unverifiable
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=light actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 2/2, truncate=False correct 2/2, autocolor_text=True correct 2/2, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
-[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- 0/1 canonical hero-uncolored measures are bolded
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'GT Cars: Horsepower and Price' captures the exact same core framing as the ground truth—identifying the dataset and the two metrics shown. Both titles are clear, accurate, and establish the same story angle.
-[FAIL] [JUDGE] Subtitle quality: 1/3 -- judge score 2/5 -- The ground truth's subtitle specifies 'All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP'—adding scope and sort order. The candidate's subtitle 'Performance vehicles ranked by horsepower' is vague (does not clarify the full row count or that this is *all* cars in the dataset) and describes a different sort order (by horsepower, not MSRP), creating inconsistency with what the table actually displays.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate splits car identification across two columns (Manufacturer, Model) before showing numeric metrics. This is defensible—users can identify each car fully before seeing its stats—and mostly natural. However, the ground truth's single-column 'Car' stub is slightly more compact and equally clear, making the candidate's split approach marginally less optimized but still sensible.
-[FAIL] [JUDGE] Color theme/palette taste: 1/3 -- judge score 2/5 -- The candidate employs a yellow-to-purple gradient on both horsepower and price columns, with yellow at the high end and deep purple at the low end. This creates visual clashing—bright yellow (high hp) and purple (low price) on the same row feel discordant. The ground truth uses a single dark-blue gradient on price only (horsepower is uncolored), achieving harmony; the candidate's bi-column diverging effect is jarring and less tasteful.
-[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 2/5 -- The candidate's source note reads only 'Source: GT Cars Dataset' with no additional insight, while the ground truth's caption explicitly mentions the key analytical finding ('Price and horsepower don't move together: the Bentley Continental GT costs more than the Chevrolet Corvette Z06 despite having 150 fewer horsepower') and cites the dataset—a concrete insight the candidate entirely omits.

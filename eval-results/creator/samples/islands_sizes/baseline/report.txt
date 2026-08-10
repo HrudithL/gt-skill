@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080537_creator_6prompts/prompts/islands_sizes/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/islands_sizes.py
 
-TOTAL: 31/99 (31.3%)
+TOTAL: 27/82 (32.9%)
   Data-compliance:        12/43
-  Formatting-compliance:  19/56
+  Formatting-compliance:  15/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 1 canonical measures unverifiable
@@ -20,17 +20,11 @@ TOTAL: 31/99 (31.3%)
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=48, fully_filled=False -> expected striping=True, actual=False
-[FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- ground truth requires a stub but candidate has none; stub tint unverifiable
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 1/3 -- title=OK, subtitle=MISSING, caption expected=True present=False, source expected=True present=False
-[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- bold_columns=[] (no canonical hero measure declared)
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate title 'Islands and Their Sizes' is clear and accurate, but less specific than the ground truth's 'Islands of the World, by Size.' The candidate's title is generic and doesn't signal the global scope or the ranking/ordering by size that is central to the table's story.
-[FAIL] [JUDGE] Subtitle quality: 1/3 -- judge score 1/5 -- The candidate has no subtitle. The ground truth provides 'Land area in thousands of square miles, continents and smaller islands together,' which clarifies the unit, scope, and the fact that continents are included. Without a subtitle, the candidate leaves readers uncertain about what is actually being measured.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (Island, then Size) is a natural reading sequence that matches the ground truth's order exactly. The identifying column (island/landmass name) is prioritized first, followed immediately by the measure, making the table easy to scan and compare values.
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a dark blue header band and light dividing lines between rows, with no color encoding on the size column itself. The ground truth uses a sequential blue color scale on the size values. Both palettes are professional and legible, though the candidate's choice not to color-encode the numeric column is a different—and arguably less visually engaging—design decision than the ground truth's gradient approach.
-[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 1/5 -- The candidate table has no caption or source note at all. The ground truth provides a detailed caption explaining that the data is ordered largest to smallest, defines 'landmass' to include continents alongside islands, and cites the source as 'R's built-in islands dataset.' Without any caption, the candidate omits this essential clarifying information.

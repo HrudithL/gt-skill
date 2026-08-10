@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080537_creator_6prompts/prompts/airquality_monthly_summary/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/airquality_monthly_summary.py
 
-TOTAL: 55/105 (52.4%)
+TOTAL: 48/88 (54.5%)
   Data-compliance:        20/49
-  Formatting-compliance:  35/56
+  Formatting-compliance:  28/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 3 canonical measures unverifiable
@@ -20,17 +20,11 @@ TOTAL: 55/105 (52.4%)
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 2/2 colored measures have a shape-appropriate domain
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=5, fully_filled=False -> expected striping=False, actual=False
-[FAIL] [MECHANICAL] Stub tint + grey-budget correctness: 0/5 -- ground truth requires a stub but candidate has none; stub tint unverifiable
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=light actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 2/2, truncate=False correct 2/2, autocolor_text=True correct 2/2
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/3 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['avg_temp', 'avg_wind', 'avg_ozone']
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
-[FAIL] [MECHANICAL] Hero-column formatting when nothing is colored: 0/2 -- 0/1 canonical hero-uncolored measures are bolded
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'Air Quality Metrics by Month' is accurate and descriptive, but lacks the specific geographic and temporal context ('in New York, 1973') that the ground truth's title includes. It is technically correct but less specific in framing the data's real-world location and year.
-[PASS] [JUDGE] Subtitle quality: 3/3 -- judge score 5/5 -- The subtitle 'Average temperature, wind speed, and ozone levels' clearly and non-redundantly specifies what metrics are shown in the table, complementing the title without restating it. It adds helpful context about the scope of what's measured.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The left-to-right column order (Month, Temperature, Wind Speed, Ozone) is logical and mirrors the ground truth's order. Month is the identifying stub column, followed by the three measured quantities in the order mentioned in the prompt, making the table easy to read.
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 3/5 -- The candidate uses a different color scheme than the ground truth: diverging hues (light blue to red for temperature, pale to dark red for ozone) compared to the ground truth's blue-to-dark-blue and peachy-red scale. The colors are legible and the warm-to-hot progression for temperature/ozone makes sense, but the bright red-orange-yellow scheme feels less cohesive with the table's overall presentation compared to the ground truth's more restrained palette.
-[FAIL] [JUDGE] Caption doesn't just restate the subtitle: 0/1 -- judge score 2/5 -- The candidate's caption ('Data source: New York air quality measurements, May–September') is minimal and provides only a source attribution, missing the crucial explanatory note that the ground truth includes about missing ozone readings (37 of 153 days missing, especially in June) and how this affects the averages. This is a key clarification mentioned in CAPTION_KEYWORDS ('missing', 'recorded value') that the candidate entirely omits.

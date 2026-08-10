@@ -1,34 +1,41 @@
 import pandas as pd
 from great_tables import GT, md
-from house_table import (
-    PALETTE, frame, finalize, band, heatmap, humanize_labels
+
+# Import helpers from the house-format skill
+import sys
+sys.path.insert(0, './.claude/skills/great-tables-house/scripts')
+from house_table import PALETTE, frame, hairlines, finalize, band, heatmap
+
+# Load data
+df = pd.read_csv('islands.csv')
+
+# Sort by size descending for better readability
+df = df.sort_values('size', ascending=False).reset_index(drop=True)
+
+# Build the table
+gt = GT(df, rowname_col='name')
+gt = gt.tab_header(
+    title='World Islands by Size',
+    subtitle=md('Total area in thousands of square kilometers'),
 )
+gt = gt.tab_stubhead(label='Island')
 
-# Read the islands data
-islands = pd.read_csv("islands.csv")
+# Format the size column as thousands with no decimals
+gt = gt.fmt_number(columns='size', decimals=0, use_seps=True)
 
-# Create the GT table
-gt = GT(islands).tab_header(
-    title="Islands by Size",
-    subtitle="Geographic area in thousands of square kilometers",
-).tab_source_note(
-    source_note="Source: provided dataset."
-)
+# Relabel the size column
+gt = gt.cols_label(size='Size (1000 km²)')
 
-# Format columns
-gt = (
-    gt.fmt_number(columns="size", decimals=1, use_seps=True)
-    .cols_label(name="Island", size="Size (1000 km²)")
-)
+# Apply the sequential heatmap for the size magnitude (Blues is neutral for a plain magnitude)
+gt = heatmap(gt, 'size', kind='sequential', hue='neutral')
 
-# Apply the sequential heatmap to the size column
-gt = heatmap(gt, "size", kind="sequential", hue="neutral")
-
-# Apply the band styling
-gt = band(gt, hue="navy")
-
-# Apply the frame
+# Apply the house-format styling
+gt = band(gt, hue='navy')
+gt = hairlines(gt)
 gt = frame(gt)
 
-# Finalize and save
-finalize(gt)
+# Source note
+gt = gt.tab_source_note(source_note='Source: provided dataset.')
+
+# Save with the mandatory renderer
+finalize(gt, path='table.png')

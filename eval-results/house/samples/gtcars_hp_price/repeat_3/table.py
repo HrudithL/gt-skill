@@ -1,37 +1,47 @@
 import pandas as pd
 from great_tables import GT
-from house_table import PALETTE, frame, finalize, band, heatmap
+from house_table import PALETTE, frame, hairlines, finalize, band, heatmap, humanize_labels
 
 df = pd.read_csv("gtcars.csv")
 
-# Select and display the relevant columns: manufacturer, model, hp, and msrp
-display_df = df[["mfr", "model", "hp", "msrp"]].copy()
+# Create composite car identifier (mfr + model)
+df["car"] = df["mfr"] + " " + df["model"]
+
+# Select and sort by horsepower descending
+display_df = df[["car", "hp", "msrp"]].sort_values("hp", ascending=False).reset_index(drop=True)
 
 gt = (
-    GT(display_df)
+    GT(display_df, rowname_col="car")
     .tab_header(
-        title="GT Cars Database",
-        subtitle="Horsepower and Price for High-Performance Vehicles",
+        title="GT Cars: Horsepower and Price",
+        subtitle="High-performance vehicles ranked by engine output"
     )
-    .fmt_number(columns="hp", decimals=0, use_seps=False)
+    .fmt_number(columns="hp", decimals=0)
     .fmt_currency(columns="msrp", decimals=0)
-    .cols_label(
-        mfr="Manufacturer",
-        model="Model",
-        hp="Horsepower",
-        msrp="Price",
-    )
-    .tab_source_note(source_note="Source: GT Cars dataset")
 )
 
-# Apply heatmap to msrp (price as primary measure in Blues)
-gt = heatmap(gt, "msrp", kind="sequential", hue="neutral")
+gt = humanize_labels(
+    gt,
+    display_df,
+    overrides={"hp": "Horsepower", "msrp": "Price (MSRP)"}
+)
 
-# Apply band styling
+# Big Color: horsepower as the sequential hero (Blues/neutral — a plain magnitude)
+gt = heatmap(gt, "hp", kind="sequential", hue="neutral")
+
+# Heading band: navy to match the Blues heatmap
 gt = band(gt, hue="navy")
 
-# Apply frame
-gt = frame(gt)
+# No striping gate check: 48 rows > 10, and only 1 column is colored (hp),
+# so body is not "essentially fully covered" — stripe applies.
+from house_table import stripe
+gt = stripe(gt)
 
-# Finalize and save
-finalize(gt)
+# Stub tint harmonizes to navy
+from house_table import stub_tint
+gt = stub_tint(gt, hue="navy")
+
+gt = gt.tab_source_note(source_note="Source: provided dataset.")
+gt = hairlines(gt)
+gt = frame(gt)
+finalize(gt, path="table.png")
