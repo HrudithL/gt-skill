@@ -54,5 +54,17 @@ no follow-through into the archetype-specific rules the same prompt sent
 `prose`/`scripts` into) — one plausible, falsifiable explanation for the
 score gap, not a full diagnosis.
 
+**A caveat on how much of this headline is actually about table design**:
+14 of `creator`'s 24 invocations (and 2 of its 6 baselines) fail Tier-2
+execution with `no top-level 'gt' GT instance in table.py` — the
+candidate's code assigns its table to a variable like `gt_table` rather
+than the harness-expected `gt`, a naming-convention miss, not a design
+defect. That zeroes several checks per affected invocation. Since this
+sweep's raw run directory no longer exists, this can't be re-verified or
+corrected retroactively — the `-3.2pp behind baseline` figure above should
+be read as "this candidate skill doesn't reliably produce harness-
+convention-compliant code," which is itself a real finding, rather than
+as a clean verdict on the tables it does successfully render.
+
 Curated candidate scripts, renders, and comparator reports for every
 invocation are under [`samples/`](samples/), organized `samples/<prompt>/<variant>/`.

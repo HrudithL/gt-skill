@@ -55,16 +55,24 @@ presence themselves are satisfied in 17/18 `prose` invocations; caption
 caption removal.)
 
 **Explicitly NOT removed in pass 2**, despite `prose` also scoring
-relatively low on them: `Column-label concept-correctness` (house 55.6%,
-prose 38.9%, scripts 41.2% — 16.7pp spread) and `Striping gate
-correctness` (house 27.8%, prose 38.9%, scripts 55.6% — 27.8pp spread).
-These show real cross-skill variation — removing them would erase
-evidence that other skills currently handle these differently/better than
+relatively low on them (numbers below are as computed on the 2026-08-07
+sweep the removal decision was actually made on — **not** reproducible
+from the refreshed `metrics.json` further down this file, which reflects
+a different, later sweep for these same skills; see "Data refresh"
+below): `Column-label concept-correctness` (house 55.6%, prose 38.9%,
+scripts 41.2% — 16.7pp spread) and `Striping gate correctness` (house
+27.8%, prose 38.9%, scripts 55.6% — 27.8pp spread). These showed real
+cross-skill variation on that sweep — removing them would have erased
+evidence that other skills handled these differently/better than
 `prose`, not evidence the check is unreasonable for everyone. Likewise
 `Computed/derived value correctness` (house 22.8%, prose 63.3%, scripts
-50.6% — 40.6pp spread, the single largest in the whole comparator) stays:
-it reveals a real, important defect in `house`'s value-correctness, exactly
-the kind of signal this comparator exists to surface.
+50.6% — 40.6pp spread, the largest of any check on that sweep) stayed:
+it was, on that data, exactly the kind of signal this comparator exists
+to surface. (On the fresher 2026-08-09 sweep this file's own numbers now
+report, this specific check's spread shrinks to 12.8pp and `house` is no
+longer the worst performer on it — a reminder that these are per-sweep
+snapshots, not fixed properties of a skill, which is also why the
+`house`/`scripts` ordering below is called noisy rather than settled.)
 
 Both passes' exact checks and mechanism (full deletion) were confirmed
 with the user via AskUserQuestion before any code changed.
@@ -85,10 +93,17 @@ simply reflects each skill's current state, scored by the current
 (24-check, 97-pt) comparator. `creator` is the one exception: its raw
 sweep directory no longer exists on disk (the ephemeral worktree it lived
 in was deleted after merge), so there is no fresher run available — its
-numbers here are still the pure point-subtraction transform applied to
-`main`'s original (2026-08-07) data, exactly as described above. The
-transform script that produced *that* number is committed at
-[`_apply_check_removal.py`](_apply_check_removal.py) for auditability.
+numbers here are still the pure point-subtraction transform (filter the 6
+removed checks' points out of each already-scored invocation and re-sum,
+no re-execution) applied to `main`'s original 2026-08-07 data, committed
+at [`_apply_check_removal.py`](_apply_check_removal.py) for auditability.
+One more asymmetry this introduces: `creator`'s 4 surviving judge-backed
+checks were scored by the judge's *original* 7-dimension prompt (the
+transform only filters which of the 7 stored scores count, it can't
+retroactively re-elicit them under the current 4-dimension prompt), while
+`house`/`prose`/`scripts`' fresh judge calls this section used the
+current 4-dimension prompt directly — `creator`'s numbers are the least
+directly comparable to the other three of anything in this file.
 
 | Skill | Mean comparator score | vs. baseline | Score spread (3 repeats) | Mean cost/invocation |
 |---|---|---|---|---|
@@ -100,8 +115,13 @@ transform script that produced *that* number is committed at
 
 \*baseline varies slightly per skill's sweep because each sweep's baseline
 run is a separate invocation (same prompts, no skill mounted, different
-sampling) — see each skill's `plots/cost.png` / `comparator_score.png` for
-the per-skill baseline actually used in that comparison.
+sampling); `prose`'s and `scripts`' baseline numbers are each additionally
+pulled down by one baseline invocation that failed Tier-2 execution (a
+`gt_table`-vs-`gt` variable-naming miss, same shape as `creator`'s own
+execution failures described in its `SUMMARY.md`) — excluding those,
+`prose`'s baseline would read ~28.1% and `scripts`' ~27.8%. See each
+skill's `plots/cost.png` / `comparator_score.png` for the per-skill
+baseline actually used in that comparison.
 \*\*`creator` is on 2026-08-07 data (see above); the other three rows are
 on 2026-08-09 data. Its cost figure is the only one here that's cheaper
 than a real skill by construction of its A/B design, not evidence of
@@ -109,20 +129,34 @@ efficiency — it's a candidate skill under evaluation, not a promoted one.
 
 ## Findings
 
-- **`prose` wins clearly.** 74.9%, ~7.7pp clear of the runner-up, and the
-  most consistent (10.6pp spread) — a genuinely decisive margin given the
-  runner-up spreads below.
+- **`prose` wins, on replication rather than this sweep's margin alone.**
+  Its 7.7pp lead over the runner-up here is *smaller* than the runner-up's
+  own 17.8pp repeat-to-repeat spread — by this file's own "gap smaller
+  than either skill's own spread means don't call it settled" standard
+  (applied to `house`/`scripts` just below), a single sweep's 7.7pp isn't
+  decisive on its own either. What makes `prose` the confident pick isn't
+  this one number, it's that it led `house` specifically by a comfortable
+  margin on *both* sweeps (15.6pp on 2026-08-07, 7.7pp here) — two
+  independent sweeps agreeing, even at different margins, is real signal
+  in a way one sweep's raw gap over whichever skill happens to be
+  runner-up that week isn't.
 - **`house` and `scripts` swap places relative to the 2026-08-07 sweep
   this file previously reported (`scripts` had led).** On today's fresh
   runs, `house` edges out `scripts` (67.2% vs. 62.4%, a 4.8pp gap) — but
   both skills' own repeat-to-repeat spread (17.8pp and 23.8pp) is *larger*
-  than that gap, so treat this specific ordering as noisy, not settled;
-  it would not be surprising for a third sweep to show either order. What
-  is consistent across both the 08-07 and 08-09 data: `scripts`' checker
-  loop is the **most expensive and least consistent** of the three real
-  skills every time it's been measured, for a mean score that's sometimes
-  ahead of `house`'s and sometimes behind it — the loop's cost is certain,
-  its benefit isn't.
+  than that gap, so treat this specific ordering as noisy, not settled.
+  Most of the gap traces to one identifiable cause, not generic noise: a
+  single `scripts` invocation (`towny_growth_trends/repeat_1`) scored
+  25.9% because its candidate code reassigns `gt = finalize(gt, ...)`,
+  and `finalize()` returns `None` — a real candidate bug (the rendered
+  PNG is fine; the harness's "is there a top-level `gt` GT instance"
+  check isn't), not a table-quality problem. Excluding that one
+  invocation, `scripts` is 65.1% and the gap shrinks to 2.1pp — genuinely
+  a coin flip. What's consistent across both the 08-07 and 08-09 data:
+  `scripts`' checker loop is the **most expensive and least consistent**
+  of the three real skills every time it's been measured, for a mean
+  score that's sometimes ahead of `house`'s and sometimes behind it — the
+  loop's cost is certain, its benefit isn't.
 - **`house` remains the cheap, decent option** regardless of its exact
   rank versus `scripts` this sweep — no flowchart, no checker loop, a real
   and now-competitive quality gain over baseline for the lowest cost of
@@ -135,9 +169,11 @@ efficiency — it's a candidate skill under evaluation, not a promoted one.
 
 ## Which skill is best overall
 
-**`prose`** — highest mean score by a decisive margin and the most
-consistent, on every sweep this file has ever reported, under every
-version of the comparator. `house` vs. `scripts` is genuinely close and
+**`prose`** — highest mean score and most consistent on every sweep this
+file has ever reported, under every version of the comparator, and its
+lead over `house` specifically replicates across both the 2026-08-07 and
+2026-08-09 sweeps (not just a single measurement). `house` vs. `scripts` is
+genuinely close and
 sweep-dependent — pick `house` when cost and consistency matter, `scripts`
 only if its checker loop's occasional extra points are worth its
 reliably-higher cost and reliably-lower consistency to you. `creator` is
@@ -148,7 +184,8 @@ not yet a real contender.
 ```
 eval-results/
   _lib.py                     shared metrics-extraction helpers (see its docstring)
-  _apply_check_removal.py     the one-off transform that produced both consensus-tuning passes' data
+  _apply_check_removal.py     the one-off transform behind both consensus-tuning passes; post-refresh,
+                               the only skill whose committed numbers still come from it is `creator`
   SUMMARY.md                  this file
   <skill>/
     metrics.json              full per-invocation cost/tokens/comparator-score data
