@@ -122,7 +122,7 @@ def _find_band_color_last(source: str) -> str | None:
     column_labels_background_color="#000000"` comment (or a docstring
     mentioning the same) was misdetected as a real, later-OVERRIDING
     `tab_options()` call, the exact same source-wide-text-scan bug class
-    already fixed for stub_tint/color-mechanics/frame/fmt_* detection.
+    already fixed for color-mechanics/frame/fmt_* detection.
     Extracts from genuine `.tab_options(...)` AST call blocks (via
     `_ast_call_blocks`, sorted into true source order, already scoped to
     top-level-only calls per the round-9 `_walk_top_level` fix) instead
@@ -760,7 +760,7 @@ def _frame_present(source: str) -> bool:
         # Codex round-12 finding (proactive AST conversion): this scanned
         # raw SOURCE TEXT via `re.findall`, with no comment/string
         # stripping -- the same recurring bug class already fixed for
-        # `_option_line_present`/stub_tint/color-mechanics/etc. Extracts
+        # `_option_line_present`/color-mechanics/etc. Extracts
         # from genuine `.tab_options(...)` AST call blocks (via `_ast_
         # call_arg_blocks`) instead, still taking the LAST occurrence of
         # each attribute across ALL real calls.
@@ -906,7 +906,7 @@ def _option_line_present(source: str, prefix: str) -> bool | None:
 
     Codex round-12 finding: this scanned raw SOURCE TEXT via `re.findall`,
     with no comment/string stripping at all -- the same recurring source-
-    wide-regex bug class already fixed for stub_tint/color-mechanics/
+    wide-regex bug class already fixed for color-mechanics/
     frame/fmt_*/heading-band-color/opt_row_striping detection: a comment
     mentioning `table_body_hlines_style="solid"` (or `"none"`) is
     misdetected as a real, score-affecting option. Extracts from genuine
@@ -1474,7 +1474,7 @@ def _ast_call_arg_blocks(source: str, func_name: str, *, allow_bare: bool = Fals
     Codex round-11 finding: `convergence._call_arg_blocks` (off-limits --
     see this file's Tier-1 compatibility-shim section) is a source-wide
     regex with no comment/string stripping at all -- the same recurring
-    bug class already fixed for color-mechanics/frame/fmt_*/stub_tint/
+    bug class already fixed for color-mechanics/frame/fmt_*/
     tab_options detection: `# .opt_row_striping()` in a comment, or a
     docstring mentioning the same text, is misdetected as a real call.
     Used for `opt_row_striping` (the flagged case) and, proactively, for
