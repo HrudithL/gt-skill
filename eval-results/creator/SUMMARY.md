@@ -5,23 +5,23 @@ repeats + 1 auto-baseline), Haiku, scored by `runner.comparator.compare()`
 against each prompt's ground truth. Full detail in [`metrics.json`](metrics.json).
 This sweep's raw run directory has since been deleted (it lived only in an
 ephemeral worktree), so its candidates can no longer be re-executed — not
-a problem for the update below, since removing a check is a pure point
+a problem for either update below, since removing a check is a pure point
 subtraction that never needed re-execution in the first place (see the
 top-level [`SUMMARY.md`](../SUMMARY.md)).
 
-**Comparator methodology (2026-08-09):** 3 checks (hero-column formatting,
-stub tint/grey-budget, caption-not-restating-subtitle) were removed from
-`runner/comparator.py` — field data across house/prose/scripts showed
-every skill variant scoring near-zero on them regardless of quality,
-meaning they measured something no current skill achieves rather than a
-real quality gap between skills. The candidate set here is **unchanged**
-(same sweep, same 24 invocations) — only the scoring rubric changed.
-Scores below are **not comparable** to this file's pre-2026-08-09 numbers
-(denominator shrank 114 -> 106 pts).
+**Comparator methodology (2026-08-09, 2 passes):** 6 checks were removed
+from `runner/comparator.py` — 3 uniformly near-zero across every skill
+(hero-column formatting, stub tint/grey-budget, caption-not-restating-
+subtitle), then 3 more flat/non-discriminating across every skill (title/
+subtitle/caption/source presence, subtitle quality, color theme/palette
+taste). The candidate set here is **unchanged** (same sweep, same 24
+invocations) — only the scoring rubric changed. Scores below are **not
+comparable** to this file's pre-2026-08-09 numbers (denominator shrank
+114 -> 97 pts).
 
 | Metric (mean across 6 prompts) | `creator` skill | baseline (no skill) |
 |---|---|---|
-| Comparator total score | **23.5%** | 26.8% |
+| Comparator total score | **21.7%** | 24.9% |
 | Cost per invocation | $0.095 | $0.073 |
 | Score spread across 3 repeats | 18.1 points | n/a (1 run) |
 
@@ -31,11 +31,15 @@ See [`plots/cost.png`](plots/cost.png), [`plots/tokens.png`](plots/tokens.png),
 
 **The headline finding still holds: `creator`'s candidate skill scores
 *below* the no-skill baseline**, on average, while still costing more per
-invocation. Removing 3 checks nothing could pass moved every skill's score
-up somewhat (including baseline's) — `creator` gained the least of the
-four (+1.8pp, vs. +2.7 to +4.2pp for `house`/`prose`/`scripts`) and remains
-3.3pp behind baseline, essentially unchanged from the 3.0pp gap before this
-pass. `creator` mounts a skill-creator-produced candidate skill verbatim
+invocation — its margin behind baseline has stayed roughly flat across
+both passes (-3.0pp originally, -3.3pp after pass 1, -3.2pp now) while its
+own absolute score actually dipped (21.7%→23.5%→21.7%), the only skill of
+the four that didn't net-improve. That's because `creator`'s few
+relative strengths were concentrated almost entirely in checks pass 2 just
+removed for not discriminating skill quality at all (it scored 50-67% on
+those three specifically, well above its own ~22% average) — once those
+are gone, what's left is disproportionately the checks it's genuinely bad
+at. `creator` mounts a skill-creator-produced candidate skill verbatim
 (for A/B evaluation against the promoted `great-tables`/`great-tables-ci`
 skills, not because it's expected to win) — this sweep is evidence it
 currently isn't competitive, not just underwhelming. See

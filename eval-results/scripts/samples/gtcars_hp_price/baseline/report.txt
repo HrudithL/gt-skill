@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080530_scripts_6prompts/prompts/gtcars_hp_price/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 29/94 (30.9%)
+TOTAL: 27/85 (31.8%)
   Data-compliance:        12/46
-  Formatting-compliance:  17/48
+  Formatting-compliance:  15/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 2 canonical measures unverifiable
@@ -24,10 +24,7 @@ TOTAL: 29/94 (30.9%)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 0/3 -- title=MISSING, subtitle=MISSING, caption expected=True present=False, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The Candidate lacks a title entirely (only column headers appear at the top). The Ground Truth has a clear, specific title 'GT Cars: Horsepower and Price' that immediately frames the table's subject and scope. Without a title, the Candidate is missing this essential orienting element, though the column headers do convey what's shown.
-[FAIL] [JUDGE] Subtitle quality: 1/3 -- judge score 1/5 -- The Candidate has no subtitle. The Ground Truth provides a clarifying subtitle: 'All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP' -- which explains the dataset scope and sort order. The Candidate is missing this non-redundant context entirely.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- Candidate's order is Manufacturer, Model, Horsepower, Price -- grouping identifying info (Manufacturer, Model) on the left and measures on the right. Ground Truth's order is Car (full name), Horsepower, Price (MSRP). Both are sensible; Candidate's split of car identity into two columns makes the grouping slightly more explicit, but Ground Truth's single Car column is also a valid and equally logical reading order.
-[FAIL] [JUDGE] Color theme/palette taste: 1/3 -- judge score 2/5 -- The Candidate shows no visible color highlighting or conditional formatting of any kind -- the price column (which should be colored per CANONICAL_MEASURES) is rendered in plain text with no color gradient. The Ground Truth uses a clear dark-blue diverging-style color for the Price column to highlight values. The Candidate's complete absence of color encoding is a significant departure from best-practice data visualization.

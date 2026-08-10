@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080527_house_6prompts/prompts/gtcars_top10_by_country/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
-TOTAL: 49/99 (49.5%)
+TOTAL: 43/90 (47.8%)
   Data-compliance:        20/51
-  Formatting-compliance:  29/48
+  Formatting-compliance:  23/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[('italy', '458 speciale'), ('italy', 'aventador'), ('italy', 'f12berlinetta'), ('italy', 'ff'), ('italy', 'gtc4lusso')], extra=[('italy', 'ferrari 458 speciale'), ('italy', 'ferrari f12berlinetta'), ('italy', 'ferrari ff'), ('italy', 'ferrari gtc4lusso'), ('italy', 'ferrari laferrari')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/1 canonical measures have a value-matching candidate column; unmatched: ['msrp']
@@ -24,10 +24,7 @@ TOTAL: 49/99 (49.5%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/1 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['msrp']
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
 [FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- Candidate title 'Top 10 Most Expensive GT Cars' captures the core subject but is slightly less specific than the ground truth's 'The 10 Priciest GT Cars, by Country of Origin', which includes the grouping dimension in the title itself. The candidate's title accurately names the table's content but de-emphasizes the grouping structure that is central to the prompt.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 3/5 -- Candidate subtitle 'Grouped by country of origin with drivetrain and transmission details' adds context beyond the title but overlaps somewhat with the title's scope. The ground truth subtitle 'MSRP, drivetrain, and transmission for the ten most expensive cars in the gtcars dataset' specifies what's measured (MSRP) and adds data-source context ('gtcars dataset'), providing slightly more useful clarification without redundancy.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- Both tables use the same column order: Car model (stub), MSRP, Drivetrain, Transmission. This order is sensible—it groups identifying information first, then price (the sorting/ranking metric), then supporting attributes. The candidate preserves this logical left-to-right flow equally well.
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- Both tables use a similar color scheme with light blue row grouping headers and a dark blue/navy bar for the top MSRP value. The candidate's palette is harmonious and tasteful, matching the ground truth's approach. The dark blue highlighting on the $1,416,362 cell is equally effective in drawing attention to the highest price. Both are well-suited to the price-focused story, though neither shows meaningful difference in taste choice.

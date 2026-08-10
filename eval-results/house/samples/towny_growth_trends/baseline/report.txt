@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080527_house_6prompts/prompts/towny_growth_trends/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 23/96 (24.0%)
+TOTAL: 18/87 (20.7%)
   Data-compliance:        10/48
-  Formatting-compliance:  13/48
+  Formatting-compliance:  8/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 13 canonical measures unverifiable
@@ -24,10 +24,7 @@ TOTAL: 23/96 (24.0%)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct', 'density_1996', 'density_2001', 'density_2006', 'density_2011', 'density_2016', 'density_2021', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=False, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title ('Population Growth Trends: Top 15 Fastest-Growing Ontario Towns') is accurate and captures the core framing of fastest-growing towns. However, it is slightly less specific than the ground truth's 'Ontario's Fastest-Growing Towns, 1996–2021,' which explicitly anchors the time period in the title itself. Both convey the right story, but the ground truth's framing is tighter.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 3/5 -- The candidate's subtitle ('Population Density (per km²) Across Census Years 1996–2021 with Period-to-Period Changes') accurately describes what the table shows, but it overlaps somewhat with the title's mention of 'growth trends.' The ground truth's subtitle ('Density at each Census year and the percent change between consecutive Censuses, ranked by total population growth over the full period') is more precise in explaining the ranking logic and the distinction between density snapshots and inter-census growth rates.
 [FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate's column ordering is confusing and poorly structured. It places 1996 Density, then 1996–01 Change %, then 2001 Density, then 2001–06 Change %, alternating throughout, before jumping to Total Growth % at the far right. This interleaving forces the reader to jump back and forth between density and change columns for the same period. The ground truth groups all density columns together (1996–2021) in their own spanned section, then all inter-census growth percentages together in a separate section, which reads much more naturally.
-[FAIL] [JUDGE] Color theme/palette taste: 1/3 -- judge score 1/5 -- The candidate table appears to have no color coding applied to any of the numerical data columns. The ground truth uses a light blue sequential gradient for the density columns and a yellow-to-green diverging palette for the growth-percentage columns, making patterns instantly visible. The absence of any color encoding in the candidate severely undermines readability and leaves important structural patterns invisible to the reader.

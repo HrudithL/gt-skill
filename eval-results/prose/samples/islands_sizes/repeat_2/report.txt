@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/islands_sizes/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/islands_sizes.py
 
-TOTAL: 83/91 (91.2%)
+TOTAL: 76/82 (92.7%)
   Data-compliance:        43/43
-  Formatting-compliance:  40/48
+  Formatting-compliance:  33/39
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 1/1 canonical measures have a value-matching candidate column
@@ -24,10 +24,7 @@ TOTAL: 83/91 (91.2%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=False, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Islands by Size' is clear and accurate, capturing the core framing of ranking islands by their size. The ground truth's 'Islands of the World, by Size' adds geographic scope ('of the World'), which provides slightly more context, but both titles serve the same essential purpose.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 4/5 -- The candidate's subtitle 'Area in thousands of square miles' clearly specifies the unit and scope without redundancy to the title. The ground truth's subtitle 'Land area in thousands of square miles, continents and smaller islands together' adds the clarification about continents being included, which is expanded in the caption. The candidate's subtitle is non-redundant and useful, though slightly less detailed.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate orders columns as island name (stub, leftmost) followed by size values. This mirrors the ground truth's 'Landmass' stub followed by 'Size,' and is a natural, sensible left-to-right reading order for the analytical story of ranking islands by their area.
-[PASS] [JUDGE] Color theme/palette taste: 3/3 -- judge score 5/5 -- The candidate uses a sequential blue palette (dark navy for largest values, lightening as values decrease) that is harmonious, legible, and well-suited to representing a size/magnitude metric. The hue choice matches the ground truth's own sequential blue palette in taste and appropriateness for the story.

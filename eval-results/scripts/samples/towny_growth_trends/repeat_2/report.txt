@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080530_scripts_6prompts/prompts/towny_growth_trends/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 76/96 (79.2%)
+TOTAL: 71/87 (81.6%)
   Data-compliance:        38/48
-  Formatting-compliance:  38/48
+  Formatting-compliance:  33/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
@@ -24,10 +24,7 @@ TOTAL: 76/96 (79.2%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 6/6, truncate=False correct 6/6, autocolor_text=True correct 6/6
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 3/4 -- 11/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct']
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
 [FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Ontario Towns: Population Growth Trends (1996-2021)' is accurate and captures the core subject and time period. It is slightly more generic than the ground truth's 'Ontario's Fastest-Growing Towns, 1996–2021', which explicitly highlights the 'fastest-growing' angle; the candidate defers that key qualifier to the subtitle, resulting in a less punchy framing.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 4/5 -- The subtitle 'Top 15 Fastest-Growing Municipalities with Density Changes Across Census Years' adds clarifying context (the 'fastest-growing' criterion and reference to density changes) without wholly overlapping the title. However, it is slightly less precise than the ground truth's subtitle, which explicitly names density at each Census year and inter-Census percent changes as the specific measures shown.
 [FAIL] [JUDGE] Column order quality: 0/2 -- judge score 1/5 -- The candidate's column order is confusing and unintuitive. Raw population values (population_1996 through population_2021) appear first, followed by percentage changes, then density values at the end. This scatters related data: density columns are far from the population change percentages they help contextualize, and the raw population figures add little analytical value given that the table is supposed to show density changes and inter-census growth percentages. The ground truth groups density values together, then inter-census growth percentages—a far more coherent reading order.
-[FAIL] [JUDGE] Color theme/palette taste: 1/3 -- judge score 2/5 -- The candidate uses a blue background for some rows (likely row alternation) and appears to apply green coloring to percentage-change cells, but the color application is muddy and difficult to parse from the compressed rendering. The ground truth employs a clean sequential (blue) palette for density columns and a yellow-to-green diverging palette for growth percentages, creating clear visual distinction and harmony. The candidate's palette choices appear less intentional and harmonious.

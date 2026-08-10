@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/sp500_monthly_performance/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/sp500_monthly_performance.py
 
-TOTAL: 54/96 (56.2%)
+TOTAL: 48/87 (55.2%)
   Data-compliance:        17/48
-  Formatting-compliance:  37/48
+  Formatting-compliance:  31/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[(None, 'apr 2010'), (None, 'apr 2011'), (None, 'apr 2012'), (None, 'apr 2013'), (None, 'apr 2014')], extra=[(None, '2010-01'), (None, '2010-02'), (None, '2010-03'), (None, '2010-04'), (None, '2010-05')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/6 canonical measures have a value-matching candidate column; unmatched: ['pct_change', 'best_day_gain', 'worst_day_loss', 'monthly_open', 'monthly_close', 'avg_volume']
@@ -24,10 +24,7 @@ TOTAL: 54/96 (56.2%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/6 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['monthly_open', 'monthly_close', 'pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss']
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=False, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'S&P 500 Monthly Performance (2010–2015)' is clear and accurate, capturing the same core framing as the ground truth's 'S&P 500 Monthly Performance, 2010–2015'. Both establish the dataset and date range immediately and prominently.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 4/5 -- The candidate's subtitle 'Opening price, closing price, percent change, average daily volume, and daily high-low range by month. Percent change is monthly close-minus-open divided by open.' adds real clarification about what is measured and the percent-change formula. However, it does not fully align with the ground truth's subtitle style ('grouped by year') and it introduces the 'daily high-low range' framing, which is somewhat at odds with the actual 'best/worst single-day gain/loss' shown.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate's order (Month, Open, Close, Pct Change, Avg Volume, Max Gain, Max Loss) is sensible and largely mirrors the ground truth's order, with identifying info first (month) and related values grouped. The single-day extremes are placed at the right, which is reasonable. However, the ground truth uses a spanner to group the extremes under 'Single-day extremes within the month,' whereas the candidate presents them flat; this is a minor structural difference that slightly reduces clarity.
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a diverging color palette (green for positive, orange/red for negative) on the percent-change and gain/loss columns, which harmonizes well with the table's story of gains vs. losses. The hues are tasteful and legible. However, the ground truth employs a spanner structure that visually separates 'Single-day extremes' with a distinct header band tint, providing additional visual hierarchy the candidate lacks; the candidate's palette alone is solid but less architecturally sophisticated.

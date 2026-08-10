@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080537_creator_6prompts/prompts/sp500_monthly_performance/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/sp500_monthly_performance.py
 
-TOTAL: 13/81 (16.0%)
+TOTAL: 11/78 (14.1%)
   Data-compliance:        2/44
-  Formatting-compliance:  11/37
+  Formatting-compliance:  9/34
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: no top-level `gt` GT instance in table.py
@@ -24,10 +24,7 @@ TOTAL: 13/81 (16.0%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=False present=True, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Subtitle quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
 [N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Color theme/palette taste: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source

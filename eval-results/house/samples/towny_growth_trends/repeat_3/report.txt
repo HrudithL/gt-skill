@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080527_house_6prompts/prompts/towny_growth_trends/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 71/96 (74.0%)
+TOTAL: 65/87 (74.7%)
   Data-compliance:        40/48
-  Formatting-compliance:  31/48
+  Formatting-compliance:  25/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
@@ -24,10 +24,7 @@ TOTAL: 71/96 (74.0%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 5/5, truncate=False correct 5/5, autocolor_text=True correct 5/5, reverse orientation matches truth 5/5
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct', 'density_1996', 'density_2001', 'density_2006', 'density_2011', 'density_2016', 'density_2021', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
 [FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Top 15 Fastest-Growing Ontario Towns' accurately captures the core subject and is clear. However, it is slightly less specific than the ground truth's 'Ontario's Fastest-Growing Towns, 1996–2021', which establishes the time period in the title itself, anchoring the scope more immediately.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 3/5 -- The candidate's subtitle 'Population and density changes across census years 1996–2021, with period-to-period growth rates' is accurate and non-redundant with the title. However, it is more generic than the ground truth's subtitle, which explicitly clarifies the ranking variable: 'Density at each Census year and the percent change between consecutive Censuses, ranked by total population growth over the full period.' The candidate does not make the ranking criterion transparent at this level.
 [FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate orders columns by census year (1996, 2001, 2006, 2011, 2016, 2021), with Pop and Density nested under each year. This structure buries Density (the focus) alongside Population counts and makes it harder to trace density trends horizontally. The ground truth separates Density columns into a cohesive block, then groups all inter-Census growth percentages together, creating a far clearer narrative flow. The candidate also omits the critical 'Rank' and 'Total Growth 1996–2021' hero columns at the front, making the ranking invisible.
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 3/5 -- The candidate uses a yellow-to-green gradient for the '% Change' columns and appears to apply light blue to density columns, which is functional and legible. However, it lacks the visual hierarchy and thematic coherence of the ground truth: the ground truth's blue header band, distinct density coloring, and strategic use of green for positive growth with yellow for neutral/slightly negative changes creates a more polished and story-forward aesthetic. The candidate's palette is acceptable but generic.

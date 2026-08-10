@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/airquality_monthly_summary/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/airquality_monthly_summary.py
 
-TOTAL: 88/97 (90.7%)
+TOTAL: 82/88 (93.2%)
   Data-compliance:        44/49
-  Formatting-compliance:  44/48
+  Formatting-compliance:  38/39
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 3/3 canonical measures have a value-matching candidate column
@@ -24,10 +24,7 @@ TOTAL: 88/97 (90.7%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 2/2, truncate=False correct 2/2, autocolor_text=True correct 2/2, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 3/3 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Air Quality: Monthly Averages' is clear and accurate, capturing the core subject matter. The ground truth's title 'Monthly Air Quality in New York, 1973' adds geographic and temporal specificity that the candidate lacks ('New York, 1973' vs. no location/year mentioned). Both frame the table as monthly averages, but the ground truth's framing is more precise and informative.
-[PASS] [JUDGE] Subtitle quality: 3/3 -- judge score 5/5 -- The candidate's subtitle 'Temperature, Wind Speed, and Ozone Levels' clearly enumerates the three measures being shown and adds meaningful context beyond the title. The ground truth's subtitle 'Average temperature, wind speed, and ozone level for each month, May through September' provides identical conceptual information with slightly more descriptive phrasing; both are non-redundant and equally useful.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate orders columns as Month, Temperature, Wind, Ozone, which is logical and follows a natural left-to-right reading flow. The ground truth uses the same order. Both prioritize the identifying column (month) first, then present the three measured quantities in a sensible sequence that matches the subtitle's enumeration.
-[FAIL] [JUDGE] Color theme/palette taste: 1/3 -- judge score 2/5 -- The candidate uses conflicting color schemes: blue for temperature (correct, sequential), but green for wind speed and no color for ozone. The ground truth correctly colors both temperature and ozone with diverging hues (blue-to-dark for temperature, peach-to-red for ozone) while keeping wind speed uncolored as a 'hero' column. The candidate's green coloring of wind speed contradicts the metadata's instruction that wind should be uncolored, and the palette lacks the harmonious design of the ground truth.

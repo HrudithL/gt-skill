@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""One-off: the transform that produced this consensus-tuning pass's
+"""One-off: the transform that produced both consensus-tuning passes'
 `eval-results/**` data (2026-08-09) -- kept for auditability, not meant to
 be re-run (it's already applied; running it again on the current
-`metrics.json` would be a no-op since the 3 checks it removes are already
-gone from every check list).
+`metrics.json` would be a no-op since all 6 checks it removes are already
+gone from every check list). Run against `main`'s ORIGINAL, pre-either-pass
+`metrics.json` (not incrementally on top of a partially-transformed one).
 
 Removing a check from the comparator is provably a pure subtraction of
 that check's fixed points from whichever bucket it belonged to -- confirmed
-by grep that none of the 3 removed checks' underlying fields/helpers are
+by grep that none of the 6 removed checks' underlying fields/helpers are
 read by any other still-live check (see `eval-results/SUMMARY.md`'s
 methodology note). Re-running the comparator fresh against each candidate
 instead would (a) require a live, correctly-populated execution environment
@@ -15,7 +16,7 @@ instead would (a) require a live, correctly-populated execution environment
 ephemeral worktree) and (b) if run against a DIFFERENT sweep than the one
 already scored, conflates "the comparator changed" with "the candidates
 changed" into one number -- both mistakes an internal review caught in an
-earlier draft of this pass. Pure subtraction on the already-scored,
+earlier draft of the first pass. Pure subtraction on the already-scored,
 already-committed `metrics.json` avoids both problems and works identically
 for all 4 skills.
 """
@@ -28,14 +29,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 EVAL_RESULTS = ROOT / "eval-results"
 
+# Pass 1 (2026-08-09): uniformly near-zero across every skill.
+# Pass 2 (2026-08-09): flat/non-discriminating across every skill (moderate
+# score, but the same moderate score regardless of which skill produced the
+# candidate) -- see eval-results/SUMMARY.md for both passes' full rationale.
 REMOVED = [
     "Hero-column formatting when nothing is colored",
     "Stub tint + grey-budget correctness",
     "Caption doesn't just restate the subtitle",
+    "Title/subtitle/caption/source presence per gating rules",
+    "Subtitle quality",
+    "Color theme/palette taste",
 ]
 REMOVED_SET = set(REMOVED)
 
-# All 3 happen to be Formatting-compliance checks -- if a future pass
+# All 6 happen to be Formatting-compliance checks -- if a future pass
 # removes a Data-compliance check too, this script's bucket handling
 # (format_earned/possible only) would need to branch per-check.
 

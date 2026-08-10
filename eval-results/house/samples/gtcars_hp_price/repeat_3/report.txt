@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080527_house_6prompts/prompts/gtcars_hp_price/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 55/94 (58.5%)
+TOTAL: 49/85 (57.6%)
   Data-compliance:        22/46
-  Formatting-compliance:  33/48
+  Formatting-compliance:  27/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 2 canonical measures unverifiable
@@ -24,10 +24,7 @@ TOTAL: 55/94 (58.5%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Title/subtitle/caption/source presence per gating rules: 2/3 -- title=OK, subtitle=OK, caption expected=True present=True, source expected=True present=False
 [FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'GT Cars Database' is accurate but generic—it names the dataset without capturing the specific analytical angle. The ground truth's title 'GT Cars: Horsepower and Price' more directly frames what the table shows and its comparative story. The candidate's title is technically correct but lacks the specificity of the ground truth's framing.
-[FAIL] [JUDGE] Subtitle quality: 2/3 -- judge score 3/5 -- The candidate's subtitle 'Horsepower and Price for High-Performance Vehicles' adds modest context about the data's scope. The ground truth's subtitle 'All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP' provides more precise, actionable detail (exact count, sort order). The candidate's subtitle is useful but overlaps with the title and omits the sorting rationale.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's order (Manufacturer → Model → Horsepower → Price) reads naturally: the identifying columns (Manufacturer, Model) come first in the stub, followed by the two metric columns in a sensible sequence (power before price). This mirrors a common data-browsing pattern and is equally sensible as the ground truth's single 'Car' stub followed by the two metrics.
-[FAIL] [JUDGE] Color theme/palette taste: 2/3 -- judge score 4/5 -- The candidate uses a light blue background row-alternating scheme with a darker blue header band and navy highlighting on the Ferrari LaFerrari (highest price). The palette is harmonious and legible. The ground truth employs a similar light-to-dark blue gradient for the Price column with a navy header. The candidate's design is tasteful and well-integrated, though the ground truth's price-column-specific coloring more directly encodes the quantitative emphasis on MSRP.
