@@ -11,14 +11,17 @@ that check's fixed points from whichever bucket it belonged to -- confirmed
 by grep that none of the 6 removed checks' underlying fields/helpers are
 read by any other still-live check (see `eval-results/SUMMARY.md`'s
 methodology note). Re-running the comparator fresh against each candidate
-instead would (a) require a live, correctly-populated execution environment
-(`creator`'s no longer exists -- its raw sweep dir lived only in a deleted
-ephemeral worktree) and (b) if run against a DIFFERENT sweep than the one
-already scored, conflates "the comparator changed" with "the candidates
-changed" into one number -- both mistakes an internal review caught in an
-earlier draft of the first pass. Pure subtraction on the already-scored,
-already-committed `metrics.json` avoids both problems and works identically
-for all 4 skills.
+instead would (a) require a live, correctly-populated execution
+environment -- NONE of the 4 skills' recorded `sweep_dir`s still exist on
+disk (the whole ephemeral worktree they lived in was deleted after merge);
+`house`/`prose`/`scripts` merely have OTHER, newer local sweeps that
+`_lib.find_latest_sweep_dir()` would silently substitute instead, while
+`creator` has no substitute at all and would hard-fail -- and (b) if run
+against a DIFFERENT sweep than the one already scored, conflates "the
+comparator changed" with "the candidates changed" into one number -- both
+mistakes an internal review caught in an earlier draft of the first pass.
+Pure subtraction on the already-scored, already-committed `metrics.json`
+avoids both problems and works identically for all 4 skills.
 """
 from __future__ import annotations
 

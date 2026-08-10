@@ -11,10 +11,13 @@ its ground truth's rendered PNG, returning strict structured output.
 Nothing else in the repo calls this yet (that wiring is Slice 2, on
 ``runner.comparator``); this module is usable standalone.
 
-(One of the original two moved checks, caption-quality, was later removed
-entirely rather than kept judge-backed -- see
-``.planning/12-consensus-tuning.md``; the 4 keys `judge()` returns today
-reflect that.)
+(Three of the original 7 dimensions this module scored were later removed
+entirely rather than kept judge-backed -- caption-quality (one of the
+original two moved checks), subtitle-quality, and color-theme-quality --
+see ``.planning/12-consensus-tuning.md``. Column order and title clarity
+are still judged; subtitle wording and palette taste are, once again,
+unscored -- field data showed neither discriminated skill quality. The 4
+keys `judge()` returns today reflect all of this.)
 
 This module NEVER renders, execs, or regenerates a PNG -- it only ever reads
 bytes from two already-existing paths (mirrors ``runner.execution_tier``'s
@@ -256,7 +259,7 @@ def _load_image_tiles_b64(path: Path) -> list[str]:
     "part i of N" labels ``_image_blocks`` attaches, and by the system
     prompt's "Image tiling" section) for keeping small text legible -- an
     acceptable tradeoff here since this judge's 4 dimensions are about
-    labels/captions/titles/column-order/color, not the kind of precise
+    labels/titles/grouping-choice/column-order, not the kind of precise
     cross-row numeric reading the deterministic comparator's own value-diff
     checks already own.
     """

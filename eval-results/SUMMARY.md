@@ -143,8 +143,10 @@ the per-skill baseline actually used in that comparison.
 **`prose`** — highest mean score and most consistent of the four, before
 and after both consensus-tuning passes. `house` is the right pick when
 cost matters more than the last several points of quality. `scripts`'
-checker loop costs the most for a worse mean and worse consistency than
-`house` under this scoring. `creator` is not yet a real contender.
+checker loop earns a higher mean than `house`'s, but costs the most and is
+the least consistent of the three real skills — its mean-score edge over
+`house` doesn't come with a consistency edge too. `creator` is not yet a
+real contender.
 
 ## Layout
 
