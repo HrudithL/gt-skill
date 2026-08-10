@@ -1,30 +1,30 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080530_scripts_6prompts/prompts/gtcars_hp_price/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/gtcars_hp_price.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124542_scripts_6prompts/prompts/gtcars_hp_price/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 75/82 (91.5%)
-  Data-compliance:        41/43
-  Formatting-compliance:  34/39
+TOTAL: 50/85 (58.8%)
+  Data-compliance:        18/46
+  Formatting-compliance:  32/39
 
-[PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
-[PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 2/2 canonical measures have a value-matching candidate column
-[PASS] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 6/6 -- ≤2 measures OK; 1/1 canonical colored measures covered by a candidate color call
+[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=['acura nsx', 'aston martin db11', 'aston martin rapide s', 'aston martin vanquish', 'aston martin vantage'], extra=['acura', 'aston martin', 'aston martin', 'aston martin', 'aston martin']
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/2 canonical measures have a value-matching candidate column; unmatched: ['msrp', 'hp']
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/1 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.50 (candidate-only=['Car'], missing=['car']); value-matched renamed columns: {'hp': 'Horsepower', 'msrp': 'Price'}
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- visible-column overlap 0.00 (candidate-only=['Horsepower', 'Manufacturer', 'Model', 'Price'], missing=['car', 'hp', 'msrp'])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Grouping_choice_quality is only applicable when the ground truth uses visible row grouping AND there is no 'grouping' key in REQUIRED_INSTRUCTIONS. The ground truth does not group rows by any variable, so this dimension does not apply.
+[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by manufacturer (the stub columns show 'Ford,' 'Ferrari,' 'Acura,' etc.), which is a sensible editorial choice that organizes the data logically and makes it easy to compare models within each brand. This grouping serves the analytical story well and is defensible as equally illuminating as the ground truth's approach (which presents a flat, price-sorted list with no explicit grouping structure).
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- The candidate correctly labels 'Horsepower' and 'Price' – both concepts match the ground truth's labels and align with the LABEL_SYNONYMS (hp/horsepower, msrp/price). Column headers are unambiguous and clearly name the underlying concepts.
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- The candidate's labels—'Model,' 'Horsepower,' and 'Price'—correctly name the underlying concepts. 'Horsepower' and 'Price' directly match the ground truth's label concepts (with 'Price' being a clear synonym for 'MSRP' per LABEL_SYNONYMS). The labels are clear, unambiguous, and instantly convey what each column represents.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=47, fully_filled=False -> expected striping=True, actual=False
+[PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=47, fully_filled=False -> expected striping=True, actual=True
 [PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; expected hue family 'navy' for palette 'blues', got 'navy'
-[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
-[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/2 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['hp', 'msrp']
+[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'GT Cars: Horsepower and Price' is identical to the ground truth's title and captures the exact same framing—a straightforward presentation of the dataset with the two key metrics.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate's column order (Car | Horsepower | Price) is sensible and reads naturally for the story. However, the ground truth places Horsepower before Price in the header (same order), making them equally good. The candidate groups cars somewhat by brand within the listed rows, which aids readability, though neither table explicitly enforces or disallows this pattern across all 47 vehicles.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'GT Cars: Horsepower and Price' matches the ground truth's framing exactly, capturing the core subject. However, the subtitle 'Premium performance vehicles by manufacturer' is different from the ground truth's 'All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP.' The candidate's subtitle is less precise—it describes the data conceptually rather than stating the complete scope and sort order. Both convey accuracy, but the ground truth's is more informative.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (Manufacturer/Model, Horsepower, Price) is logical and sensible. Placing the identifying/categorizing information (manufacturer and model) first, followed by the two numerical measures (horsepower and price), creates a natural reading flow that matches the analytical goal of showing cars' horsepower and price. This is equally sensible as the ground truth's single-column flat stub order.

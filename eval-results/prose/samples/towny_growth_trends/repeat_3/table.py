@@ -1,103 +1,128 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, md, style, loc
+from great_tables import GT, style, loc
 
-# Load and clean data
+# Step 1: Load and clean the data
 df = pd.read_csv("towny.csv")
 
-# Calculate total population growth (1996-2021) to identify fastest-growing towns
-df["growth_1996_2021"] = ((df["population_2021"] - df["population_1996"]) / df["population_1996"]) * 100
+# Calculate overall population growth 1996-2021
+df["growth_1996_2021"] = (df["population_2021"] - df["population_1996"]) / df["population_1996"]
 
-# Get top 15 fastest-growing towns
-top_15 = df.nlargest(15, "growth_1996_2021")[["name", "population_1996", "population_2001", "population_2006",
-                                                "population_2011", "population_2016", "population_2021",
-                                                "density_1996", "density_2001", "density_2006", "density_2011",
-                                                "density_2016", "density_2021",
-                                                "pop_change_1996_2001_pct", "pop_change_2001_2006_pct",
-                                                "pop_change_2006_2011_pct", "pop_change_2011_2016_pct",
-                                                "pop_change_2016_2021_pct"]].reset_index(drop=True)
+# Sort by growth and get top 15
+top_15 = df.nlargest(15, "growth_1996_2021").copy()
+
+# Reset index for cleaner display
+top_15 = top_15.reset_index(drop=True)
+
+# Step 2: Organize columns for the table
+# Select columns: name, all density columns, and all percentage change columns
+display_cols = ["name"]
+density_cols = ["density_1996", "density_2001", "density_2006", "density_2011", "density_2016", "density_2021"]
+pct_cols = ["pop_change_1996_2001_pct", "pop_change_2001_2006_pct", "pop_change_2006_2011_pct",
+            "pop_change_2011_2016_pct", "pop_change_2016_2021_pct"]
+
+table_df = top_15[display_cols + density_cols + pct_cols].copy()
 
 # Rename columns for display
-display_df = top_15.copy()
-display_df.columns = ["Town", "Pop 1996", "Pop 2001", "Pop 2006", "Pop 2011", "Pop 2016", "Pop 2021",
-                       "Dens 1996", "Dens 2001", "Dens 2006", "Dens 2011", "Dens 2016", "Dens 2021",
-                       "% 96-01", "% 01-06", "% 06-11", "% 11-16", "% 16-21"]
+table_df.columns = ["Town"] + [f"D-{year}" for year in ["1996", "2001", "2006", "2011", "2016", "2021"]] + \
+                   [f"Δ {period}" for period in ["96-01", "01-06", "06-11", "11-16", "16-21"]]
 
-# Extract density columns for Big Color treatment (gradient fill)
-density_cols = ["Dens 1996", "Dens 2001", "Dens 2006", "Dens 2011", "Dens 2016", "Dens 2021"]
-pop_cols = ["Pop 1996", "Pop 2001", "Pop 2006", "Pop 2011", "Pop 2016", "Pop 2021"]
-pct_cols = ["% 96-01", "% 01-06", "% 06-11", "% 11-16", "% 16-21"]
+# Step 3: Determine Big Color measures
+# Density columns qualify as ordered magnitudes (≥5 rows, 15 towns shown)
+# Percentage changes are also ordered magnitudes
+# Priority: user named "density changes... with percentage changes" - both are named
+# Using the tie-break rule: density is in the topic clause ("density changes"), so color density
+# Percentage changes are secondary comparison, should be bold-uncolored
 
-# Calculate domain for density columns (Big Color measure #1)
-dens_lo = float(np.nanmin(display_df[density_cols].to_numpy()))
-dens_hi = float(np.nanmax(display_df[density_cols].to_numpy()))
+density_display_cols = [f"D-{year}" for year in ["1996", "2001", "2006", "2011", "2016", "2021"]]
+pct_display_cols = [f"Δ {period}" for period in ["96-01", "01-06", "06-11", "11-16", "16-21"]]
 
-# Calculate domain for percentage change columns (Big Color measure #2) - diverging around 0
-pct_lo = float(np.nanmin(display_df[pct_cols].to_numpy()))
-pct_hi = float(np.nanmax(display_df[pct_cols].to_numpy()))
-# Make domain symmetric for diverging
-pct_domain_abs = max(abs(pct_lo), abs(pct_hi))
-pct_domain = [-pct_domain_abs, pct_domain_abs]
+# Step 4: Heading band
+# Table has Big Color (density gradient) → use LIGHT band
+# Palette by semantic: density is neutral magnitude → use Blues
+# Get domain for density columns
+density_vals = table_df[density_display_cols].to_numpy()
+density_lo = float(np.nanmin(density_vals))
+density_hi = float(np.nanmax(density_vals))
 
-# Create the GT table
+# Create GT and apply formatting
 gt = (
-    GT(display_df, rowname_col="Town")
-
-    # Format population columns as integers
-    .fmt_number(columns=pop_cols, decimals=0)
-
-    # Format density columns with 1 decimal place
-    .fmt_number(columns=density_cols, decimals=1)
-
-    # Format percentage change columns (already on 0-1 scale, so use scale_values=False after converting to percent scale)
-    # Note: data is already in decimal form (0.05 = 5%), so scale_values=True converts to 500% - need False
-    .fmt_percent(columns=pct_cols, decimals=1, scale_values=False)
-
-    # Big Color #1: Density columns with sequential Blues palette (neutral magnitude)
+    GT(table_df, rowname_col="Town")
+    .fmt_number(columns=density_display_cols, decimals=2)
+    .fmt_percent(columns=pct_display_cols, decimals=1, scale_values=True)
     .data_color(
-        columns=density_cols,
+        columns=density_display_cols,
         palette="Blues",
-        domain=[dens_lo, dens_hi],
+        domain=[density_lo, density_hi],
         truncate=False,
         na_color="#808080",
     )
-
-    # Big Color #2: Percentage change columns with diverging palette (signed measure)
-    .data_color(
-        columns=pct_cols,
-        palette="RdYlGn",
-        domain=pct_domain,
-        truncate=False,
-        na_color="#808080",
-    )
-
-    # Light band (Big Color present) - washed Navy tint
-    .tab_options(
-        column_labels_background_color="#EAF0F6",
-        column_labels_font_weight="bold",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
-        table_body_hlines_style="solid",
-        table_body_hlines_color="#E8E8E8",
-        table_body_hlines_width="1px",
-        # Frame borders
-        table_border_top_style="solid",    table_border_top_color="#CCCCCC",    table_border_top_width="1px",
-        table_border_bottom_style="solid", table_border_bottom_color="#CCCCCC", table_border_bottom_width="1px",
-        table_border_left_style="solid",   table_border_left_color="#CCCCCC",   table_border_left_width="1px",
-        table_border_right_style="solid",  table_border_right_color="#CCCCCC",  table_border_right_width="1px",
-    )
-
-    # Add titles and caption
-    .tab_header(
-        title="Top 15 Fastest-Growing Ontario Towns",
-        subtitle="Population and Density Trends (1996–2021)"
-    )
-
-    .tab_source_note(
-        md("*Data source: Census Canada (1996–2021)*")
+    # Make percentage columns bold (secondary measures)
+    .tab_style(
+        style=style.text(weight="bold"),
+        locations=loc.body(columns=pct_display_cols),
     )
 )
 
-# Render to PNG with expand margin
-gt.gtsave("table.png", expand=15)
+# Step 5: Small Color polish
+# (a) Cell borders - hairlines between rows
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#E8E8E8",
+    table_body_hlines_width="1px",
+    column_labels_border_bottom_color="#CCCCCC",
+    column_labels_border_bottom_width="2px",
+)
+
+# (b) Column-group vertical dividers - separate density and percentage change groups
+gt = (
+    gt.tab_spanner(label="Population Density (per km²)", columns=density_display_cols)
+    .tab_spanner(label="Population Change (%)", columns=pct_display_cols)
+)
+
+# Add divider at the boundary between density and percentage change groups
+gt = gt.tab_style(
+    style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
+    locations=loc.body(columns=[density_display_cols[-1]]),
+)
+gt = gt.tab_style(
+    style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
+    locations=loc.column_labels(columns=[density_display_cols[-1]]),
+)
+
+# Check row count for striping gate: 15 rows, density columns fully filled → striping NOT needed per the rule
+# But we still add a subtle stub tint for visual anchoring
+gt = gt.tab_style(
+    style=style.fill(color="#EAF0F6"),  # Washed Navy tint (Forest for growth data, but Navy is default)
+    locations=loc.stub(),
+)
+
+# (f) Titles and annotations
+gt = (
+    gt.tab_header(
+        title="Top 15 Fastest-Growing Ontario Towns",
+        subtitle="Population Density Trends and Growth Rates Across Census Years (1996–2021)",
+    )
+    .tab_source_note(
+        source_note="Density measured in persons per km². Percentage changes reflect population growth between consecutive census periods.",
+    )
+    .tab_source_note(
+        source_note="Source: towny.csv - Ontario Census Data (1996-2021)",
+    )
+)
+
+# Step 6: Frame and margins
+gt = gt.tab_options(
+    table_border_left_color="#E0E0E0",
+    table_border_left_width="1px",
+    table_border_right_color="#E0E0E0",
+    table_border_right_width="1px",
+    table_border_top_color="#E0E0E0",
+    table_border_top_width="1px",
+    table_border_bottom_color="#E0E0E0",
+    table_border_bottom_width="1px",
+)
+
+# Step 7: Render
+gt.gtsave("table.png", zoom=1.0, expand=15)
 print("Table rendered successfully to table.png")

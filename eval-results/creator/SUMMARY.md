@@ -5,9 +5,12 @@ repeats + 1 auto-baseline), Haiku, scored by `runner.comparator.compare()`
 against each prompt's ground truth. Full detail in [`metrics.json`](metrics.json).
 This sweep's raw run directory has since been deleted (it lived only in an
 ephemeral worktree), so its candidates can no longer be re-executed — not
-a problem for either update below, since removing a check is a pure point
-subtraction that never needed re-execution in the first place (see the
-top-level [`SUMMARY.md`](../SUMMARY.md)).
+a problem for either consensus-tuning update below, since removing a
+check is a pure point subtraction that never needed re-execution in the
+first place (see the top-level [`SUMMARY.md`](../SUMMARY.md)). Unlike
+`house`/`prose`/`scripts` (each refreshed to a 2026-08-09 sweep — see the
+top-level file's "Data refresh" section), `creator` has no fresher sweep
+to refresh to; the numbers below are still on 2026-08-07 data.
 
 **Comparator methodology (2026-08-09, 2 passes):** 6 checks were removed
 from `runner/comparator.py` — 3 uniformly near-zero across every skill

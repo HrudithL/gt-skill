@@ -72,81 +72,76 @@ with the user via AskUserQuestion before any code changed.
 **Combined effect**: Formatting-compliance ceiling 61 → 53 → 44 pts.
 Data-compliance unaffected throughout. Combined: 114 → 106 → 97 pts.
 
-**Every number below re-scores the exact same already-existing candidates**
-(the same sweep this file has always reported on) **against the updated
-comparator — nothing was re-generated or re-executed.** Removing a check is
-a pure subtraction of that check's fixed points from whichever bucket it
-belonged to (confirmed by grep — none of the 6 removed checks' underlying
-fields are read by any other check), so holding the candidate set fixed
-isolates the comparator change as the only variable. This holds exactly
-for the 20 surviving *mechanical* checks: the transform (`_apply_check_
-removal.py`) only ever filters the 6 removed checks out of each
-invocation's already-computed check list and re-sums, never recomputes a
-surviving check's own value, so every surviving mechanical check's
-points/passed/tier are byte-identical to `main`'s original data by
-construction — a live dual-comparator A/B run against a first, smaller
-version of this same transform (pass 1's 3 checks) already confirmed this
-holds in practice, not just in theory. It holds only *approximately* for
-the 4 surviving judge-backed checks' stored scores, since those were elicited by the
-judge's original 7-dimension system prompt (now 4 dimensions) — a live
-re-run of the judge today on the same candidates could score those
-dimensions slightly differently. The transform script that produced this
-data is committed at [`_apply_check_removal.py`](_apply_check_removal.py)
-for auditability.
+## Data refresh (2026-08-09, after both passes above)
+
+`house`, `prose`, and `scripts` below are each that skill's most recent
+6-prompt sweep — a genuinely fresh harness run (new LLM generation, new
+render, new real judge calls), not a re-score of the candidates the two
+passes above were validated against. This is a deliberate, separate step
+(explicit user request) from the consensus-tuning passes themselves — it
+is **not** a re-run of the "hold candidates fixed, change only the
+comparator" methodology those passes used to isolate their own effect; it
+simply reflects each skill's current state, scored by the current
+(24-check, 97-pt) comparator. `creator` is the one exception: its raw
+sweep directory no longer exists on disk (the ephemeral worktree it lived
+in was deleted after merge), so there is no fresher run available — its
+numbers here are still the pure point-subtraction transform applied to
+`main`'s original (2026-08-07) data, exactly as described above. The
+transform script that produced *that* number is committed at
+[`_apply_check_removal.py`](_apply_check_removal.py) for auditability.
 
 | Skill | Mean comparator score | vs. baseline | Score spread (3 repeats) | Mean cost/invocation |
 |---|---|---|---|---|
-| `prose` | **75.6%** | +51.0pp | **11.1pp** (most consistent) | $0.150 |
-| `scripts` | 69.9% | +47.6pp | 23.7pp (least consistent) | **$0.188** (most expensive) |
-| `house` | 60.0% | +38.7pp | 18.5pp | **$0.110** (cheapest of the 3 real skills) |
-| `creator` | 21.7% | **-3.2pp** | 18.1pp | $0.095 |
-| baseline (no skill) | 21.3-24.9%\* | — | n/a (1 run) | $0.060-$0.089\* |
+| `prose` | **74.9%** | +49.2pp | **10.6pp** (most consistent) | $0.167 |
+| `house` | 67.2% | +40.7pp | 17.8pp | $0.117 |
+| `scripts` | 62.4% | +37.7pp | 23.8pp (least consistent) | **$0.175** (most expensive) |
+| `creator` | 21.7%\*\* | **-3.2pp** | 18.1pp | **$0.095** (cheapest) |
+| baseline (no skill) | 24.7-26.6%\* | — | n/a (1 run) | $0.065-$0.090\* |
 
 \*baseline varies slightly per skill's sweep because each sweep's baseline
 run is a separate invocation (same prompts, no skill mounted, different
 sampling) — see each skill's `plots/cost.png` / `comparator_score.png` for
 the per-skill baseline actually used in that comparison.
+\*\*`creator` is on 2026-08-07 data (see above); the other three rows are
+on 2026-08-09 data. Its cost figure is the only one here that's cheaper
+than a real skill by construction of its A/B design, not evidence of
+efficiency — it's a candidate skill under evaluation, not a promoted one.
 
 ## Findings
 
-- **The ranking is unchanged across both passes**: `prose` > `scripts` >
-  `house` > `creator`, the same order this file has always reported.
-  Absolute scores moved (mostly up — removing checks nothing/nobody-
-  discriminating could pass raises everyone's floor — except `creator`,
-  which moved slightly *down* because it happened to score disproportionately
-  well, relative to its own dismal average, on exactly pass 2's 3 removed
-  checks), but the relative order never changed. Don't read a skill
-  recommendation into the absolute numbers moving; read it into the
-  (unchanged) order.
-- **`prose` still wins on both quality and consistency.** The full 7-step
-  flowchart + `REFERENCE.md` router produces the highest mean score and the
-  smallest repeat-to-repeat spread of the three real skills, at a mid-range
-  cost.
-- **`scripts`' checker loop is a double-edged sword.** It pushes the mean
-  score above `house`'s, but the loop itself (how many issues it catches,
-  how many fix attempts it takes) still makes `scripts` both the most
-  expensive and the least consistent of the three real skills.
-- **`house` is the cheap, decent option.** No flowchart, no checker loop —
-  one worked reference script + a rules file — costs the least of the three
-  real skills for a real (if smaller) quality gain over baseline.
-- **`creator` still loses to no skill at all.** Its score moved the
-  "wrong" direction across these passes (down, not up) precisely because
-  its few relative strengths were concentrated in checks that turned out
-  not to discriminate skill quality at all — everything that's actually
-  hard, it still doesn't do. It remains *below* baseline (21.7% vs. 24.9%,
-  -3.2pp). See `creator/SUMMARY.md` and `creator/progressive_disclosure.md`
-  for one concrete, falsifiable partial explanation (shallower, less-routed
+- **`prose` wins clearly.** 74.9%, ~7.7pp clear of the runner-up, and the
+  most consistent (10.6pp spread) — a genuinely decisive margin given the
+  runner-up spreads below.
+- **`house` and `scripts` swap places relative to the 2026-08-07 sweep
+  this file previously reported (`scripts` had led).** On today's fresh
+  runs, `house` edges out `scripts` (67.2% vs. 62.4%, a 4.8pp gap) — but
+  both skills' own repeat-to-repeat spread (17.8pp and 23.8pp) is *larger*
+  than that gap, so treat this specific ordering as noisy, not settled;
+  it would not be surprising for a third sweep to show either order. What
+  is consistent across both the 08-07 and 08-09 data: `scripts`' checker
+  loop is the **most expensive and least consistent** of the three real
+  skills every time it's been measured, for a mean score that's sometimes
+  ahead of `house`'s and sometimes behind it — the loop's cost is certain,
+  its benefit isn't.
+- **`house` remains the cheap, decent option** regardless of its exact
+  rank versus `scripts` this sweep — no flowchart, no checker loop, a real
+  and now-competitive quality gain over baseline for the lowest cost of
+  the three real skills.
+- **`creator` still loses to no skill at all.** -3.2pp behind baseline,
+  unchanged in direction from every prior measurement of it. See
+  `creator/SUMMARY.md` and `creator/progressive_disclosure.md` for one
+  concrete, falsifiable partial explanation (shallower, less-routed
   reference reading), not a full diagnosis.
 
 ## Which skill is best overall
 
-**`prose`** — highest mean score and most consistent of the four, before
-and after both consensus-tuning passes. `house` is the right pick when
-cost matters more than the last several points of quality. `scripts`'
-checker loop earns a higher mean than `house`'s, but costs the most and is
-the least consistent of the three real skills — its mean-score edge over
-`house` doesn't come with a consistency edge too. `creator` is not yet a
-real contender.
+**`prose`** — highest mean score by a decisive margin and the most
+consistent, on every sweep this file has ever reported, under every
+version of the comparator. `house` vs. `scripts` is genuinely close and
+sweep-dependent — pick `house` when cost and consistency matter, `scripts`
+only if its checker loop's occasional extra points are worth its
+reliably-higher cost and reliably-lower consistency to you. `creator` is
+not yet a real contender.
 
 ## Layout
 
@@ -182,4 +177,7 @@ here without changing candidates, use `_apply_check_removal.py` as a
 template (point-subtraction on the existing `metrics.json`, not a live
 re-run) rather than `make_plots.py`. Only use `make_plots.py` when you
 deliberately want to score a fresh sweep from scratch (needs
-`ANTHROPIC_API_KEY` in `.env` for the judge calls).
+`ANTHROPIC_API_KEY` in `.env` for the judge calls) — this is exactly how
+`house`/`prose`/`scripts`' current numbers were produced (see "Data
+refresh" above); it was a deliberate choice made once, not something to
+casually re-run expecting the same numbers back.

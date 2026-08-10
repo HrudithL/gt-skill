@@ -1,8 +1,8 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080530_scripts_6prompts/prompts/islands_sizes/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/islands_sizes.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124542_scripts_6prompts/prompts/islands_sizes/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/easy/ground_truth/islands_sizes.py
 
-TOTAL: 71/82 (86.6%)
+TOTAL: 74/82 (90.2%)
   Data-compliance:        42/43
-  Formatting-compliance:  29/39
+  Formatting-compliance:  32/39
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 1/1 canonical measures have a value-matching candidate column
@@ -11,20 +11,20 @@ TOTAL: 71/82 (86.6%)
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
 [PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping. REQUIRED_INSTRUCTIONS has no 'grouping' key, but grouping is not discretionary here since neither table groups at all—this dimension does not apply.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The ground truth uses a single 'Landmass' grouping column (continents and islands together), not a discretionary grouping by category. Since REQUIRED_INSTRUCTIONS contains no 'grouping' key, but the ground truth's structure is a single flat list rather than multiple groups, this dimension does not test a discretionary editorial choice here.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate labels the first column as unlabeled (no header shown in part 1) and the size column simply as 'size' rather than clarifying units. The ground truth explicitly labels columns as 'Landmass' and 'Size (thousand sq. mi.)', making units and concept immediately clear. The candidate's subtitle mentions units but the column header itself is vague.
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The column is labeled only as 'size' without units, whereas the ground truth clearly specifies 'Size (thousand sq. mi.)' and the subtitle states the units are 'in thousands of square miles'. The candidate subtitle says '(in square kilometers)' but the actual data values match the ground truth's thousands of square miles, creating a critical mismatch between the declared unit and the actual data shown.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
-[FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=MISSING (Step 5a, always required); dividers=OK
+[PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=48, fully_filled=True -> expected striping=False, actual=True
 [PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; expected hue family 'navy' for palette 'blues', got 'navy'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
+[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate title 'World's Largest Islands' is accurate and relevant, but it frames the table as largest islands specifically, whereas the ground truth's 'Islands of the World, by Size' frames it as a comprehensive size ranking. The candidate's framing is narrower and less aligned with the table's actual content (many smaller islands are included).
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's column order (island name on the left, size values on the right) reads naturally and matches the ground truth's layout. Both place the identifying/stub column first and the measured value second, which is a sensible and conventional order for this analytical story.
+[FAIL] [JUDGE] Title quality: 1/3 -- judge score 2/5 -- The candidate title 'Island Sizes' is generic and does not capture the ground truth's framing of 'Islands of the World, by Size,' which establishes the geographic scope and comparative context. The candidate's subtitle also contradicts the data by claiming square kilometers when the values are in thousands of square miles.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (name/island on the left, size on the right) is straightforward and sensible, matching the ground truth's natural reading order where the identifying column comes first and the measured metric follows.

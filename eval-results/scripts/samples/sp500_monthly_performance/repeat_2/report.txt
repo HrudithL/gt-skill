@@ -1,30 +1,30 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080530_scripts_6prompts/prompts/sp500_monthly_performance/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/sp500_monthly_performance.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124542_scripts_6prompts/prompts/sp500_monthly_performance/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/sp500_monthly_performance.py
 
-TOTAL: 42/87 (48.3%)
+TOTAL: 47/87 (54.0%)
   Data-compliance:        17/48
-  Formatting-compliance:  25/39
+  Formatting-compliance:  30/39
 
-[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[(None, 'apr 2010'), (None, 'apr 2011'), (None, 'apr 2012'), (None, 'apr 2013'), (None, 'apr 2014')], extra=[(None, '2010-01'), (None, '2010-02'), (None, '2010-03'), (None, '2010-04'), (None, '2010-05')]
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/6 canonical measures have a value-matching candidate column; unmatched: ['pct_change', 'best_day_gain', 'worst_day_loss', 'monthly_open', 'monthly_close', 'avg_volume']
+[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 6 canonical measures unverifiable
 [FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/3 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- visible-column overlap 0.00 (candidate-only=['% Change', 'Avg Daily Volume', 'Closing Price', 'Highest Daily Gain', 'Highest Daily Loss', 'Month', 'Opening Price'], missing=['avg_volume', 'best_day_gain', 'month_label', 'monthly_close', 'monthly_open', 'pct_change', 'worst_day_loss', 'year'])
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.40 (candidate-only=['high_gain', 'high_loss'], missing=['best_day_gain', 'month_label', 'worst_day_loss', 'year']); value-matched renamed columns: {'monthly_close': 'close', 'monthly_open': 'open'}
 [N/A] [MECHANICAL] Grouping existence: 0/0 -- grouping is a discretionary editorial choice here (ground truth groups, but REQUIRED_INSTRUCTIONS has no 'grouping' key) -- judged separately by grouping_choice_quality, not scored as a strict presence match
-[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups rows by year (2010, 2011, 2012, 2013, 2014, 2015), matching the ground truth's grouping structure. This grouping clearly serves the analytical story by making it easy to scan performance trends within and across calendar years, and it was not mandated in REQUIRED_INSTRUCTIONS, so it represents a sensible editorial choice.
+[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- Both the ground truth and candidate maintain visible year groupings (2010, 2011, 2012, 2013, 2014, 2015 headers), which serve the analytical goal of showing how performance evolves across the six-year span. The candidate's choice is equally sensible for revealing temporal trends.
 [FAIL] [MECHANICAL] Column-group spanners existence: 0/2 -- candidate spanner_present=False, truth=True
-[PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
+[FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 1/5 -- The candidate labels 'Highest Daily Gain' and 'Highest Daily Loss' as raw dollar amounts ($17.31, $25.31, etc.), but the ground truth and source data metadata confirm these should be percent values (e.g., '+1.6%', '-2.2%'). The candidate displays absolute price changes rather than daily percent changes, fundamentally misrepresenting the concepts these columns should convey.
-[FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- 0/1 colored measures have a shape-appropriate domain; measure 0 (['% Change']): domain '[-5, 5]' doesn't match a diverging shape
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate's columns mislabel the gain/loss metrics as plain numbers (e.g., '16.43', '-23.73') rather than percentages, even though the caption states they represent 'daily extremes.' The ground truth clearly labels them 'Best Day (gain)' and 'Worst Day (loss)' and displays them as percentages (e.g., '+1.6%', '-2.2%'). This misrepresentation of the semantic type is a significant concept error.
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=OK; dividers=expected=True (gated on spanners), got=False
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=72, fully_filled=False -> expected striping=True, actual=True
 [PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/6 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['monthly_open', 'monthly_close', 'pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss']
-[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
+[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate title 'S&P 500 Monthly Performance Summary' clearly and accurately names the subject (S&P 500 monthly performance), matching the core framing of the ground truth's 'S&P 500 Monthly Performance, 2010–2015.' Both titles establish the same core subject matter and scope.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's column order (Month identifier, Opening Price, Closing Price, % Change, Avg Daily Volume, Highest Daily Gain, Highest Daily Loss) follows a logical left-to-right narrative: identifying information first, then opening and closing prices (the raw monthly anchors), then the derived monthly percent change, then volume context, then the extremes. This order is as sensible and well-structured as the ground truth's own ordering.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate title 'S&P 500 Monthly Performance Summary (2010–2015)' is accurate and captures the core subject matter. The ground truth's 'S&P 500 Monthly Performance, 2010–2015' is slightly more direct, but the candidate's wording ('Summary') is reasonable and doesn't misframe the content.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate orders columns logically: Opening Price, Closing Price, Monthly %, Avg Daily Vol, Highest Daily Gain, Highest Daily Loss. This flows naturally from raw prices through monthly performance to daily extremes. The ground truth regroups prices and percentages before introducing volume and daily extremes, but the candidate's order remains sensible and reader-friendly overall.

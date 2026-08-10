@@ -1,30 +1,30 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080527_house_6prompts/prompts/towny_growth_trends/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/hard/ground_truth/towny_growth_trends.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124540_house_6prompts/prompts/towny_growth_trends/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 62/88 (70.5%)
-  Data-compliance:        40/49
-  Formatting-compliance:  22/39
+TOTAL: 71/87 (81.6%)
+  Data-compliance:        42/48
+  Formatting-compliance:  29/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 4/6 -- ≤2 measures OK; 5/11 canonical colored measures covered by a candidate color call
-[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 10/10 colored measures use an encoding matching their data shape
+[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 4/6 -- ≤2 measures OK; 6/11 canonical colored measures covered by a candidate color call
+[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 6/6 colored measures use an encoding matching their data shape
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.48 (candidate-only=['dens_change_1', 'dens_change_2', 'dens_change_3', 'dens_change_4', 'dens_change_5', 'population_1996', 'population_2001', 'population_2006', 'population_2011', 'population_2016', 'population_2021'], missing=['rank', 'total_growth_pct'])
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 0.93 (candidate-only=[], missing=['total_growth_pct'])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping, so this is not a discretionary editorial choice being tested.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The ground truth does not employ row grouping, and REQUIRED_INSTRUCTIONS contains no 'grouping' key, so grouping choice quality is not being assessed as a discretionary editorial decision in this comparison.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=True, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[FAIL] [MECHANICAL] No same-family hue collision across 2 measures: 0/1 -- colored-measure palettes: ['RdYlGn', 'RdYlGn']; colliding pair(s) sharing a hue family: [('RdYlGn', 'RdYlGn')]
+[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 1/5 -- The candidate table shows raw population counts and density values without the inter-census percentage change columns specified in the prompt. The ground truth's labels like '1996–2001' for percentage change periods are missing entirely, fundamentally failing to show 'percentage changes between each period' as required.
-[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 10/10 colored measures have a shape-appropriate domain
-[FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=OK; hairlines=MISSING (Step 5a, always required); dividers=expected=True (gated on spanners), got=False
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=15, fully_filled=False -> expected striping=True, actual=False
-[FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=light actual=unknown; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
-[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 10/10, truncate=False correct 10/10, autocolor_text=True correct 10/10, reverse orientation matches truth 5/5
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 1/5 -- The candidate shows population density values (persons/km²) correctly, but the inter-census growth columns are labeled 'Population Growth Rate (% change)' when they actually show only decimal percentages (e.g., 0.7%, 0.6%) rather than the double-digit percentages clearly visible in the ground truth (e.g., +71.2%, +56.5%). This mislabeling fundamentally misrepresents the magnitude of the data being shown.
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 6/6 colored measures have a shape-appropriate domain
+[FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=MISSING (Step 5a, always required); dividers=OK
+[PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=15, fully_filled=False -> expected striping=True, actual=True
+[FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=light actual=unknown; expected hue family 'navy' for palette 'blues', got 'navy'
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 6/6, truncate=False correct 6/6, autocolor_text=True correct 6/6, reverse orientation matches truth 6/6
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 2/4 -- 6/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']
 [FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate title 'Top 15 Fastest-Growing Ontario Towns' is accurate and includes the core subject, but is somewhat generic compared to the ground truth's 'Ontario's Fastest-Growing Towns, 1996–2021', which explicitly frames the time period as part of the headline story.
-[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate organizes by population counts (1996–2021) followed by density values, but completely omits the inter-census percentage-change columns. The ground truth places rank and total growth first (most important identifying columns), then densities and growth percentages logically grouped, resulting in a much more readable order for the analytical story.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'Ontario's Fastest-Growing Towns: Population Growth & Density Trends' is accurate and mentions the core subject. However, the ground truth's subtitle explicitly anchors the table to the 'full period' (1996–2021) and ranking methodology, while the candidate's subtitle 'Top 15 towns ranked by overall population growth (1996–2021)' is more generic and less specific about what 'fastest-growing' means in context, missing the clarifying framing of the ground truth's subtitle.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate places the 'Rank' column second, then all six density census years (1996, 2001, 2006, 2011, 2016, 2021) together, followed by the five inter-census growth percentages. This separates the hero metric 'total_growth_pct' (which should appear early after rank) far into the table. The ground truth places the total growth 1996–2021 in the second column immediately after rank, then groups densities and inter-census changes coherently. The candidate's order obscures the primary ranking metric and makes the analytical story harder to follow.

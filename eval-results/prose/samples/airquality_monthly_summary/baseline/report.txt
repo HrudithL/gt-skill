@@ -1,4 +1,4 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/airquality_monthly_summary/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/airquality_monthly_summary.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124545_prose_6prompts/prompts/airquality_monthly_summary/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/medium/ground_truth/airquality_monthly_summary.py
 
 TOTAL: 37/87 (42.5%)
   Data-compliance:        17/48
@@ -9,14 +9,14 @@ TOTAL: 37/87 (42.5%)
 [FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/2 canonical colored measures covered by a candidate color call
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[]); value-matched renamed columns: {'avg_ozone': 'Avg Ozone (ppb)', 'avg_temp': 'Avg Temperature (°F)', 'avg_wind': 'Avg Wind Speed (mph)', 'month': 'Month'}
+[PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[]); value-matched renamed columns: {'avg_ozone': 'Avg Ozone (ppb)', 'avg_temp': 'Avg Temp (°F)', 'avg_wind': 'Avg Wind Speed (mph)', 'month': 'Month'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate employs row grouping. Since grouping is not used by either table and the REQUIRED_INSTRUCTIONS contains no 'grouping' key, this dimension does not apply.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor candidate applies row grouping, so this dimension does not constitute a discretionary editorial choice being tested here.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- All column labels correctly name their underlying concepts: 'Month', 'Avg Temperature (°F)', 'Avg Wind Speed (mph)', and 'Avg Ozone (ppb)' are clear, unambiguous, and match the LABEL_SYNONYMS grounding. Each label instantly identifies what is being measured.
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- Both tables use clear, unambiguous labels that correctly name their underlying concepts: 'Month' for months, 'Avg Temp (°F)' for average temperature, 'Avg Wind Speed (mph)' for average wind speed, and 'Avg Ozone (ppb)' for average ozone levels. All labels align with the LABEL_SYNONYMS metadata and convey their exact concepts instantly.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=5, fully_filled=False -> expected striping=False, actual=False
@@ -26,5 +26,5 @@ TOTAL: 37/87 (42.5%)
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 3/3 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'Air Quality Metrics by Month' is accurate but generic and flat. The ground truth's title 'Monthly Air Quality in New York, 1973' captures the same core concept but adds specificity (location and year) that grounds the story more precisely. The candidate misses the geographic and temporal framing.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right column order (Month → Avg Temperature → Avg Wind Speed → Avg Ozone) is natural and reads smoothly. It places the identifying month column first, followed by the three measured metrics in the order given by the prompt. This is equally sensible as the ground truth's column order and serves the analytical story well.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate title 'Monthly Air Quality Summary' is accurate but generic and flat. The ground truth's title 'Monthly Air Quality in New York, 1973' captures the specific geographic and temporal context and frames the story more precisely, while the candidate omits the location and year entirely.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (Month, Avg Temp, Avg Wind Speed, Avg Ozone) matches the ground truth's order exactly and reads naturally: the identifying month column is first, followed by the three measured variables in a logical sequence. This order serves the analytical story as well as the ground truth.

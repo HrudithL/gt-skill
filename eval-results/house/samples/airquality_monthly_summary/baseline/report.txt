@@ -1,4 +1,4 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080527_house_6prompts/prompts/airquality_monthly_summary/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/airquality_monthly_summary.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124540_house_6prompts/prompts/airquality_monthly_summary/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/medium/ground_truth/airquality_monthly_summary.py
 
 TOTAL: 30/87 (34.5%)
   Data-compliance:        14/48
@@ -11,12 +11,12 @@ TOTAL: 30/87 (34.5%)
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
 [FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.14 (candidate-only=['Avg Ozone (ppb)', 'Avg Temperature (°F)', 'Avg Wind Speed (mph)'], missing=['avg_ozone', 'avg_temp', 'avg_wind']); value-matched renamed columns: {'month': 'Month'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping. Since the ground truth does not visibly use grouping and REQUIRED_INSTRUCTIONS lacks a 'grouping' key, this dimension is not a discretionary editorial choice being tested here.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping. This dimension only applies when the ground truth visibly uses row grouping and grouping is not a mandated instruction, so it is not applicable here.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- All column labels correctly name their underlying concepts: 'Avg Temperature (°F)' for temperature, 'Avg Wind Speed (mph)' for wind speed, and 'Avg Ozone (ppb)' for ozone levels. The labels are clear, unambiguous, and align perfectly with the LABEL_SYNONYMS metadata.
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- All column labels correctly name their underlying concepts: 'Month' for the month identifier, 'Avg Temperature (°F)' for average temperature, 'Avg Wind Speed (mph)' for wind speed, and 'Avg Ozone (ppb)' for ozone levels. Each label uses precise, unambiguous phrasing with appropriate units.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=5, fully_filled=False -> expected striping=False, actual=False
@@ -26,5 +26,5 @@ TOTAL: 30/87 (34.5%)
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/3 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['avg_temp', 'avg_wind', 'avg_ozone']
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'Monthly Air Quality Statistics' is accurate and unambiguous, but it is more generic than the ground truth's 'Monthly Air Quality in New York, 1973,' which specifies the geographic location and time period. The candidate's framing is correct but less specific.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (Month, Temperature, Wind Speed, Ozone) is sensible and matches the ground truth's order exactly, with the identifying month column first, followed by the three measured metrics in a logical reading sequence.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'Air Quality Monthly Summary' is accurate and describes the table's content, but it is flatter and less specific than the ground truth's 'Monthly Air Quality in New York, 1973,' which establishes both the geographic and temporal context. The candidate's title captures the generic story but lacks the grounding detail that makes the ground truth's title more informative.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (Month, then the three metrics: Temperature, Wind Speed, Ozone) reads naturally and logically, matching the ground truth's order exactly. The stub column (Month) comes first, followed by the three measured metrics in a sensible sequence for understanding air quality.

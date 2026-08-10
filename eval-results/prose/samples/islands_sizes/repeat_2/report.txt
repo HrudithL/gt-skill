@@ -1,7 +1,7 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/islands_sizes/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/easy/ground_truth/islands_sizes.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124545_prose_6prompts/prompts/islands_sizes/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/easy/ground_truth/islands_sizes.py
 
-TOTAL: 76/82 (92.7%)
-  Data-compliance:        43/43
+TOTAL: 75/82 (91.5%)
+  Data-compliance:        42/43
   Formatting-compliance:  33/39
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
@@ -11,12 +11,12 @@ TOTAL: 76/82 (92.7%)
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
 [PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The ground truth does not use row grouping—all rows are in a flat list ordered by size. The candidate similarly presents a flat list. Since neither table groups and REQUIRED_INSTRUCTIONS contains no 'grouping' key, this dimension is not applicable.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The ground truth does not use row grouping (it lists all islands in a flat ranked list), and REQUIRED_INSTRUCTIONS has no 'grouping' key, so grouping_choice_quality is not applicable per the rubric.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- The candidate labels its columns 'size' (for the metric) and implicitly 'island name' in the stub, with a subtitle clarifying 'Area in thousands of square miles.' Both concepts are correctly named and unambiguous, matching the ground truth's 'Landmass' and 'Size (thousand sq. mi.)' in accuracy.
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate labels the size column simply as 'Size' with a subtitle 'Area in thousands of square kilometers', but the ground truth labels it 'Size (thousand sq. mi.)' and clarifies the unit directly in the column header. More critically, the candidate reports values in thousands of square kilometers while the ground truth and the metadata's LABEL_SYNONYMS expect thousands of square miles—the numeric values appear identical, indicating a unit conversion mismatch that actively misleads readers about the actual measurement.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=48, fully_filled=True -> expected striping=False, actual=True
@@ -26,5 +26,5 @@ TOTAL: 76/82 (92.7%)
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Islands by Size' is clear and accurate, capturing the core framing of ranking islands by their size. The ground truth's 'Islands of the World, by Size' adds geographic scope ('of the World'), which provides slightly more context, but both titles serve the same essential purpose.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate orders columns as island name (stub, leftmost) followed by size values. This mirrors the ground truth's 'Landmass' stub followed by 'Size,' and is a natural, sensible left-to-right reading order for the analytical story of ranking islands by their area.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate title 'Island Sizes' is accurate and describes the subject, but it is generic and lacks the framing specificity of the ground truth's 'Islands of the World, by Size', which emphasizes the global scope and explicit ordering. The candidate's title is correct but less illuminating about the analytical framing.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate presents a logical left-to-right order with the island/landmass name in the stub (leftmost) position and the size measure as the only data column (rightmost), making the reading order natural and matching the structure and sensibility of the ground truth's layout.

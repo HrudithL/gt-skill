@@ -1,30 +1,30 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/runs/sweep/20260807_080533_prose_6prompts/prompts/gtcars_top10_by_country/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-full-comparator-sweep/prompts/medium/ground_truth/gtcars_top10_by_country.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124545_prose_6prompts/prompts/gtcars_top10_by_country/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
-TOTAL: 49/90 (54.4%)
-  Data-compliance:        20/51
-  Formatting-compliance:  29/39
+TOTAL: 51/87 (58.6%)
+  Data-compliance:        19/48
+  Formatting-compliance:  32/39
 
-[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[('italy', '458 speciale'), ('italy', 'aventador'), ('italy', 'f12berlinetta'), ('italy', 'ff'), ('italy', 'gtc4lusso')], extra=[('italy', 'ferrari 458 speciale'), ('italy', 'ferrari f12berlinetta'), ('italy', 'ferrari ff'), ('italy', 'ferrari gtc4lusso'), ('italy', 'ferrari laferrari')]
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/1 canonical measures have a value-matching candidate column; unmatched: ['msrp']
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/1 canonical colored measures covered by a candidate color call
+[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 1 canonical measures unverifiable
+[PASS] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 6/6 -- ≤2 measures OK; 1/1 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
 [FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 2/5 -- 1/3 required instructions satisfied; grouping=True not satisfied; sort=('msrp', 'desc', 'within_group') not satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- visible-column overlap 0.00 (candidate-only=['Car', 'Country', 'Drivetrain', 'Price', 'Transmission'], missing=['ctry_origin', 'drivetrain', 'model', 'msrp', 'trsmn'])
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.29 (candidate-only=['Drivetrain', 'Transmission'], missing=['ctry_origin', 'drivetrain', 'trsmn']); value-matched renamed columns: {'model': 'Model', 'msrp': 'MSRP'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=True, truth=True
-[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by country of origin and sorts within each group by price descending, exactly matching both the prompt requirement and the ground truth's structure. The grouping clearly serves the analytical goal of understanding which countries dominate the most-expensive-car market.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Grouping is mandated by the REQUIRED_INSTRUCTIONS metadata ("grouping": true), so it is not a discretionary editorial choice being tested here—it is verified by a separate deterministic mechanism.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
-[PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
+[FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 3/5 -- The candidate labels 'Drivetrain,' 'Transmission,' and 'Price' correctly name their respective concepts. However, the transmission abbreviations ('7a', '8a', '8am') are opaque coded forms that lack clarity; the ground truth uses fully written-out descriptions like '7-speed automatic' and '8-speed automated-manual,' making the underlying concept immediately clear. The use of abbreviations creates ambiguity that weakens label clarity.
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The Drivetrain and Transmission columns use abbreviated labels ('rwd', 'awd', '7a', '8a', '8am') instead of the full, clear descriptions shown in the ground truth ('RWD', 'AWD', '7-speed automatic', '8-speed automatic', '8-speed automated-manual'). The MSRP label is correct, but the abbreviated transmission and drivetrain values obscure the underlying concepts they represent.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=10, fully_filled=False -> expected striping=True, actual=False
 [PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; expected hue family 'navy' for palette 'blues', got 'navy'
-[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/1 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['msrp']
+[PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' directly matches the core framing and subject of the ground truth's title 'The 10 Priciest GT Cars, by Country of Origin.' Both establish the same analytical focus on the highest-priced vehicles.
-[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate places Model/Car name in the stub (correct), but then orders Drivetrain, Transmission, Price left-to-right. The ground truth orders MSRP, Drivetrain, Transmission—placing price first in the data columns, which is sensible since price is the primary sorting criterion and most important metric. The candidate's rightward placement of price, while readable, is less optimal for highlighting the hero metric.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' with subtitle 'Grouped by Country of Origin' captures the core framing of the ground truth's title. The phrasing differs slightly and omits explicit mention of MSRP, drivetrain, and transmission details, but it correctly identifies the subject and analytical focus.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate's column order (Model, Drivetrain, Transmission, MSRP) reorders the columns compared to the ground truth (Model, MSRP, Drivetrain, Transmission). While placing MSRP at the far right is workable, moving it away from the Model label weakens the visual proximity between the identifying column and the primary measure; the ground truth's order more naturally associates price with the car model.
