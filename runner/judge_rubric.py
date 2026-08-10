@@ -106,28 +106,6 @@ DIMENSIONS: dict[str, dict] = {
             ),
         },
     },
-    "subtitle_quality": {
-        "title": "Subtitle quality",
-        "assesses": (
-            "Does the subtitle add real clarifying context beyond the "
-            "title, without being redundant with it?"
-        ),
-        "anchors": {
-            1: (
-                "Missing where the table clearly needs one, or purely "
-                "redundant with the title (adds nothing new)."
-            ),
-            3: (
-                "Adds some context but overlaps substantially with the "
-                "title or is vague about what's actually shown."
-            ),
-            5: (
-                "Adds real, non-redundant clarifying context (what's "
-                "measured, over what scope, grouped/ranked by what) -- as "
-                "useful as the ground truth's subtitle."
-            ),
-        },
-    },
     "column_order_quality": {
         "title": "Column order quality",
         "assesses": (
@@ -152,35 +130,6 @@ DIMENSIONS: dict[str, dict] = {
                 "Left-to-right order reads naturally for the story -- "
                 "related columns adjacent, most important/identifying "
                 "info first -- as sensible as the ground truth's order."
-            ),
-        },
-    },
-    "color_theme_quality": {
-        "title": "Color theme / palette taste",
-        "assesses": (
-            "Beyond whether the color ENCODING is correct (sequential vs. "
-            "diverging matching the data's shape -- that is checked "
-            "deterministically elsewhere and is NOT your job here), is "
-            "the SPECIFIC hue/palette choice tasteful and harmonious with "
-            "the rest of the table?"
-        ),
-        "anchors": {
-            1: (
-                "Palette clashes (hues fighting for attention, or colors "
-                "that don't harmonize with the heading band/stub tint), "
-                "or is a jarring/unreadable choice for the story."
-            ),
-            3: (
-                "Palette is legible and acceptable but generic/uninspired, "
-                "or only partially harmonizes with the rest of the "
-                "table's chrome."
-            ),
-            5: (
-                "Hue choice is tasteful, harmonious with the table's "
-                "other chrome, and well-suited to the story (e.g. a "
-                "diverging palette whose two hues carry sensible "
-                "connotations for the sign) -- as tasteful as the ground "
-                "truth's own choice."
             ),
         },
     },
@@ -234,7 +183,7 @@ or CANDIDATE label as ONE continuous table read top-to-bottom -- never as \
 separate tables, and never penalize a dimension just because evidence for \
 it happens to sit in a later tile.
 
-## The 6 dimensions
+## The 4 dimensions
 
 {_render_rubric_section()}
 ## Applicability -- self-report, don't dodge
@@ -277,7 +226,7 @@ still score a 5.
 
 ## Output
 
-Call `{TOOL_NAME}` exactly once with all 6 keys above present, no other \
+Call `{TOOL_NAME}` exactly once with all 4 keys above present, no other \
 top-level keys. For each: `applicable` (boolean), `score` (integer 1-5 \
 when applicable, `null` when not), `rationale` (string, always present). \
 Never invent a score for a dimension you marked inapplicable.
@@ -332,7 +281,7 @@ def build_tool_schema() -> dict:
     return {
         "name": TOOL_NAME,
         "description": (
-            "Submit your scores for all 6 rubric dimensions comparing the "
+            "Submit your scores for all 4 rubric dimensions comparing the "
             "candidate table image to the ground-truth table image."
         ),
         "input_schema": {

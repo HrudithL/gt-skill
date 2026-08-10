@@ -9,28 +9,32 @@ anywhere" lock): most checks are still regex/AST parsing (Tier 1,
 ``runner.execution_tier``), or a lookup against the ground truth's own
 authored metadata (§5) — these have exactly one provably-correct answer and
 stay fully deterministic. A handful of checks are instead about wording or
-an open-ended space of valid choices (column-label clarity, caption/title/
-subtitle quality, column order, palette taste) — those are computed by one
-batched call to ``runner.judge.judge()`` (a vision-capable LLM call, see
-that module) and read out of the single combined result ``compare()``
-stashes in ``meta["_judge_result"]`` before running the check functions.
-Every check function still has the exact same signature and every
-judge-backed check degrades to the existing ``_na()`` pattern (0/0,
-excluded from the denominator) if the judge is unavailable or the
-dimension doesn't apply to this comparison — nothing ever silently passes
-or fails. ``CheckResult.tier`` ("mechanical" or "judge") makes the
-distinction visible in the printed report, not just in code comments.
+an open-ended space of valid choices (column-label clarity, title quality,
+column order) — those are computed by one batched call to
+``runner.judge.judge()`` (a vision-capable LLM call, see that module) and
+read out of the single combined result ``compare()`` stashes in
+``meta["_judge_result"]`` before running the check functions. Every check
+function still has the exact same signature and every judge-backed check
+degrades to the existing ``_na()`` pattern (0/0, excluded from the
+denominator) if the judge is unavailable or the dimension doesn't apply to
+this comparison — nothing ever silently passes or fails.
+``CheckResult.tier`` ("mechanical" or "judge") makes the distinction
+visible in the printed report, not just in code comments.
 
-Report shape: a 0–106 total = Data-compliance (0–53) + Formatting-compliance
-(0–53), plus one line per check naming its tier, what passed/failed, its
+Report shape: a 0–97 total = Data-compliance (0–53) + Formatting-compliance
+(0–44), plus one line per check naming its tier, what passed/failed, its
 point value, and why (§7).
 
-Per ``.planning/12-consensus-tuning.md``: 3 Formatting-compliance checks
-(hero-column formatting, stub tint/grey-budget, caption-not-restating-
-subtitle) were removed entirely -- field data across every real skill
-variant in the eval corpus showed near-zero scores on all three regardless
-of skill quality, meaning they measured something no current skill-guided
-output achieves rather than a real quality gap between skills.
+Per ``.planning/12-consensus-tuning.md``: 6 Formatting-compliance checks
+were removed entirely across two passes, all for the same reason -- field
+data across the eval corpus's real skill variants showed each one scoring
+either near-zero (hero-column formatting, stub tint/grey-budget,
+caption-not-restating-subtitle) or flat/non-discriminating (title/
+subtitle/caption/source presence, subtitle quality, color theme/palette
+taste) regardless of which skill produced the candidate, meaning each
+measured something no current skill-guided output reliably achieves or
+that doesn't actually distinguish skill quality, rather than a real
+quality gap between skills.
 """
 
 from __future__ import annotations
@@ -2795,7 +2799,7 @@ def _judge_dimension_check(meta: dict, dimension_key: str, name: str, points: in
 
 
 # ----------------------------------------------------------------------- #
-# Data-compliance checks (§8, 50 pts)
+# Data-compliance checks (§8, 53 pts)
 # ----------------------------------------------------------------------- #
 
 def _row_multiset_identity(
@@ -4030,7 +4034,7 @@ DATA_CHECKS: list[CheckFn] = [
 
 
 # ----------------------------------------------------------------------- #
-# Formatting-compliance checks (§9, 50 pts)
+# Formatting-compliance checks (§9, 44 pts)
 # ----------------------------------------------------------------------- #
 
 def _domain_element_symmetric(lo: str, hi: str, value_range: tuple[float, float] | None = None) -> bool:
@@ -4841,67 +4845,6 @@ def check_fmt_semantic_type(cand: dict, truth: dict, meta: dict) -> CheckResult:
     return CheckResult(name, 4, _round_points_covered(ok_count, total, 4), all_ok, detail)
 
 
-def check_title_subtitle_caption_source(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    name = "Title/subtitle/caption/source presence per gating rules"
-    t1 = cand["tier1"]
-    # Presence-only signals (title_present / caption_present -- the latter
-    # is convergence.py's field name for "tab_header's subtitle= kwarg is
-    # present", not the source-note caption computed a few lines below;
-    # unrelated pre-existing name collision), NOT title_text/subtitle_text
-    # -- those are literal-extraction fields that return None for a
-    # dynamic value (a variable or f-string title/subtitle), which would
-    # otherwise wrongly read as "missing" for an output-identical candidate.
-    title_pts = 1 if t1.get("title_present") else 0
-    subtitle_pts = 1 if t1.get("caption_present") else 0
-    n = _n_rows(cand)
-    caption_expected = n is not None and n >= 5
-    # `None` means a `tab_source_note(...)` call exists but its text is a
-    # dynamic expression (a variable, an unresolved f-string) -- same
-    # benefit-of-the-doubt treatment as title_text/subtitle_text above: the
-    # call is genuinely present, just not statically readable, so it must
-    # not read as "missing" the way an explicit empty-string literal would.
-    # Codex round-1 finding: the code below previously contradicted this
-    # comment -- it required `notes[i] is not None`, docking the point from
-    # a candidate whose caption/source-note call genuinely exists but is a
-    # dynamic expression. `source_note_texts`'s own contract (see
-    # `convergence._source_note_texts`'s docstring) is ONE list entry per
-    # call, always -- so the SLOT existing (`len(notes) >= N`) is what
-    # establishes "the call is present," independent of whether its text
-    # happened to resolve statically.
-    #
-    # Codex round-6 finding: a bare `len(notes) >= N` slot-existence check
-    # doesn't distinguish a genuinely unresolved DYNAMIC expression
-    # (`None` -- benefit of the doubt, still "present") from a statically
-    # EXPLICIT empty-string literal (`tab_source_note(source_note="")`) --
-    # the latter is a real call that adds NO actual text, not a footer
-    # that's "present" in any meaningful sense.
-    notes = cand["tier1"].get("source_note_texts") or []
-
-    def _note_slot_present(index: int) -> bool:
-        if index >= len(notes):
-            return False
-        val = notes[index]
-        if val is None:
-            return True  # dynamic expression -- benefit of the doubt
-        return val.strip() != ""
-
-    caption_present = _note_slot_present(0)
-    source_expected = bool(truth["tier1"].get("source_note_texts")) and len(truth["tier1"]["source_note_texts"]) >= 2
-    source_present = _note_slot_present(1)
-    # "present if expected" for both -- neither ever REQUIRES absence when
-    # optional (fewer than 5 rows): a compliant short table that
-    # voluntarily includes a caption anyway must not lose this point, the
-    # same tolerance already given to an optional source note.
-    footer_ok = (caption_present or not caption_expected) and (source_present or not source_expected)
-    footer_pts = 1 if footer_ok else 0
-    pts = title_pts + subtitle_pts + footer_pts
-    return CheckResult(
-        name, 3, pts, pts == 3,
-        f"title={'OK' if title_pts else 'MISSING'}, subtitle={'OK' if subtitle_pts else 'MISSING'}, "
-        f"caption expected={caption_expected} present={caption_present}, source expected={source_expected} present={source_present}",
-    )
-
-
 def check_render_mechanics(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Render mechanics (zoom/expand fit-order rule)"
     t1 = cand["tier1"]
@@ -5079,17 +5022,10 @@ def check_summary_row_visual_distinction(cand: dict, truth: dict, meta: dict) ->
 
 
 def check_title_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    # New per .planning/10-hybrid-comparator.md §3: the prior
-    # check_title_subtitle_caption_source above is presence-only ("does a
-    # title exist"); this grades whether it's clear, accurate, and matches
-    # the ground truth's core framing -- a wording judgment, not a fact.
+    # New per .planning/10-hybrid-comparator.md §3: grades whether the
+    # title is clear, accurate, and matches the ground truth's core
+    # framing -- a wording judgment, not a fact.
     return _judge_dimension_check(meta, "title_quality", "Title quality", 3)
-
-
-def check_subtitle_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    # New, same rationale as check_title_quality: does the subtitle add real
-    # clarifying context, non-redundant with the title.
-    return _judge_dimension_check(meta, "subtitle_quality", "Subtitle quality", 3)
 
 
 def check_column_order_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -5097,16 +5033,6 @@ def check_column_order_quality(cand: dict, truth: dict, meta: dict) -> CheckResu
     # column order", `09` §3) since a sensible left-to-right reading order
     # is one of several valid choices, not a single fixed answer.
     return _judge_dimension_check(meta, "column_order_quality", "Column order quality", 2)
-
-
-def check_color_theme_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    # New: check_sequential_vs_diverging/check_domain_computation/check_
-    # band_hue_harmonization above already verify shape/family/mechanics
-    # correctness deterministically; this grades the remaining subjective
-    # layer -- is the SPECIFIC hue/palette choice tasteful and harmonious --
-    # previously an explicit non-goal (`09` §3: "only family/shape-
-    # correctness is checked").
-    return _judge_dimension_check(meta, "color_theme_quality", "Color theme/palette taste", 3)
 
 
 FORMAT_CHECKS: list[CheckFn] = [
@@ -5117,13 +5043,10 @@ FORMAT_CHECKS: list[CheckFn] = [
     check_color_mechanics,
     check_summary_row_formatting,
     check_fmt_semantic_type,
-    check_title_subtitle_caption_source,
     check_render_mechanics,
     check_summary_row_visual_distinction,
     check_title_quality,
-    check_subtitle_quality,
     check_column_order_quality,
-    check_color_theme_quality,
 ]
 
 
@@ -5210,7 +5133,7 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
 
     The judge is invoked exactly ONCE per comparison (§4 of
     ``.planning/10-hybrid-comparator.md``: "one batched call... scoring all
-    6 dimensions together"), and its single combined result is stashed in
+    4 dimensions together"), and its single combined result is stashed in
     ``meta["_judge_result"]`` before any check function runs, so every
     judge-backed check (see ``_judge_dimension_check``) reads from the same
     call rather than each triggering its own.
@@ -5226,7 +5149,7 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
     `candidate_path.with_suffix(".png")` -- the candidate SCRIPT's own
     filename stem -- so a candidate invoked as `/tmp/submission.py` that
     correctly writes `/tmp/table.png` (exactly as required) had the judge
-    looking for `/tmp/submission.png` instead: either degrading all 6
+    looking for `/tmp/submission.png` instead: either degrading all 4
     judge-backed checks to unavailable for a perfectly correct candidate,
     or worse, silently judging a stale, unrelated PNG that happened to
     already exist at that wrong path. `candidate_path.parent /
@@ -5272,7 +5195,7 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
     elif _judge_png_is_stale(candidate_png, candidate_path):
         # Codex round-4 finding: see `_judge_png_is_stale`'s docstring --
         # degrade exactly like `judge()`'s own documented "unavailable"
-        # contract (all 6 keys, applicable=False, rationale prefixed with
+        # contract (all 4 keys, applicable=False, rationale prefixed with
         # the literal "judge unavailable: " string) rather than scoring a
         # PNG that predates the source it's supposed to represent.
         judge_unavailable_reason = f"judge unavailable: candidate PNG is older than its source .py ({candidate_png} predates {candidate_path})"
