@@ -51,34 +51,6 @@ DIMENSIONS: dict[str, dict] = {
             ),
         },
     },
-    "caption_quality": {
-        "title": "Caption / source-note quality",
-        "assesses": (
-            "Does the candidate's caption or source note add REAL "
-            "information beyond the subtitle, rather than just restating "
-            "it in different words? CAPTION_KEYWORDS, if provided, is "
-            "optional grounding context for the kind of insight expected, "
-            "not a required phrase list."
-        ),
-        "anchors": {
-            1: (
-                "No caption where the table clearly needs one, or the "
-                "caption only restates the title/subtitle with no new "
-                "information."
-            ),
-            3: (
-                "Caption adds some genuine information (e.g. a bare source "
-                "citation) but misses the ground truth's key clarifying "
-                "insight (a definition, an exclusion rule, a methodology "
-                "note)."
-            ),
-            5: (
-                "Caption adds real, non-redundant information a careful "
-                "reader would want -- as informative as the ground truth's "
-                "own caption/source note."
-            ),
-        },
-    },
     "grouping_choice_quality": {
         "title": "Grouping-choice quality (discretionary only)",
         "assesses": (
@@ -134,28 +106,6 @@ DIMENSIONS: dict[str, dict] = {
             ),
         },
     },
-    "subtitle_quality": {
-        "title": "Subtitle quality",
-        "assesses": (
-            "Does the subtitle add real clarifying context beyond the "
-            "title, without being redundant with it?"
-        ),
-        "anchors": {
-            1: (
-                "Missing where the table clearly needs one, or purely "
-                "redundant with the title (adds nothing new)."
-            ),
-            3: (
-                "Adds some context but overlaps substantially with the "
-                "title or is vague about what's actually shown."
-            ),
-            5: (
-                "Adds real, non-redundant clarifying context (what's "
-                "measured, over what scope, grouped/ranked by what) -- as "
-                "useful as the ground truth's subtitle."
-            ),
-        },
-    },
     "column_order_quality": {
         "title": "Column order quality",
         "assesses": (
@@ -180,35 +130,6 @@ DIMENSIONS: dict[str, dict] = {
                 "Left-to-right order reads naturally for the story -- "
                 "related columns adjacent, most important/identifying "
                 "info first -- as sensible as the ground truth's order."
-            ),
-        },
-    },
-    "color_theme_quality": {
-        "title": "Color theme / palette taste",
-        "assesses": (
-            "Beyond whether the color ENCODING is correct (sequential vs. "
-            "diverging matching the data's shape -- that is checked "
-            "deterministically elsewhere and is NOT your job here), is "
-            "the SPECIFIC hue/palette choice tasteful and harmonious with "
-            "the rest of the table?"
-        ),
-        "anchors": {
-            1: (
-                "Palette clashes (hues fighting for attention, or colors "
-                "that don't harmonize with the heading band/stub tint), "
-                "or is a jarring/unreadable choice for the story."
-            ),
-            3: (
-                "Palette is legible and acceptable but generic/uninspired, "
-                "or only partially harmonizes with the rest of the "
-                "table's chrome."
-            ),
-            5: (
-                "Hue choice is tasteful, harmonious with the table's "
-                "other chrome, and well-suited to the story (e.g. a "
-                "diverging palette whose two hues carry sensible "
-                "connotations for the sign) -- as tasteful as the ground "
-                "truth's own choice."
             ),
         },
     },
@@ -242,7 +163,7 @@ You are an evaluator for a great_tables-based table-generation harness. You \
 score a CANDIDATE table's rendered PNG against its GROUND TRUTH's rendered \
 PNG for the same natural-language prompt and the same source data. You do \
 not generate tables, suggest code, or hold a conversation -- you score \
-exactly 7 named dimensions and submit them via the `{TOOL_NAME}` tool.
+exactly 6 named dimensions and submit them via the `{TOOL_NAME}` tool.
 
 ## What the ground truth is
 
@@ -262,7 +183,7 @@ or CANDIDATE label as ONE continuous table read top-to-bottom -- never as \
 separate tables, and never penalize a dimension just because evidence for \
 it happens to sit in a later tile.
 
-## The 7 dimensions
+## The 4 dimensions
 
 {_render_rubric_section()}
 ## Applicability -- self-report, don't dodge
@@ -278,10 +199,10 @@ separate deterministic mechanism elsewhere in the harness -- self-report \
 not group at all, this is not a discretionary editorial choice being \
 tested here either -- self-report `applicable=false`.
 - For every OTHER dimension, self-report `applicable=false` only when the \
-dimension genuinely cannot be assessed from what's rendered (e.g. there is \
-no caption/source-note region on EITHER table at all, so caption quality \
-has nothing to compare). Do not use `applicable=false` to avoid a hard \
-call -- when in doubt, score it.
+dimension genuinely cannot be assessed from what's rendered (e.g. a table \
+has only one non-stub column on EITHER side, so `column_order_quality` has \
+nothing to compare). Do not use `applicable=false` to avoid a hard call -- \
+when in doubt, score it.
 - Applicability filtering for what a SPECIFIC ground truth requires, \
 beyond the grouping rule above, is handled elsewhere in the harness, not \
 by you.
@@ -305,7 +226,7 @@ still score a 5.
 
 ## Output
 
-Call `{TOOL_NAME}` exactly once with all 7 keys above present, no other \
+Call `{TOOL_NAME}` exactly once with all 4 keys above present, no other \
 top-level keys. For each: `applicable` (boolean), `score` (integer 1-5 \
 when applicable, `null` when not), `rationale` (string, always present). \
 Never invent a score for a dimension you marked inapplicable.
@@ -360,7 +281,7 @@ def build_tool_schema() -> dict:
     return {
         "name": TOOL_NAME,
         "description": (
-            "Submit your scores for all 7 rubric dimensions comparing the "
+            "Submit your scores for all 4 rubric dimensions comparing the "
             "candidate table image to the ground-truth table image."
         ),
         "input_schema": {

@@ -5,11 +5,19 @@ Per ``.planning/10-hybrid-comparator.md`` §4: two of ``runner.comparator``'s
 ~25 checks were faking semantic judgment with hardcoded keyword/synonym
 lists, and several real quality dimensions (title/subtitle wording, column
 order, palette taste) were left entirely unscored because they don't fit a
-regex. This module is the fix for those 7 dimensions specifically -- a
-one-shot, vision-capable call that scores a candidate table's rendered PNG
-against its ground truth's rendered PNG, returning strict structured output.
+regex. This module is the fix for those dimensions -- a one-shot,
+vision-capable call that scores a candidate table's rendered PNG against
+its ground truth's rendered PNG, returning strict structured output.
 Nothing else in the repo calls this yet (that wiring is Slice 2, on
 ``runner.comparator``); this module is usable standalone.
+
+(Three of the original 7 dimensions this module scored were later removed
+entirely rather than kept judge-backed -- caption-quality (one of the
+original two moved checks), subtitle-quality, and color-theme-quality --
+see ``.planning/12-consensus-tuning.md``. Column order and title clarity
+are still judged; subtitle wording and palette taste are, once again,
+unscored -- field data showed neither discriminated skill quality. The 4
+keys `judge()` returns today reflect all of this.)
 
 This module NEVER renders, execs, or regenerates a PNG -- it only ever reads
 bytes from two already-existing paths (mirrors ``runner.execution_tier``'s
@@ -98,7 +106,7 @@ from runner.spec import MODELS
 # -- may not have done so yet).
 ROOT = Path(__file__).resolve().parent.parent
 
-# The 7 keys `judge()` always returns, in the exact fixed order Slice 2 will
+# The 4 keys `judge()` always returns, in the exact fixed order Slice 2 will
 # look them up by name. Sourced from judge_rubric so the contract and the
 # rubric text can never drift apart.
 DIMENSION_KEYS: tuple[str, ...] = judge_rubric.DIMENSION_KEYS
@@ -202,7 +210,7 @@ class JudgeDimension:
 
 
 def _unavailable(reason: str) -> dict[str, JudgeDimension]:
-    """The shared degrade path: all 7 keys, all ``applicable=False``, every
+    """The shared degrade path: all 4 keys, all ``applicable=False``, every
     ``rationale`` prefixed with ``_UNAVAILABLE_PREFIX`` -- see `judge()`'s
     docstring for why that prefix is the thing callers should key off of to
     distinguish "the judge broke" from "genuinely not applicable."
@@ -250,8 +258,8 @@ def _load_image_tiles_b64(path: Path) -> list[str]:
     to mentally stitch bands back into one table (mitigated by the explicit
     "part i of N" labels ``_image_blocks`` attaches, and by the system
     prompt's "Image tiling" section) for keeping small text legible -- an
-    acceptable tradeoff here since this judge's 7 dimensions are about
-    labels/captions/titles/column-order/color, not the kind of precise
+    acceptable tradeoff here since this judge's 4 dimensions are about
+    labels/titles/grouping-choice/column-order, not the kind of precise
     cross-row numeric reading the deterministic comparator's own value-diff
     checks already own.
     """
@@ -406,9 +414,8 @@ def judge(
 
     Returns
     -------
-    Always exactly the 7 keys in ``DIMENSION_KEYS`` (``label_concept_correctness``,
-    ``caption_quality``, ``grouping_choice_quality``, ``title_quality``,
-    ``subtitle_quality``, ``column_order_quality``, ``color_theme_quality``),
+    Always exactly the 4 keys in ``DIMENSION_KEYS`` (``label_concept_correctness``,
+    ``grouping_choice_quality``, ``title_quality``, ``column_order_quality``),
     each a ``JudgeDimension(applicable, score, rationale)``. Never raises and
     never fabricates a score -- ``score`` is only ever an int 1-5 when
     ``applicable`` is True, else ``None``.
@@ -426,8 +433,8 @@ def judge(
       prefix below.
     - **The judge itself is unavailable** -- either PNG path doesn't exist,
       the model call failed or timed out, or its output couldn't be
-      validated as well-formed JSON matching the 7-key contract. In this
-      case ALL 7 dimensions come back ``applicable=False`` and EVERY
+      validated as well-formed JSON matching the 4-key contract. In this
+      case ALL 4 dimensions come back ``applicable=False`` and EVERY
       ``rationale`` starts with the literal prefix ``"judge unavailable: "``
       followed by the reason. Callers that need to distinguish "not
       applicable" from "judge broke" should check for this prefix
