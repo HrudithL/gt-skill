@@ -5,11 +5,16 @@ Per ``.planning/10-hybrid-comparator.md`` §4: two of ``runner.comparator``'s
 ~25 checks were faking semantic judgment with hardcoded keyword/synonym
 lists, and several real quality dimensions (title/subtitle wording, column
 order, palette taste) were left entirely unscored because they don't fit a
-regex. This module is the fix for those 6 dimensions specifically -- a
-one-shot, vision-capable call that scores a candidate table's rendered PNG
-against its ground truth's rendered PNG, returning strict structured output.
+regex. This module is the fix for those dimensions -- a one-shot,
+vision-capable call that scores a candidate table's rendered PNG against
+its ground truth's rendered PNG, returning strict structured output.
 Nothing else in the repo calls this yet (that wiring is Slice 2, on
 ``runner.comparator``); this module is usable standalone.
+
+(One of the original two moved checks, caption-quality, was later removed
+entirely rather than kept judge-backed -- see
+``.planning/12-consensus-tuning.md``; the 6 keys `judge()` returns today
+reflect that.)
 
 This module NEVER renders, execs, or regenerates a PNG -- it only ever reads
 bytes from two already-existing paths (mirrors ``runner.execution_tier``'s
