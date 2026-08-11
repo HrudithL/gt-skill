@@ -84,11 +84,18 @@ Every rule maps to the single reference file that pins its fix (this is the
 | `domain-present` | FAIL | A literal `data_color(...)` with **no explicit `domain=`** | `big_color/column_gradient_fill.md` |
 | `frame-missing` | FAIL | No enclosing boxed frame, or LEFT/RIGHT border **style** left at `none` (color/width alone is invisible) | `small_color.md` |
 | `heading-band` | FAIL | No band, wrong **shade** for the Big-Color state (light w/ Big Color, dark w/o), a non-palette hex, or a dark band without white labels | `palettes.md` |
-| `render-params` | FAIL | `gtsave` `zoom < 2.0` or `expand <= 5` (INFO if no `gtsave` call is detected) | `small_color.md` |
+| `render-missing` | FAIL | No `gtsave`/`finalize` call anywhere in the script — `table.png` is never produced | `small_color.md` |
+| `render-params` | FAIL | `gtsave` `zoom < 2.0` or `expand <= 5` | `small_color.md` |
 | `striping-gate` | FAIL | ≥10 body rows, body **not** fully color-filled, but striping not enabled | `small_color.md` |
 | `orphan-stub` | FAIL | `tab_stubhead(...)` set but no `rowname_col=` in `GT(...)` | `small_color.md` |
 | `opt-stylize-banned` | FAIL | `opt_stylize(...)` used as a whole-table styler | `small_color.md` |
 | `formatting` | INFO | Numeric `data_color` present but **no** `fmt_*` formatter (numbers may render raw) | `small_color.md` |
+| `hairlines-missing` | FAIL | No `table_body_hlines_*` (or a body-scoped `tab_style` border) — Step 5a is always required, not gated | `small_color.md` |
+| `dividers-missing` | FAIL | 2+ `tab_spanner()` column groups but no vertical divider at the seam | `small_color.md` |
+| `stub-tint-missing` | FAIL | A stub exists, striping is OFF, but no light tint is applied to it (mutually exclusive with striping, not both-required) | `small_color.md` |
+| `source-note-incomplete` | FAIL | No `tab_source_note()` call at all, or only one on a ≥5-row table (needs a separate analytical caption AND a source/provenance note) | `small_color.md` |
+| `render-target-identity` | FAIL | `.gtsave(...)`/`finalize(...)` called on a variable other than the top-level `gt` — the object actually rendered may not be the one this checker's DOM inspection covered | `scripts.md` |
+| `unused-helper-import` | FAIL | A `gt_consistency` helper (`frame`/`finalize`/`heatmap`/`band`/`stripe`/`stub_tint`) is imported but never called — a step the script intended but silently skipped | `scripts.md` |
 | `gt-missing` | FAIL | Ran clean, but **no module-level `gt`** to inspect | `small_color.md` |
 | `exec-error` | FAIL | `table.py` raised while executing | `small_color.md` |
 | `dom-error` | INFO | `gt.as_raw_html()` failed; DOM-level checks skipped (source checks still ran) | `small_color.md` |

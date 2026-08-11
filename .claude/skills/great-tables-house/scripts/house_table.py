@@ -6,16 +6,17 @@ This file is two things at once:
    to be imported into a real table script exactly the way
    ``great-tables-ci/scripts/gt_consistency.py`` is imported by that skill:
 
-       from house_table import PALETTE, frame, finalize, band, stripe, \
-           stub_tint, heatmap, status_chip, summary_row, group_emphasis, \
-           humanize_labels
+       from house_table import PALETTE, frame, hairlines, finalize, band, \
+           stripe, stub_tint, heatmap, status_chip, summary_row, \
+           group_emphasis, humanize_labels
 
 2. **The one worked example.** Running this file directly
    (``python house_table.py``) builds a single synthetic "Regional Product
    Line Performance" table that exercises every generic formatting feature
    the skill covers — stub, groups, spanners, a sequential heatmap, a
    diverging heatmap, categorical status chips, a summary row, striping,
-   stub tint, band, frame, footnote, source note, and a missing value — and
+   stub tint, band, frame, hairlines, footnote, source note, and a missing
+   value — and
    saves it to ``house_table.png`` next to this script.
 
 THE NON-NEGOTIABLE BASE (see ``references/RULES.md`` for the full rule):
@@ -23,14 +24,21 @@ every table gets ALL of — (1) a title AND subtitle, (2) a source note (a
 generic one if the real provenance is unknown — never omitted), (3) the
 boxed frame (``frame(gt)``), (4) AT MOST 2 colored measures total across
 the whole table (never one heatmap per numeric column — a 3rd
-``heatmap()``/``data_color()`` call is always a bug), and (5)
-``finalize(gt, path="table.png")`` as the final call. These five are
+``heatmap()``/``data_color()`` call is always a bug), (5) the body-row
+``hairlines(gt)`` rule (a completely separate `great_tables` option family
+from the outer ``frame()`` border — skipping it is what makes an otherwise
+well-colored table still read as bare and undivided), and (6)
+``finalize(gt, path="table.png")`` as the final call. These six are
 unconditional, unlike the stub/group/spanner/status-chip/summary-row
-choices below, which stay genuinely data-dependent. Importing a helper
+choices below, which stay genuinely data-dependent — and unlike striping
+(conditional on row count/fill, see ``stripe()`` below), which stays a
+gate you must evaluate every time, not skip. Importing a helper
 (``stripe``, ``stub_tint``, ``humanize_labels``, ...) and then not calling
-it is fine; skipping one of the five items above because your table
-"didn't seem to need it" is not — the demo below hits all five every time
-for exactly this reason.
+it is fine when its own gate doesn't fire; skipping one of the six items
+above because your table "didn't seem to need it" is not — small polish
+(hairlines, a stub tint, striping when its gate fires) matters just as
+much as the big colored measures, and the demo below hits all six
+unconditional items every time for exactly this reason.
 
 Why a single script instead of a flowchart + per-shape reference files (the
 ``great-tables`` / `great-tables-ci` design)? Those two skills solve
@@ -213,6 +221,32 @@ def frame(gt, color=None, width="1px", style="solid"):
         table_border_right_style=style,
         table_border_right_color=color,
         table_border_right_width=width,
+    )
+
+
+def hairlines(gt, color=None, width="1px", style="solid"):
+    """Apply the light hairline rule between every body row.
+
+    WHAT: sets ``table_body_hlines_style``/``_color``/``_width`` — the thin
+    rule BETWEEN ordinary rows. Defaults to ``PALETTE["neutral"]["hairline"]``
+    (``#E8E8E8``).
+
+    WHY this is its own helper, not folded into ``frame()``: a hairline is a
+    body-row separator, a completely different `great_tables` option family
+    from ``frame()``'s outer table border — conflating the two by only
+    calling ``frame()`` is exactly how a table ends up with a boxed outline
+    but a bare, undivided body (no hairlines defined anywhere is a silent
+    gap, not a rendering error, so it's easy to never notice). This is UNCON-
+    DITIONAL — every table gets it, the same as `frame()` and the heading
+    band's bottom rule, regardless of row count or whether the table has Big
+    Color. See ``references/RULES.md``'s "THE NON-NEGOTIABLE BASE".
+    """
+    if color is None:
+        color = PALETTE["neutral"]["hairline"]
+    return gt.tab_options(
+        table_body_hlines_style=style,
+        table_body_hlines_color=color,
+        table_body_hlines_width=width,
     )
 
 
@@ -746,6 +780,7 @@ def build_house_table():
         .tab_source_note(source_note="Source: internal sales ledger, FY close. Figures in USD.")
     )
 
+    gt = hairlines(gt)
     gt = frame(gt)
     finalize(gt, path="house_table.png")
     return gt
