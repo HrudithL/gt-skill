@@ -58,7 +58,18 @@ for name in ("gtskill_chrome", "_gtskill_sidecar"):
 _installed_gt_version = None
 try:
     import great_tables as _gt
-    _gt.GT.gtsave = lambda *a, **k: None
+    # Both real gtsave()/save() return `self` (chaining/reassignment idiom --
+    # see gt_consistency.finalize's own `return gt.gtsave(path, **opts)`) so
+    # each stub returns `self` too, not `None`: a stub returning None breaks
+    # `gt = gt.gtsave(...)`, rebinding `gt` to None even though the table
+    # itself is fine, and this runner then wrongly reports "no top-level `gt`
+    # GT instance" for a correct table. `save()` (the older spelling) is
+    # ALSO stubbed here, not just `gtsave()` -- left un-stubbed, it would
+    # actually launch a browser and write a real `table.png` into the run's
+    # own directory (`exec_table` runs with `cwd=path.parent`), silently
+    # overwriting the harness's real rendered artifact mid-comparison.
+    _gt.GT.gtsave = lambda self, *a, **k: self
+    _gt.GT.save = lambda self, *a, **k: self
     _installed_gt_version = getattr(_gt, "__version__", None)
 except Exception:
     pass
