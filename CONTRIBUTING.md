@@ -46,18 +46,31 @@ the one required below for a given piece of work. That does not exempt you: when
 subagent to do that work, you MUST explicitly pin its model to the assignment below. This rule is
 not a default or a suggestion — it is a hard requirement, checked on every subagent spawn.
 
-| Kind of work | Required model | Notes |
+| Kind of work | Required tier | Notes |
 |---|---|---|
-| **Writing/editing code** (implementing a slice, fixing a bug, writing tests) | **Sonnet 5** (`claude-sonnet-5`) | All "coding" subagents from [§5](#5-phase-3--executing-slices-subagents). |
-| **Thinking and planning** — writing/updating the plan in `memory/`, deciding branch/slice breakdown, triaging review findings ([§7](#7-phase-5--review-agent)), deciding whether a proposed doc/fix change should be made at all | **Opus 5** (`claude-opus-5`); if unavailable, **Opus 4.8** | This is the "judgment" layer — anywhere the agent is deciding *what* to do or *whether* something is worth doing, not executing a already-decided mechanical step. |
-| **Documentation and simple mechanical fixes** — writing/updating docs, README content, changelog entries, and applying already-decided, already-verified simple fixes after a PR has passed review | **Haiku** (`claude-haiku-4-5-20251001`) | Only for execution of a change that Opus has already decided should happen (see above). Haiku does not decide anything — it writes what it's told to write. |
-| **The review agent itself** ([§7](#7-phase-5--review-agent)) | **Opus 5** (`claude-opus-5`); if unavailable, **Opus 4.8** | An elite adversarial review is a judgment task (finding defects, weighing severity), not a code-writing task — it uses the thinking-tier model, not the coding-tier model. |
+| **Writing/editing code** (implementing a slice, fixing a bug, writing tests) | **Sonnet** (`model: "sonnet"`) | All "coding" subagents from [§5](#5-phase-3--executing-slices-subagents). |
+| **Thinking and planning** — writing/updating the plan in `memory/`, deciding branch/slice breakdown, triaging review findings ([§7](#7-phase-5--review-agent)), deciding whether a proposed doc/fix change should be made at all | **Opus** (`model: "opus"`) | This is the "judgment" layer — anywhere the agent is deciding *what* to do or *whether* something is worth doing, not executing an already-decided mechanical step. |
+| **Documentation and simple mechanical fixes** — writing/updating docs, README content, changelog entries, and applying already-decided, already-verified simple fixes after a PR has passed review | **Haiku** (`model: "haiku"`) | Only for execution of a change that Opus has already decided should happen (see above). Haiku does not decide anything — it writes what it's told to write. |
+| **The review agent itself** ([§7](#7-phase-5--review-agent)) | **Opus** (`model: "opus"`) | An elite adversarial review is a judgment task (finding defects, weighing severity), not a code-writing task — it uses the thinking-tier model, not the coding-tier model. |
+
+`model: "..."` above is the tier label passed at the actual subagent-spawn call
+site (e.g. the `Agent`/`Task` tool's `model` parameter) — it always resolves to
+whatever concrete model currently backs that tier, so this table never needs
+updating when a tier's underlying model version changes. For code that pins a
+concrete model ID directly (e.g. `GTSKILL_JUDGE_MODEL`, `runner/spec.py`'s
+`MODELS` dict), `runner/spec.py` is the single authoritative source — it is
+documented in-file as "the one place to bump an id"; do not hardcode a model
+ID anywhere else, including in this document. (This document previously named
+specific IDs here and drifted out of sync with `runner/spec.py`'s actual pins
+— exactly the kind of mismatch `runner/judge.py`'s own comments record a past
+incident of. Tier labels don't have that failure mode.)
 
 Rules for applying this table:
 
-- **Pin the model explicitly on every spawn.** Never rely on inheritance from the parent session.
-- **Never downgrade a thinking/review task to save cost.** If Opus 5 is unavailable, fall back to
-  Opus 4.8 — do not fall back further to Sonnet or Haiku for planning, triage, or review.
+- **Pin the model tier explicitly on every spawn.** Never rely on inheritance from the parent session.
+- **Never downgrade a thinking/review task to save cost.** Planning, triage, and review stay on the
+  Opus tier — do not fall back to Sonnet or Haiku for these regardless of which concrete Opus
+  version is currently available.
 - **Never upgrade a mechanical task "just in case."** Docs and already-decided simple fixes stay on
   Haiku; if a "simple fix" turns out to need judgment once a subagent is in it, that subagent
   escalates back to the parent rather than silently deciding on its own tier.
@@ -79,6 +92,9 @@ For every task, spec, or feature request:
    ```
    The `memory/` directory MUST be listed in `.gitignore`. This is the agent's private working
    memory for this project — planning notes, specs, and progress state — not artifacts of the PR.
+   (Some in-flight and historical plans in this specific repo predate this convention and live in
+   `.planning/` instead — also gitignored, not being migrated by this rewrite. New plans go in
+   `memory/`; don't assume a `memory/<spec-name>.md` path resolves for older work.)
 
 2. The plan file MUST include:
    - **Goal** — one paragraph.
@@ -118,7 +134,7 @@ main
 - **Feature branches:** branch off the root. Each represents one cohesive capability from the plan.
 - **Sub-branches:** branch off a feature. Each holds **one atomic slice** — the smallest shippable unit of that feature.
 - **Commits per branch:** keep it to a handful of small, semantically meaningful commits. If a branch grows large, split it into more sub-branches.
-- **Parallelism:** independent slices MUST be developed in parallel via subagents (see [§4](#4-phase-3--executing-slices-subagents)). Dependent slices are serialized behind their parent.
+- **Parallelism:** independent slices MUST be developed in parallel via subagents (see [§5](#5-phase-3--executing-slices-subagents)). Dependent slices are serialized behind their parent.
 - **Isolation:** a single repository checkout can only have one branch checked out at a time — if two subagents share it, one switching branches yanks the working tree out from under the other, and edits or commits can land on the wrong branch. Each subagent working an in-flight branch in parallel with another MUST get its own git worktree (or clone). If isolated worktrees genuinely aren't available, serialize the branch work instead of sharing one checkout.
 - **Every branch is a leaf until proven otherwise.** Only create children when needed.
 
@@ -154,7 +170,7 @@ A subagent's final message back to the parent MUST include:
 - Any assumptions it made.
 - Any items it flagged as subjective and did **not** decide.
 - Test/lint results.
-- The PR URL (see [§5](#5-phase-4--pull-requests)).
+- The PR URL (see [§6](#6-phase-4--pull-requests)).
 
 ---
 
@@ -192,24 +208,28 @@ below): it isn't "re-review forever until there is literally nothing left to say
 
 This is the load-bearing rule of this section. The review subagent MUST be spawned with:
 
-- the PR's **full diff** (every changed file, not just hunks — enough surrounding code to judge
-  correctness in context),
+- the PR's **full diff** (every changed file, not just hunks),
 - the PR **title and description**,
-- and **nothing else.**
+- and **nothing else** from the surrounding task.
 
-The review subagent must **not** receive: the parent session's conversation history, the working
-plan in `memory/`, the implementer's rationale for why it made the choices it made, or prior
-review rounds' comments on this same PR. This is deliberate, not an oversight — a reviewer that
-only sees the diff and the PR's own stated intent reviews what the code actually does, not what
+"Nothing else" bounds *sources of context*, not *tools*: the review subagent MAY read any
+changed file's full current content directly from the repo (a raw diff hunk's few lines of
+surrounding context are often not enough to judge correctness) and MAY run read-only commands
+(tests, greps, a self-comparison) to verify a claim. It MUST NOT be given, and must not go
+looking for: the parent session's conversation history, the working plan in `memory/`, the
+implementer's rationale for why it made the choices it made, or prior review rounds' comments on
+this same PR. This is deliberate, not an oversight — a reviewer that only sees the diff, the PR's
+own stated intent, and the repo's own current state reviews what the code actually does, not what
 the implementer intended it to do, and cannot be talked out of a finding by context the code
 itself doesn't carry. If a later round is needed after fixes, spawn a **fresh** review subagent
 with the same restricted contract against the new diff — do not reuse or carry forward the prior
-round's subagent state.
+round's subagent state, and do not pass it prior rounds' comments (see "Declined findings" below
+for how repeats are meant to be handled instead).
 
 ### Model and goal
 
-Per [§2](#2-model-assignment-mandatory), the review subagent runs on **Opus 5** (or Opus 4.8 if
-Opus 5 is unavailable) — review is a judgment task, not a code-writing task, so it uses the
+Per [§2](#2-model-assignment-mandatory), the review subagent runs on the **Opus tier**
+(`model: "opus"`) — review is a judgment task, not a code-writing task, so it uses the
 thinking-tier model regardless of what tier wrote the code under review.
 
 Brief the review subagent to be an **elite, adversarial reviewer**, not a friendly pass. Its job
@@ -221,15 +241,16 @@ minimum it must actively hunt for:
   exceptions.
 - **Security issues** — injection (SQL/shell/path), unsafe deserialization, secrets or credentials
   handling, SSRF, unsafe use of `eval`/`exec`/pickle, missing input validation at trust boundaries.
-- **Inefficiencies** — quadratic-or-worse algorithms where linear is available, loading more data
-  into memory than needed (e.g. reading the whole 300 GB archive into pandas instead of a
-  filtered/streamed scan), redundant recomputation, unnecessary I/O in a loop, missing
-  predicate/projection pushdown on Parquet/DuckDB/Polars scans.
-- **Poorly managed data** — anything that mutates the immutable raw archive, look-ahead bias
-  (using information not yet available at the point-in-time of a decision), survivorship bias,
-  point-in-time violations in joins (e.g. joining a consensus estimate that wasn't actually known
-  before the event), timezone/session mismatches, silent NaN/null handling that changes results,
-  non-reproducible randomness (missing seeds), train/test leakage, misuse of statistical tests.
+- **Inefficiencies** — quadratic-or-worse algorithms where linear is available, redundant
+  recomputation, unnecessary I/O or subprocess spawns in a loop, re-rendering a table/re-running
+  the judge when a cheaper deterministic check would answer the same question.
+- **Poorly managed data / eval integrity** — a corpus ground truth or checked-in golden PNG mutated
+  without regenerating what depends on it, a comparator or judge scoring change silently applied
+  to some but not all of `eval-results/**` (candidate-set vs. scoring-method confounds — this repo
+  has hit this exact bug before), non-reproducible eval runs (missing seeds, a judge call made
+  without pinning the model/temperature contract), skill-file content (`.claude/skills/**`) that
+  drifts from what `runner/comparator.py`'s checks or `runner/spec.py`'s model pins actually
+  enforce, silent `NaN`/null handling in a check that changes its score.
 - **Missing or weak tests** for the behavior the PR claims to add.
 
 Findings must be reported **ordered most-severe-first**, each with a concrete failure
@@ -245,7 +266,20 @@ End with a short verdict on whether the PR is safe to merge up as-is.
 - **Wait for CI too.** Before triaging a round of findings, also wait for the **entire CI run**
   (every job configured for this repo, not just the fastest one) to finish. Collect all CI
   failures and all review findings together, then address them in one follow-up pass — do not
-  react to a partial signal from either source.
+  react to a partial signal from either source. If a repo has no test/CI workflow beyond a
+  trigger-only action (e.g. an `@claude`-mention responder with no automated test job), this gate
+  is trivially satisfied — there is nothing else to wait for.
+- **If the review subagent itself fails** (errors, times out, or returns no usable report): retry
+  once with a fresh spawn against the same diff. If it fails again, do not treat that as "review
+  passed" or merge around it — either perform the adversarial review yourself at the Opus tier
+  using the same context contract (diff + description only) and note in the PR that this round was
+  self-reviewed and why, or escalate to the human if you cannot do the review yourself with
+  confidence. A PR never merges up on the theory that the gate "would have passed."
+- **A background review subagent's completion is a claim, not a fact until directly confirmed.**
+  If the review is running in the background (the default for subagents), do not assert "still
+  waiting" or "review passed" from memory of when it was spawned — a completion notification can
+  arrive during a gap in the conversation and go unprocessed. Check its actual current status
+  directly before triaging or before telling anyone the PR is ready.
 
 ### Triage the findings — this is an Opus decision
 
@@ -264,8 +298,12 @@ delegated to the Sonnet coding subagent and never done by skimming. For each fin
    [§11](#11-subjective-vs-objective-decisions). Ask one focused question — "implement it this way
    or that way?" — with a recommendation. Do not ask about fixes that are straightforward.
 3. **Decline what would overcomplicate.** A suggestion adding scope/abstraction/infrastructure
-   beyond what the spec needs may be declined or deferred — note why on the PR. Simplicity (§1)
-   outranks satisfying every finding.
+   beyond what the spec needs may be declined or deferred — note why **in the PR description**
+   (not just a comment). This matters mechanically, not just for the human record: the next
+   round's review subagent is spawned fresh with only the diff and the PR's title/description
+   (see the context contract above) — it never sees prior comments, so a declined item only stays
+   suppressed if the reasoning lives in the description itself. Simplicity (§1) outranks satisfying
+   every finding.
 4. **Push a follow-up commit with the decided fixes and spawn a fresh review subagent** against
    the new diff. If that round surfaces more substantive findings, repeat the same Opus-tier
    triage. If it doesn't (see below), stop.
@@ -286,11 +324,14 @@ Note the outcome briefly on the PR ("remaining findings are stylistic nits / alr
 stopping here") and move on. This is an Opus-tier judgment call the agent makes itself, not a
 genuine fork to escalate to the human.
 
-**Repeated out-of-scope findings cap the loop at 2–3 rounds.** If a round's findings are
-out-of-scope and the next fresh-diff round comes back with the same or other out-of-scope content
-anyway, that is evidence the loop has stopped being productive, not a reason to keep spawning
-review subagents hoping for a cleaner pass. Note this on the PR ("review agent kept raising
-out-of-scope items after being scoped down — stopping after round N") and move on.
+**Repeated out-of-scope findings cap the loop at 2–3 rounds.** Each fresh review subagent sees
+only the diff and the PR description (not prior rounds' comments), so a declined item can only
+stop recurring if its rationale was added to the description per the triage step above. If a
+round's findings are out-of-scope and the next fresh-diff round comes back with the same or other
+out-of-scope content anyway *despite* the description already covering it, that is evidence the
+loop has stopped being productive, not a reason to keep spawning review subagents hoping for a
+cleaner pass. Note this on the PR ("review agent kept raising out-of-scope items already declined
+in the description — stopping after round N") and move on.
 
 The PR is eligible to merge up once **both** are true: the review has reached its stopping point
 per the criteria above, and any escalated forks are resolved by the human. None of this requires a
@@ -310,7 +351,7 @@ working memory.
 
 - Merges from sub → feature and feature → root are **allowed and expected** without additional user gating, provided **CI is green (all jobs)** and the review agent pass in [§7](#7-phase-5--review-agent) has been triaged.
 - **Use merge commits everywhere** (not squash, not rebase-and-merge). Full history is preserved so the small-commit trail up the tree stays intact and auditable.
-- After each successful merge, propose branch cleanup per [§9](#9-phase-8--branch-cleanup).
+- After each successful merge, propose branch cleanup per [§10](#10-phase-8--branch-cleanup).
 
 ---
 
@@ -399,7 +440,7 @@ The agent MUST NOT:
 - Make a genuine-fork decision on the human's behalf — a §11 category (product/UX, public API shape, naming, deps, architecture, security posture) or a choice with multiple materially-different reasonable implementations (see [§11.1](#111-when-to-decide-vs-ask)). Straightforward fixes are the agent's to make.
 - Merge a PR up the tree before the review agent's pass ([§7](#7-phase-5--review-agent)) has been read and triaged (at the Opus tier) for the latest diff.
 - Treat "the CI passed" as a substitute for the review agent's pass.
-- Spawn any subagent without pinning its model per [§2](#2-model-assignment-mandatory) — including spawning the review agent on anything other than Opus 5/4.8, or having the review agent's context include anything beyond the PR diff and description.
+- Spawn any subagent without pinning its model per [§2](#2-model-assignment-mandatory) — including spawning the review agent on anything other than the Opus tier, or having the review agent's context include anything beyond the PR diff and description.
 
 ---
 
@@ -417,7 +458,7 @@ Per slice:
 - [ ] Opened a PR to the parent branch with a complete description.
 
 Per PR:
-- [ ] Spawned the review subagent as part of opening the PR — on Opus 5/4.8, context-limited to the PR diff + description only, nothing more.
+- [ ] Spawned the review subagent as part of opening the PR — on the Opus tier, context-limited to the PR diff + description only, nothing more.
 - [ ] Waited for the **entire CI run** (completed, green or red) AND the **fresh review subagent pass** against the latest diff to finish before making any fix — no reacting to partial signals.
 - [ ] Triaged the review subagent's findings at the Opus tier per [§11.1](#111-when-to-decide-vs-ask); delegated decided fixes to Sonnet 5 (or Haiku for pure docs/no-judgment fixes).
 - [ ] Posted the review subagent's findings (or a summary) as a PR comment, labelled as the internal review agent's pass.
