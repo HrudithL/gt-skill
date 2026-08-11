@@ -525,6 +525,42 @@ def _stmt_targets_name(stmt: ast.stmt, name: str) -> bool:
     is progressively reassigned to itself), or (b) is a bare expression
     statement whose own call-chain root is `name` (`gt.gtsave(...)`,
     `gt.tab_header(...).gtsave(...)`, a bare `finalize(gt, ...)`).
+
+    Internal review finding (2026-08-11): the bare-call branch below
+    previously compared the wrong thing for a call shaped like `finalize(gt,
+    ...)` -- `name` is
+    the SCRIPT's exported variable ("gt"), but the code compared it against
+    `func.id`, which is the CALLEE's own name ("finalize"), an equality
+    that can never hold. That silently excluded every bare `finalize(gt,
+    ...)` statement from `_walk_exported_scope`'s restricted walk -- so
+    `_ast_call_blocks(source, tree, "finalize", allow_bare=True)` (called
+    from `_render_call_present`, which `check_render_mechanics` reads via
+    the `render_call_present` fingerprint field to detect a render call at
+    all) never found it, scoring a perfectly correct, actually-rendered
+    candidate as "no
+    gtsave()/finalize() call found -- the required table image was never
+    rendered." A bare call's SUBJECT is its first positional argument (the
+    same convention `_exported_gt_name` above already uses to resolve
+    `finalize(gt, ...)`'s target), not the function name -- check that.
+
+    Follow-up review finding (same day): the first fix checked ANY bare
+    call's first argument against `name`, not just `finalize(...)` --
+    `debug_dump(gt, ...)` or even `print(gt)` would also match, pulling
+    that statement's entire subtree into the exported scope (the exact
+    false-positive class `_walk_exported_scope`'s round-14 fix exists to
+    prevent, e.g. a throwaway `GT(df).data_color(...)` passed as some
+    OTHER argument to that same bare call). Restricted to `func.id ==
+    "finalize"` specifically -- the one bare-call render convention this
+    corpus actually uses, matching `_exported_gt_name`'s own identical
+    restriction just above. `finalize(gt=gt, ...)` (keyword-only) is
+    still not resolved by either function -- benign today only because
+    both degrade the same way (both return None/False, so a name that
+    can't be resolved falls back to the unrestricted `_walk_top_level`
+    rather than being wrongly excluded); a script that ALSO resolves the
+    exported name some other way (e.g. `gt = gt.gtsave(...)` elsewhere)
+    while using `finalize(gt=gt, ...)` for a bare call would silently
+    drop that one statement from scope. Not handled -- keyword-only
+    `finalize()` calls aren't a pattern this corpus uses.
     """
     if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
         return stmt.targets[0].id == name
@@ -534,8 +570,10 @@ def _stmt_targets_name(stmt: ast.stmt, name: str) -> bool:
             func = expr.func
             if isinstance(func, ast.Attribute):
                 expr = func.value
-            elif isinstance(func, ast.Name):
-                return func.id == name  # a bare call directly on the name, e.g. finalize(gt, ...)
+            elif isinstance(func, ast.Name) and func.id == "finalize":
+                # a bare `finalize(gt, ...)` call -- `name` is the call's
+                # first ARGUMENT, not its callee.
+                return bool(expr.args) and isinstance(expr.args[0], ast.Name) and expr.args[0].id == name
             else:
                 return False
         return isinstance(expr, ast.Name) and expr.id == name

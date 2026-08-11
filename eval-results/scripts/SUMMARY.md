@@ -17,11 +17,31 @@ removal rationale and cross-skill comparison. Scores below are **not
 comparable** to this file's pre-2026-08-09 numbers (denominator shrank
 114 -> 97 pts).
 
+**Comparator bug fixes (2026-08-11):** two bugs were fixed, both of which
+happened to affect this skill more than the others.
+1. `check_render_mechanics` was scoring 0/2 for every candidate that
+   renders via a bare `finalize(gt, ...)` statement rather than
+   `gt = gt.gtsave(...)` — a comparator detection bug (7 of this skill's
+   18 skill invocations used that pattern).
+2. Separately, `runner/execution_tier.py`/`convergence.py`'s no-render
+   stub for `GT.gtsave`/`GT.save` returned `None` instead of `self`,
+   breaking the `gt = gt.gtsave(...)` *reassignment* idiom specifically —
+   `towny_growth_trends/repeat_1`'s candidate used exactly that idiom,
+   so it failed Tier-2 execution entirely (scored 21/81, 25.9%) even
+   though its rendered PNG was completely fine. Fixed; that invocation
+   now executes and was re-scored for real (including a fresh judge
+   call, since its previous judge result was cached as "unavailable"
+   under the old, broken execution status and that's no longer true) —
+   it now scores 68/88 (77.3%).
+
+Numbers below reflect both fixes. See the top-level
+[`SUMMARY.md`](../SUMMARY.md) for the full root-cause writeups.
+
 | Metric (mean across 6 prompts) | `scripts` skill | baseline (no skill) |
 |---|---|---|
-| Comparator total score | **62.4%** | 24.7% |
+| Comparator total score | **66.1%** | 24.7% |
 | Cost per invocation | $0.175 | $0.090 |
-| Score spread across 3 repeats | 23.8 points | n/a (1 run) |
+| Score spread across 3 repeats | 16.9 points | n/a (1 run) |
 
 See [`plots/cost.png`](plots/cost.png), [`plots/tokens.png`](plots/tokens.png),
 [`plots/consistency.png`](plots/consistency.png),

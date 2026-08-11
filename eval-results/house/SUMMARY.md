@@ -17,17 +17,26 @@ removal rationale and cross-skill comparison. Scores below are **not
 comparable** to this file's pre-2026-08-09 numbers (denominator shrank
 114 -> 97 pts).
 
+**Comparator bug fix (2026-08-11):** `check_render_mechanics` was scoring
+0/2 for every candidate that renders via a bare `finalize(gt, ...)`
+statement (rather than `gt = gt.gtsave(...)`) — a comparator detection
+bug, not a real candidate defect (see the top-level
+[`SUMMARY.md`](../SUMMARY.md)). `house`'s worked example teaches exactly
+that pattern, so this was a false negative on 16 of its 18 skill
+invocations (baseline invocations, which don't use the skill's worked
+example, were unaffected). Fixed; numbers below reflect the correction.
+
 | Metric (mean across 6 prompts) | `house` skill | baseline (no skill) |
 |---|---|---|
-| Comparator total score | **67.2%** | 26.6% |
+| Comparator total score | **69.3%** | 26.6% |
 | Cost per invocation | $0.117 | $0.065 |
-| Score spread across 3 repeats | 17.8 points | n/a (1 run) |
+| Score spread across 3 repeats | 18.2 points | n/a (1 run) |
 
 See [`plots/cost.png`](plots/cost.png), [`plots/tokens.png`](plots/tokens.png),
 [`plots/consistency.png`](plots/consistency.png),
 [`plots/comparator_score.png`](plots/comparator_score.png).
 
-The skill scores roughly **2.5x** the baseline's comparator score for about
+The skill scores roughly **2.6x** the baseline's comparator score for about
 1.8x the cost — the cheapest of the three real skills (no flowchart, no
 checker loop; one worked reference script + a rules file). On this sweep
 it edges out `scripts` (see the top-level [`SUMMARY.md`](../SUMMARY.md) —

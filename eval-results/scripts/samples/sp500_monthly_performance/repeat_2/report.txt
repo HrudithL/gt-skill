@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124542_scripts_6prompts/prompts/sp500_monthly_performance/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/sp500_monthly_performance.py
 
-TOTAL: 47/87 (54.0%)
+TOTAL: 49/87 (56.3%)
   Data-compliance:        17/48
-  Formatting-compliance:  30/39
+  Formatting-compliance:  32/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 6 canonical measures unverifiable
@@ -24,7 +24,7 @@ TOTAL: 47/87 (54.0%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/6 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['monthly_open', 'monthly_close', 'pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss']
-[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
+[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate title 'S&P 500 Monthly Performance Summary (2010–2015)' is accurate and captures the core subject matter. The ground truth's 'S&P 500 Monthly Performance, 2010–2015' is slightly more direct, but the candidate's wording ('Summary') is reasonable and doesn't misframe the content.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate orders columns logically: Opening Price, Closing Price, Monthly %, Avg Daily Vol, Highest Daily Gain, Highest Daily Loss. This flows naturally from raw prices through monthly performance to daily extremes. The ground truth regroups prices and percentages before introducing volume and daily extremes, but the candidate's order remains sensible and reader-friendly overall.

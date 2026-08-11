@@ -24,7 +24,7 @@ TOTAL: 29/87 (33.3%)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/1 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['msrp']
-[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
+[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- gtsave()/finalize() call(s) found, but none targets the required table.png output
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- Title 'Top 10 Most Expensive GT Cars' with subtitle 'Grouped by Country of Origin' is accurate and captures the core framing of top 10 expensive cars grouped by country. It is slightly less narrative than the ground truth's 'The 10 Priciest GT Cars, by Country of Origin' but conveys the same essential story.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- Column order (Model, Drivetrain, Transmission, Price) is sensible and groups related specs together. Ground truth uses (Model, MSRP, Drivetrain, Transmission), prioritizing price earlier as the sorting criterion. Candidate's placement of price last is still logical for a narrative flow but slightly less aligned with the prominent role price plays as both the sort key and the 'hero' measure.

@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124540_house_6prompts/prompts/sp500_monthly_performance/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/sp500_monthly_performance.py
 
-TOTAL: 39/84 (46.4%)
+TOTAL: 41/84 (48.8%)
   Data-compliance:        15/45
-  Formatting-compliance:  24/39
+  Formatting-compliance:  26/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[(None, 'apr 2010'), (None, 'apr 2011'), (None, 'apr 2012'), (None, 'apr 2013'), (None, 'apr 2014')], extra=[(None, '2010-01'), (None, '2010-02'), (None, '2010-03'), (None, '2010-04'), (None, '2010-05')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/6 canonical measures have a value-matching candidate column; unmatched: ['pct_change', 'best_day_gain', 'worst_day_loss', 'monthly_open', 'monthly_close', 'avg_volume']
@@ -24,7 +24,7 @@ TOTAL: 39/84 (46.4%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/6 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['monthly_open', 'monthly_close', 'pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss']
-[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
+[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 1/3 -- judge score 2/5 -- The candidate's title 'S&P 500 Monthly Performance Summary' is generic and omits the date range (2010-2015), whereas the ground truth's 'S&P 500 Monthly Performance, 2010-2015' includes it. The subtitle in the candidate ('2010-2015: opening/closing prices, percent change, and intra-month volatility') frames the daily extremes as 'intra-month volatility,' which is less precise than the ground truth's description: 'best and worst single trading day within that month'—the candidate's framing obscures the actual concept being measured.
 [FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate's column order (Month, Open, Close, % Change, Avg Daily Volume, Max Daily Gain, Max Daily Loss) keeps related price metrics (Open, Close) and daily extremes (Gain, Loss) adjacent, which is workable. However, the ground truth groups the daily extremes under a spanner 'Single-day extremes within the month' with Gain and Loss as sub-columns, and places them after Volume, creating a more structured hierarchy. The candidate flattens this distinction and reads less naturally from an analytical perspective, though the order remains defensible—not confusing, but not optimally organized.

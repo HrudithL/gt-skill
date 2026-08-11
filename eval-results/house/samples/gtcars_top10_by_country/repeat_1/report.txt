@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124540_house_6prompts/prompts/gtcars_top10_by_country/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
-TOTAL: 44/90 (48.9%)
+TOTAL: 46/90 (51.1%)
   Data-compliance:        20/51
-  Formatting-compliance:  24/39
+  Formatting-compliance:  26/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[('italy', '458 speciale'), ('italy', 'aventador'), ('italy', 'f12berlinetta'), ('italy', 'ff'), ('italy', 'gtc4lusso')], extra=[('italy', 'ferrari 458 speciale'), ('italy', 'ferrari f12berlinetta'), ('italy', 'ferrari ff'), ('italy', 'ferrari gtc4lusso'), ('italy', 'ferrari laferrari')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/1 canonical measures have a value-matching candidate column; unmatched: ['msrp']
@@ -24,7 +24,7 @@ TOTAL: 44/90 (48.9%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/1 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['msrp']
-[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
+[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate title 'Top 10 Most Expensive GT Cars, Grouped by country of origin with drivetrain and transmission details' is clear, accurate, and captures the same core framing as the ground truth's 'The 10 Priciest GT Cars, by Country of Origin'—both establish that the table shows the ten most expensive cars organized by country.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The left-to-right order (Car, MSRP, Drivetrain, Transmission) reads naturally: the identifying car model comes first, followed by the key metric (MSRP), then the two supporting details (Drivetrain and Transmission). This is a sensible and logical reading order, equivalent to the ground truth's own arrangement.

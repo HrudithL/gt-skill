@@ -24,7 +24,7 @@ TOTAL: 67/82 (81.7%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
+[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- gtsave()/finalize() call(s) found, but none targets the required table.png output
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title "GT Cars: Horsepower and Price" matches the ground truth's title exactly and captures the correct framing. However, the candidate's subtitle "A collection of high-performance vehicles" is generic and differs from the ground truth's more informative subtitle about dataset scope and sort order.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- Both tables follow the same left-to-right order: Car name (stub), Horsepower, then Price. This order is sensible for the analytical story—identifying the car first, then showing its performance characteristic, then its cost. The candidate's order is equally logical as the ground truth's.

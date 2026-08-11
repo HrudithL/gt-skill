@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124542_scripts_6prompts/prompts/gtcars_hp_price/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 50/85 (58.8%)
+TOTAL: 52/85 (61.2%)
   Data-compliance:        18/46
-  Formatting-compliance:  32/39
+  Formatting-compliance:  34/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=['acura nsx', 'aston martin db11', 'aston martin rapide s', 'aston martin vanquish', 'aston martin vantage'], extra=['acura', 'aston martin', 'aston martin', 'aston martin', 'aston martin']
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/2 canonical measures have a value-matching candidate column; unmatched: ['msrp', 'hp']
@@ -24,7 +24,7 @@ TOTAL: 50/85 (58.8%)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/2 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['hp', 'msrp']
-[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
+[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'GT Cars: Horsepower and Price' matches the ground truth's framing exactly, capturing the core subject. However, the subtitle 'Premium performance vehicles by manufacturer' is different from the ground truth's 'All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP.' The candidate's subtitle is less precise—it describes the data conceptually rather than stating the complete scope and sort order. Both convey accuracy, but the ground truth's is more informative.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (Manufacturer/Model, Horsepower, Price) is logical and sensible. Placing the identifying/categorizing information (manufacturer and model) first, followed by the two numerical measures (horsepower and price), creates a natural reading flow that matches the analytical goal of showing cars' horsepower and price. This is equally sensible as the ground truth's single-column flat stub order.
