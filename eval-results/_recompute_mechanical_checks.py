@@ -83,7 +83,14 @@ def rewrite_report_text(old_text: str, new_checks_by_name: dict, new_score: dict
         m = _CHECK_LINE_RE.match(line)
         if m and m.group(3) not in JUDGE_CHECK_NAMES:
             nc = new_checks_by_name[m.group(3)]
-            status = "PASS" if nc["passed"] else ("N/A" if nc["points_possible"] == 0 else "FAIL")
+            # Matches comparator.format_report's own precedence exactly (comparator.py's
+            # `mark = "N/A" if r.points_possible == 0 else (...)`) -- N/A must be checked
+            # FIRST: `_na()` results have `passed=True` (see its own docstring), so
+            # checking `passed` before `points_possible == 0` mislabels every N/A check
+            # as PASS, falsely claiming a condition was verified when it wasn't graded
+            # at all. (Internal review finding, 2026-08-11: this inversion originally
+            # shipped here and corrupted 72 of 96 regenerated report.txt files.)
+            status = "N/A" if nc["points_possible"] == 0 else ("PASS" if nc["passed"] else "FAIL")
             out.append(f"[{status}] [{nc['tier'].upper()}] {nc['name']}: {nc['points_earned']}/{nc['points_possible']} -- {nc['detail']}")
             continue
         if _TOTAL_RE.match(line):

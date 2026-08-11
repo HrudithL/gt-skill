@@ -14,17 +14,17 @@ TOTAL: 48/90 (53.3%)
 [PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by country of origin and sorts cars within each group by price (descending), exactly matching the ground truth's grouping structure and the REQUIRED_INSTRUCTIONS mandate for 'grouping: true' and sort by 'msrp' descending 'within_group'. Both tables clearly show Italy, United Kingdom, and United States as country groups with prices sorted from highest to lowest within each.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
-[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate uses abbreviated transmission labels ('7a', '8a', '8am') instead of the readable 'transmission' concept names ('7-speed automatic', '8-speed automatic', '8-speed automated-manual'). Similarly, drivetrain is abbreviated to 'rwd' and 'awd' instead of 'RWD' and 'AWD'. The Price column label is sensible, but transmission/drivetrain concepts are obscured by poor abbreviation.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=10, fully_filled=False -> expected striping=True, actual=True
 [FAIL] [MECHANICAL] Heading band hue harmonization: 0/5 -- shade expected=light actual=unknown; expected hue family 'navy' for palette 'blues', got 'unknown'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
-[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/1 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['msrp']
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
-[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate title 'Top 10 Most Expensive GT Cars by Country' with subtitle 'Grouped by country of origin with drivetrain and transmission details' captures the core framing and analytical story as effectively as the ground truth's 'The 10 Priciest GT Cars, by Country of Origin'. Both establish the same subject (top 10 expensive cars) and grouping structure (by country).
 [FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate's column order (Model, Year, Drivetrain, Transmission, Price) differs from the ground truth's (Model, MSRP, Drivetrain, Transmission). The ground truth prioritizes MSRP (the hero metric, shown with color highlighting) immediately after the model, making price central to the story. The candidate delays Price to the far right, which is workable but less intuitive for a table about 'most expensive' cars.

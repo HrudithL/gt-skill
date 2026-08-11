@@ -14,17 +14,17 @@ TOTAL: 72/87 (82.8%)
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping, so this is not a discretionary editorial choice being evaluated. REQUIRED_INSTRUCTIONS contains no 'grouping' key, but the condition for applicability also requires the ground truth to visibly use row grouping, which it does not.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
-[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- All column labels clearly and correctly name their underlying concepts: 'Temperature (°F)', 'Wind Speed (mph)', and 'Ozone (ppb)' are unambiguous and match the LABEL_SYNONYMS metadata for the core concepts (avg_temp, avg_wind, avg_ozone).
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=5, fully_filled=False -> expected striping=False, actual=True
 [FAIL] [MECHANICAL] Heading band hue harmonization: 0/5 -- shade expected=light actual=unknown; expected hue family 'oxblood' for palette 'reds', got 'unknown'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
-[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 3/3 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
-[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Air Quality Metrics by Month' is accurate and clear, but lacks the specificity of the ground truth's 'Monthly Air Quality in New York, 1973,' which explicitly anchors the data to location and time period. Both framing approaches are reasonable, though the ground truth's is slightly more informative.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The left-to-right order (Month → Temperature → Wind Speed → Ozone) follows a natural analytical sequence from identifying information through the three metrics, matching the ground truth's order and supporting clear story flow.

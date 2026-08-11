@@ -14,17 +14,17 @@ TOTAL: 46/90 (51.1%)
 [FAIL] [JUDGE] Grouping-choice quality: 2/3 -- judge score 4/5 -- The candidate groups by country of origin (Italy, United Kingdom, United States), which directly addresses the prompt's grouping requirement. However, within the United Kingdom group, the candidate has reordered cars by descending price ($335,000 → $304,350 → $287,250), whereas the ground truth keeps the same group intact but places the United States group (with the single $447,000 GT) between Italy and United Kingdom, achieving a global price ordering across groups. The candidate's grouping is sensible but does not reflect the same cross-group ordering strategy.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
-[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- All column labels are clear and correct: 'Car' identifies the model, 'MSRP' correctly denotes price (aligned with LABEL_SYNONYMS), 'Drivetrain' and 'Transmission' precisely name their concepts. Labels are consistent and unambiguous.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=MISSING (Step 5a, always required); dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=10, fully_filled=False -> expected striping=True, actual=False
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=light actual=unknown; expected hue family 'navy' for palette 'blues', got 'navy'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
-[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/1 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['msrp']
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
-[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate title 'Top 10 Most Expensive GT Cars, Grouped by country of origin with drivetrain and transmission details' is clear, accurate, and captures the same core framing as the ground truth's 'The 10 Priciest GT Cars, by Country of Origin'—both establish that the table shows the ten most expensive cars organized by country.
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The left-to-right order (Car, MSRP, Drivetrain, Transmission) reads naturally: the identifying car model comes first, followed by the key metric (MSRP), then the two supporting details (Drivetrain and Transmission). This is a sensible and logical reading order, equivalent to the ground truth's own arrangement.

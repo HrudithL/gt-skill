@@ -22,8 +22,9 @@ comparable** to this file's pre-2026-08-09 numbers (denominator shrank
 statement (rather than `gt = gt.gtsave(...)`) — a comparator detection
 bug, not a real candidate defect (see the top-level
 [`SUMMARY.md`](../SUMMARY.md)). `house`'s worked example teaches exactly
-that pattern, so this was a false negative on 16 of its 24 invocations.
-Fixed; numbers below reflect the correction.
+that pattern, so this was a false negative on 16 of its 18 skill
+invocations (baseline invocations, which don't use the skill's worked
+example, were unaffected). Fixed; numbers below reflect the correction.
 
 | Metric (mean across 6 prompts) | `house` skill | baseline (no skill) |
 |---|---|---|

@@ -22,21 +22,24 @@ happened to affect this skill more than the others.
 1. `check_render_mechanics` was scoring 0/2 for every candidate that
    renders via a bare `finalize(gt, ...)` statement rather than
    `gt = gt.gtsave(...)` — a comparator detection bug (7 of this skill's
-   24 invocations used that pattern).
+   18 skill invocations used that pattern).
 2. Separately, `runner/execution_tier.py`/`convergence.py`'s no-render
    stub for `GT.gtsave`/`GT.save` returned `None` instead of `self`,
    breaking the `gt = gt.gtsave(...)` *reassignment* idiom specifically —
    `towny_growth_trends/repeat_1`'s candidate used exactly that idiom,
    so it failed Tier-2 execution entirely (scored 21/81, 25.9%) even
    though its rendered PNG was completely fine. Fixed; that invocation
-   now scores normally.
+   now executes and was re-scored for real (including a fresh judge
+   call, since its previous judge result was cached as "unavailable"
+   under the old, broken execution status and that's no longer true) —
+   it now scores 68/88 (77.3%).
 
 Numbers below reflect both fixes. See the top-level
 [`SUMMARY.md`](../SUMMARY.md) for the full root-cause writeups.
 
 | Metric (mean across 6 prompts) | `scripts` skill | baseline (no skill) |
 |---|---|---|
-| Comparator total score | **66.2%** | 24.7% |
+| Comparator total score | **66.1%** | 24.7% |
 | Cost per invocation | $0.175 | $0.090 |
 | Score spread across 3 repeats | 16.9 points | n/a (1 run) |
 
@@ -46,14 +49,14 @@ See [`plots/cost.png`](plots/cost.png), [`plots/tokens.png`](plots/tokens.png),
 
 `great-tables-ci` is the same 7-step-flowchart skill as `prose` plus a
 mechanical checker loop (`gt_check.py`) it runs and fixes against before
-finishing. Fixing `towny_growth_trends/repeat_1`'s spurious execution
-failure did more than raise this skill's mean — it removed the single
-biggest outlier dragging down its own consistency, so `scripts` is no
-longer the least consistent of the three real skills (16.9pp spread,
-between `prose`'s 10.6pp and `house`'s 18.2pp — see the top-level
-[`SUMMARY.md`](../SUMMARY.md)). It remains the **most expensive** of the
-three regardless, and still trails `house` on mean score by a narrow,
-sweep-dependent margin. See
+finishing. On this sweep `house` edges it out on mean score (see the
+top-level [`SUMMARY.md`](../SUMMARY.md) — that ordering is close enough to
+the repeat-to-repeat spread that it shouldn't be read as settled either
+way), and the checker loop remains the **most expensive and least
+consistent** of the three real skills regardless — the loop itself is a
+source of run-to-run variance (how many issues it happens to catch, how
+many fix attempts it takes) that a higher mean score, on sweeps where it
+has one, doesn't offset. See
 [`progressive_disclosure.md`](progressive_disclosure.md) for a transcript
 excerpt showing both halves: reference reads before writing code, then a
 targeted checker-driven fix pass after.

@@ -1,8 +1,8 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124542_scripts_6prompts/prompts/towny_growth_trends/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/towny_growth_trends.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124542_scripts_6prompts/prompts/towny_growth_trends/repeat_1/table.py vs prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 65/82 (79.3%)
-  Data-compliance:        42/48
-  Formatting-compliance:  23/34
+TOTAL: 68/88 (77.3%)
+  Data-compliance:        42/49
+  Formatting-compliance:  26/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
@@ -11,20 +11,20 @@ TOTAL: 65/82 (79.3%)
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
 [FAIL] [MECHANICAL] Column set shown vs. hidden: 3/4 -- visible-column overlap 0.73 (candidate-only=['Town'], missing=['name', 'rank', 'total_growth_pct']); value-matched renamed columns: {'density_1996': '1996', 'density_2001': '2001', 'density_2006': '2006', 'density_2011': '2011', 'density_2016': '2016', 'density_2021': '2021', 'pop_change_1996_2001_pct': '1996-2001', 'pop_change_2001_2006_pct': '2001-2006', 'pop_change_2006_2011_pct': '2006-2011', 'pop_change_2011_2016_pct': '2011-2016', 'pop_change_2016_2021_pct': '2016-2021'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping, so there is no discretionary grouping choice to evaluate. Grouping is not visibly employed in either rendering, and REQUIRED_INSTRUCTIONS contains no 'grouping' key, making this dimension inapplicable.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=True, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [PASS] [MECHANICAL] No same-family hue collision across 2 measures: 1/1 -- colored-measure palettes: ['Blues', 'Greens']
-[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate table has a critical error: it includes Cockburn Island as the first row, which has zero or near-zero density values (0.0-0.1 per km²) across all years. The ground truth explicitly excludes such municipalities in its caption ('Municipalities missing a population figure for any Census year... are excluded'), and the prompt asks for the 'top 15 fastest-growing Ontario towns.' The candidate violates this by including a town with no meaningful population/density data, while excluding a town that should be there (Barrie is in the ground truth but missing from the candidate). Additionally, the candidate labels the density columns with units '(per km²)' while the ground truth uses '(persons/km²)' – though this is a minor clarification. The inclusion of Cockburn Island represents a fundamental labeling/concept error about what constitutes valid data for this analysis.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 11/11 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=15, fully_filled=True -> expected striping=False, actual=True
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=light actual=unknown; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 3/4 -- na_color correct 0/11, truncate=False correct 11/11, autocolor_text=True correct 11/11, reverse orientation matches truth 11/11
-[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 3/4 -- 11/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct']
 [FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- gtsave()/finalize() call(s) found, but none targets the required table.png output
-[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Top 15 Fastest-Growing Ontario Towns' clearly captures the core subject and framing. The ground truth's title 'Ontario's Fastest-Growing Towns, 1996–2021' is similarly clear but slightly more geographically framed and explicitly includes the time range. Both titles convey the same analytical story (fastest-growing towns over the full period), though the ground truth's inclusion of the year range is marginally more precise. The candidate's subtitle adds context ('Population Density Changes (1996–2021) and Inter-Census Period Growth Rates') that accurately describes the table contents.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate's column order is workable but less intuitive than the ground truth. The candidate places Town name first (correct), then six density columns (1996–2021), then five inter-Census percentage-change columns. The ground truth intersperses rank and total-growth columns early, grouping density data and inter-Census growth separately with clear headers. The candidate's approach separates the 'story' – density trends and growth rates – into two distinct blocks, requiring the reader to scan left-to-right twice. The ground truth's inclusion of rank and total-growth percentages early, followed by density detail and then period-by-period growth, follows a more natural analytical progression from summary to detail.

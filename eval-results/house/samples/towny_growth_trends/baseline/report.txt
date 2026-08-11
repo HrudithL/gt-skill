@@ -14,17 +14,17 @@ TOTAL: 21/87 (24.1%)
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- The REQUIRED_INSTRUCTIONS metadata contains no 'grouping' key, but neither the ground truth nor candidate rendering uses row grouping, so this dimension does not apply as a discretionary editorial choice to be tested.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=True, truth=True
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
-[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
-[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 3/5 -- Column labels correctly identify their underlying concepts (density years, percentage changes, overall growth), but the candidate uses plain numerics (e.g., '2006') for density columns without the explicit 'density' or 'persons/km²' unit labels present in the ground truth's header structure, relying more on the subtitle to establish that these are density figures. The 'Change %' labels are clear but less specific than Ground Truth's dated inter-census intervals.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 0/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=expected=True (gated on spanners), got=False
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=15, fully_filled=False -> expected striping=True, actual=False
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
-[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct', 'density_1996', 'density_2001', 'density_2006', 'density_2011', 'density_2016', 'density_2021', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
-[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Population Growth Trends: Top 15 Fastest-Growing Ontario Towns' captures the same core framing (fastest-growing, Ontario, top 15) as the ground truth's 'Ontario's Fastest-Growing Towns, 1996–2021', though the ground truth more explicitly anchors the time span in its title itself, giving it a slightly sharper temporal framing.
 [FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate's column order (Town, density 1996, 2001, Change %, 2006, Change %, …, Overall Growth %) interleaves individual density measurements with their inter-census changes within each period block, which is readable but less cohesive than the ground truth's structure that groups all densities together before all percentage changes. The candidate does prioritize Town and Overall Growth appropriately, but the split arrangement requires more horizontal scanning to follow the analytical flow.

@@ -105,40 +105,11 @@ retroactively re-elicit them under the current 4-dimension prompt), while
 current 4-dimension prompt directly — `creator`'s numbers are the least
 directly comparable to the other three of anything in this file.
 
-**Comparator bug fixes (2026-08-11, after the refresh above):** two bugs
-were fixed, applied as a pure mechanical-check recomputation against the
-SAME candidates already reported on above (no re-execution beyond what's
-needed to re-derive affected checks' inputs, no fresh judge calls).
-`creator` could not be recomputed at all (its raw sweep directory no
-longer exists) and is carried forward unchanged.
-
-1. `check_render_mechanics` was scoring 0/2 for any candidate that
-   renders via a bare `finalize(gt, ...)` statement rather than
-   `gt = gt.gtsave(...)` — `_stmt_targets_name` compared the call's
-   *function name* ("finalize") against the exported variable name
-   ("gt") instead of checking whether "gt" is the call's first argument,
-   an equality that could never hold. 16 of `house`'s 24 invocations and
-   7 of `scripts`' used that pattern and were false-negative-scored on
-   this one check; `prose` and `creator` had zero.
-2. Separately, `runner/execution_tier.py` and `runner/convergence.py`'s
-   no-render stubs for `GT.gtsave`/`GT.save` returned `None` instead of
-   `self`, breaking the (different, narrower) `gt = gt.gtsave(...)`
-   *reassignment* idiom specifically. `scripts/towny_growth_trends/
-   repeat_1`'s candidate used exactly that idiom and failed Tier-2
-   execution entirely as a result (scored 21/81, 25.9%, across *nine*
-   checks) even though its rendered PNG was completely fine — this was
-   the single largest outlier in the whole `scripts` dataset. Fixed;
-   that invocation now scores normally, which also sharply reduced
-   `scripts`' own repeat-to-repeat spread (23.8pp -> 16.9pp), not just
-   its mean.
-
-The table below reflects both fixes.
-
 | Skill | Mean comparator score | vs. baseline | Score spread (3 repeats) | Mean cost/invocation |
 |---|---|---|---|---|
 | `prose` | **74.9%** | +49.2pp | **10.6pp** (most consistent) | $0.167 |
-| `house` | 69.3% | +42.8pp | 18.2pp (least consistent) | $0.117 |
-| `scripts` | 66.2% | +41.5pp | 16.9pp | **$0.175** (most expensive) |
+| `house` | 69.3% | +42.7pp | 18.2pp (least consistent) | $0.117 |
+| `scripts` | 66.1% | +41.4pp | 16.9pp | **$0.175** (most expensive) |
 | `creator` | 21.7%\*\* | **-3.2pp** | 18.1pp | **$0.095** (cheapest) |
 | baseline (no skill) | 24.7-26.6%\* | — | n/a (1 run) | $0.065-$0.090\* |
 
@@ -152,50 +123,99 @@ execution failures described in its `SUMMARY.md`) — excluding those,
 skill's `plots/cost.png` / `comparator_score.png` for the per-skill
 baseline actually used in that comparison.
 \*\*`creator` is on 2026-08-07 data (see above); the other three rows are
-on 2026-08-09 data. Its cost figure is the only one here that's cheaper
-than a real skill by construction of its A/B design, not evidence of
-efficiency — it's a candidate skill under evaluation, not a promoted one.
+the 2026-08-09 sweep as corrected by the 2026-08-11 bug fixes below. Its
+cost figure is the only one here that's cheaper than a real skill by
+construction of its A/B design, not evidence of efficiency — it's a
+candidate skill under evaluation, not a promoted one.
+
+## Comparator and execution-tier bug fixes (2026-08-11)
+
+Two bugs were found and fixed after the data refresh above, both via
+internal Opus-tier PR review. Neither changed which candidates were
+generated — both are re-scoring fixes against the same 2026-08-09 sweep,
+applied by recomputing affected checks (mechanically, or via a fresh
+judge call where the underlying execution status genuinely changed) and
+substituting the corrected values in place. `house`'s and `scripts`'
+numbers above already reflect both fixes; `prose` had zero affected
+checks; `creator` is unreachable (see "Data refresh" above) and unaffected
+by construction (fixed today, `creator`'s frozen data predates both bugs
+either way).
+
+1. **`check_render_mechanics` false negative on bare `finalize(gt, ...)`.**
+   The check only recognized `gt = gt.gtsave(...)`-style assignment as
+   "rendering the exported table"; a bare `finalize(gt, ...)` statement
+   (no assignment) scored 0/2 even though it's a valid, common render
+   idiom — `house`'s own worked example teaches exactly this pattern.
+   Fixed in `_stmt_targets_name` (`runner/comparator.py`), narrowly: only
+   a bare call whose callee is literally `finalize` is treated as
+   targeting its first argument — not bare calls generally, which would
+   reopen a different false-positive class (e.g. `print(gt)` wrongly
+   counting as a render). Affected 16 of `house`'s 18 skill invocations
+   and a comparable share of `scripts`'; 0 for `prose` (its worked
+   example uses the assignment form). See
+   [`tests/test_render_mechanics_bare_finalize.py`](../tests/test_render_mechanics_bare_finalize.py).
+2. **`GT.gtsave`/`GT.save` no-render stubs returned `None` instead of
+   `self`.** `runner/execution_tier.py` and `runner/convergence.py` each
+   stub these methods out during no-render Tier-1/data-hash execution
+   (to avoid actually launching a headless-Chrome render on every
+   candidate). The stub returned `None`, breaking the equally-common
+   `gt = gt.gtsave(...)` *reassignment* idiom specifically — any
+   candidate using it lost its exported `gt` object entirely partway
+   through execution. `scripts/towny_growth_trends/repeat_1` hit exactly
+   this: it failed Tier-2 execution outright (21/81, 25.9%) despite a
+   completely fine rendered PNG. Fixed to `lambda self, *a, **k: self`
+   in both files; see
+   [`tests/test_gtsave_stub_return_value.py`](../tests/test_gtsave_stub_return_value.py).
+   Because this invocation's execution *status* genuinely changed (not
+   just a mechanical check's value), it was re-scored with a real,
+   fresh `comparator.compare()` call — including a new judge API call,
+   since the previous judge result was never elicited under the old
+   failing-execution path — rather than the mechanical-only recompute
+   used everywhere else. It now scores 68/88 (77.3%).
+
+`eval-results/_recompute_mechanical_checks.py` (mechanical recompute) and
+a one-off script for the single real re-score above are both committed
+for auditability; see each skill's own `SUMMARY.md` for its exact
+before/after numbers.
 
 ## Findings
 
 - **`prose` wins, on replication rather than this sweep's margin alone.**
-  Its 5.6pp lead over the runner-up here is *smaller* than either
-  runner-up's own repeat-to-repeat spread (`house`'s 18.2pp, `scripts`'
-  16.9pp) — by this file's own "gap smaller than either skill's own
-  spread means don't call it settled" standard, a single sweep's 5.6pp
-  isn't decisive on its own either. What makes `prose` the confident pick
-  isn't this one number, it's that it led `house` specifically by a
-  comfortable margin on *both* sweeps this file has ever measured (15.6pp
-  on 2026-08-07, 5.6pp here) — two independent sweeps agreeing, even at
-  different margins, is real signal in a way one sweep's raw gap over
-  whichever skill happens to be runner-up that week isn't.
-- **`house` and `scripts` are genuinely close, and which one is "least
-  consistent" has flipped twice as bugs got fixed** — worth naming
-  plainly since this file's own prior versions asserted the opposite. On
-  the raw fresh sweep, `scripts` trailed `house` by 4.8pp and was both
-  the most expensive AND least consistent (23.8pp spread) of the three
-  real skills. Fixing the render-mechanics detection bug (above) widened
-  that gap to 6.0pp without changing `scripts`' consistency at all — that
-  fix affected both skills similarly. Fixing the separate `gtsave`-stub
-  bug then did something the first fix didn't: it repaired one severely
-  broken `scripts` invocation that had been dragging down BOTH its mean
-  AND its own spread simultaneously, narrowing the gap back to 3.1pp
-  *and* making `scripts` (16.9pp) more consistent than `house` (18.2pp).
-  Net effect of both fixes together: `house` still leads on mean score,
-  but by less than the raw sweep suggested, and `scripts` is no longer
-  the least consistent of the three — `house` is. Treat the `house`-vs-
-  `scripts` mean-score ordering as narrow and sweep-dependent, not
-  settled; the consistency ordering, now that it isn't being distorted by
-  a since-fixed execution bug, is a fairer comparison than it was before.
-- **`scripts` remains the most expensive of the three real skills** —
-  the checker loop's cost is a structural property of running it at all,
-  unaffected by either bug fix above. Its benefit (a higher mean score)
-  is real on this sweep but, per the point above, narrower and less
-  certain than previously reported.
-- **`house` remains the cheap, decent option** — no flowchart, no
-  checker loop, a real and competitive quality gain over baseline for the
-  lowest cost of the three real skills, even though it's now the least
-  consistent of the three by a small margin.
+  Its 5.6pp lead over the runner-up here is *smaller* than the runner-up's
+  own 18.2pp repeat-to-repeat spread — by this file's own "gap smaller
+  than either skill's own spread means don't call it settled" standard
+  (applied to `house`/`scripts` just below), a single sweep's 5.6pp isn't
+  decisive on its own either. What makes `prose` the confident pick isn't
+  this one number, it's that it led `house` specifically by a comfortable
+  margin on *both* sweeps (15.6pp on 2026-08-07, 5.6pp here) — two
+  independent sweeps agreeing, even at different margins, is real signal
+  in a way one sweep's raw gap over whichever skill happens to be
+  runner-up that week isn't.
+- **`house` and `scripts` swap places relative to the 2026-08-07 sweep
+  this file previously reported (`scripts` had led).** On the bug-fixed
+  2026-08-09 runs, `house` edges out `scripts` (69.3% vs. 66.1%, a 3.2pp
+  gap) — but both skills' own repeat-to-repeat spread (18.2pp and 16.9pp)
+  is *larger* than that gap, so treat this specific ordering as noisy, not
+  settled. Note this gap is now the *real*, fully-corrected one: an
+  earlier draft of this file attributed most of it to a single outlier
+  invocation (`scripts/towny_growth_trends/repeat_1`, which had scored
+  25.9% due to a `gt = finalize(gt, ...)` reassignment tripping a
+  since-fixed execution-tier bug) and suggested excluding it narrowed the
+  gap to 2.1pp — that framing no longer applies now that the bug itself
+  is fixed and the invocation is scored for real (77.3%) and included
+  above, not excluded. What's consistent across both the 08-07 and 08-09
+  data: `scripts`' checker loop is the **most expensive** of the three
+  real skills every time it's been measured, for a mean score that's
+  sometimes ahead of `house`'s and sometimes behind it — the loop's cost
+  is certain, its benefit isn't. (Its consistency ranking is less stable
+  than its cost ranking: it was least consistent on the pre-fix numbers,
+  but with the outlier invocation now scored correctly instead of
+  crashing to 25.9%, `house` has the wider spread of the two on this
+  sweep.)
+- **`house` remains the cheap, decent option** regardless of its exact
+  rank versus `scripts` this sweep — no flowchart, no checker loop, a real
+  and now-competitive quality gain over baseline for the lowest cost of
+  the three real skills.
 - **`creator` still loses to no skill at all.** -3.2pp behind baseline,
   unchanged in direction from every prior measurement of it. See
   `creator/SUMMARY.md` and `creator/progressive_disclosure.md` for one
@@ -204,15 +224,14 @@ efficiency — it's a candidate skill under evaluation, not a promoted one.
 
 ## Which skill is best overall
 
-**`prose`** — highest mean score on every sweep this file has ever
-reported, under every version of the comparator, and its lead over
-`house` specifically replicates across both the 2026-08-07 and 2026-08-09
-sweeps (not just a single measurement or a since-fixed bug). `house` vs.
-`scripts` is genuinely close and sweep-dependent on mean score, with their
-relative consistency having flipped as bugs were fixed (see Findings) —
-pick `house` when cost is the deciding factor, `scripts` only if its
-checker loop's occasional extra points are worth its reliably-higher
-cost. `creator` is
+**`prose`** — highest mean score and most consistent on every sweep this
+file has ever reported, under every version of the comparator, and its
+lead over `house` specifically replicates across both the 2026-08-07 and
+2026-08-09 sweeps (not just a single measurement). `house` vs. `scripts` is
+genuinely close and
+sweep-dependent — pick `house` when cost and consistency matter, `scripts`
+only if its checker loop's occasional extra points are worth its
+reliably-higher cost and reliably-lower consistency to you. `creator` is
 not yet a real contender.
 
 ## Layout
