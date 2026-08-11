@@ -27,17 +27,36 @@ unchecked, the table isn't done yet.
    request and leave the rest uncolored (bold text at most). Three or more
    `heatmap(...)` calls in one script is always a bug, never a stylistic
    choice — if you catch yourself writing a third one, delete it.
-5. **`finalize(gt, path="table.png")`** — the mandatory render, always last.
+5. **Body-row hairlines pinned to the house tone, always** — `hairlines(gt)`.
+   `great_tables` renders a hairline between body rows ON BY DEFAULT (a
+   raw library gray, `#D3D3D3`) even without this call — the gap this
+   closes is not "no line at all," it's "the wrong gray." This is a
+   completely separate `great_tables` option family from item 3's outer
+   `frame()` border, not a duplicate of it — calling `frame()` alone still
+   leaves the body-row lines at the library default, unrelated to whatever
+   the frame itself looks like. Small polish like this is not optional
+   filler around the "real" work of Big Color — a table with a heatmap but
+   the raw default hairline gray is still an unfinished table.
+6. **`finalize(gt, path="table.png")`** — the mandatory render, always last.
 
 Everything else in this file — a stub, a group, a spanner, a status chip,
 a summary row, the striping/tint hierarchy — is genuinely conditional on
-what the data and request actually call for, and stays that way. The five
+what the data and request actually call for, and stays that way. The six
 items above are different in kind: they are the base every table stands
 on, never something to selectively adopt. If you imported a helper
 (`stripe`, `stub_tint`, `humanize_labels`, ...) and then don't end up
 calling it, that's a sign you copied more of `house_table.py` than your
 table needs — remove the unused import, but never let "I didn't get to
 it" cost you an item on this list.
+
+**Conditional does not mean skippable — it means "evaluate the gate every
+time."** `stripe()` (>=10 body rows AND body not essentially fully
+color-filled) and `stub_tint()` (a stub exists) are genuinely
+data-dependent, not unconditional like the six items above — but that
+means you check their gate condition on every table, not that you can
+forget they exist. A 12-row table with only 2 of 6 columns colored that
+ships with no striping and no stub tint isn't "keeping it simple," it's
+skipping two items whose gate condition was clearly met.
 
 ## Ambiguous measures / selection criteria — pick ONE definition, STATE it
 

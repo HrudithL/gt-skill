@@ -47,6 +47,33 @@ default.
 The order is fixed: color intent (Step 3) is decided before the quiet polish
 (Step 5), and the band (Step 4) can only be decided once Big Color is known.
 
+## Step 7 is a full manual audit — `gt_check.py` does not cover these items
+
+Before you consider the table done, re-check every item below by eye against the
+rendered PNG. `gt_check.py` mechanically enforces the ≤2-colored-measure ceiling
+and the frame; it does **not** currently check hairlines, column dividers, stub
+tint, or the footer's two-call convention (an earlier version of this checklist
+claimed it did — that was wrong, and mechanical checks for these are a real but
+separate follow-up, not something to assume exists today):
+
+- **Body-row hairlines** — a separate `great_tables` option family from the outer
+  frame; `great_tables` renders a hairline by default, so the actual thing to
+  verify is that its color is pinned to the house/washed-neutral tone (see
+  `small_color.md` (a)), not left at the raw library gray.
+- **Column dividers** at each spanner seam, when 2+ column groups exist.
+- **The footer's two-call convention** (`small_color.md` (f)): an analytical
+  caption AND a separate source note, not one combined line, on any table with
+  ≥5 rows.
+- **Hero-uncolored measures must be bold, not bare** — this one needs the
+  prompt (which measure is the request's actual topic), so no mechanical check
+  could verify it even if one existed. If the request names 2+ measures and you
+  colored both because both fit under the ceiling, that's still wrong — re-read
+  Step 3's ceiling, color the one that's the request's actual topic, and
+  `style.text(weight="bold")` the other.
+
+Small polish matters as much as Big Color — audit all of these by eye every time,
+don't rely on a checker that doesn't exist yet to catch them for you.
+
 ## Withhold values, forbid guessing — open the file the action needs
 
 SKILL.md names *what* to decide; the *value* lives only in the reference file
