@@ -830,7 +830,13 @@ def main():
             return _orig_init(self, data, *a, **k)
 
         _gt.GT.__init__ = _patched_init
-        _gt.GT.gtsave = lambda *a, **k: None
+        # Same fix as runner/execution_tier.py's identical stub -- see its
+        # comment for the full rationale: both real gtsave()/save() return
+        # `self`, so a script's `gt = gt.gtsave(...)` idiom needs the stub
+        # to do the same, and `save()` (the older spelling) is stubbed too
+        # so it can't actually launch a browser and write a real file here.
+        _gt.GT.gtsave = lambda self, *a, **k: self
+        _gt.GT.save = lambda self, *a, **k: self
     except Exception:
         pass
 
