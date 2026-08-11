@@ -71,10 +71,14 @@ as bare or half-finished. Before you consider the table done:
    fraction of body cells carrying a color fill. If rows ≥ 10 **and** the body is NOT
    essentially fully filled, `opt_row_striping()` is REQUIRED, not a nice-to-have.
    If you haven't actually counted, count now before answering this item.
-6. **Stub tint gate — mutually exclusive with item 5.** If a stub (`rowname_col`)
-   exists AND striping (item 5) is OFF, the stub needs a light tint
-   (`small_color.md` (d)). If striping IS on, do NOT also tint the stub — the two are
-   deliberately either/or, not both-required.
+6. **Stub tint gate — independent of item 5, not either/or.** If a stub
+   (`rowname_col`) exists, it needs a light tint (`small_color.md` (d)) —
+   striping being on doesn't excuse skipping it; stripes still show on an
+   unfilled stub (`small_color.md` (c)). If a stub, a striped/filled body,
+   AND a colored heading band are all in play at once and the grey starts
+   to look monotonous, that's the grey-budget rule's job (`small_color.md`
+   "The grey-budget rule") — recolor the highest-priority element, don't
+   drop one.
 7. **Hero-uncolored measures are bold, not bare.** Every measure the request names
    that is NOT one of your ≤2 colored measures gets `style.text(weight="bold")`. If
    you named 2 measures and colored both, stop — re-read Step 3's ceiling: color the

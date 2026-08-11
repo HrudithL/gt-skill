@@ -26,8 +26,10 @@ boxed frame (``frame(gt)``), (4) AT MOST 2 colored measures total across
 the whole table (never one heatmap per numeric column — a 3rd
 ``heatmap()``/``data_color()`` call is always a bug), (5) the body-row
 ``hairlines(gt)`` rule (a completely separate `great_tables` option family
-from the outer ``frame()`` border — skipping it is what makes an otherwise
-well-colored table still read as bare and undivided), and (6)
+from the outer ``frame()`` border — `great_tables` already renders a raw
+gray hairline by default, so skipping this call leaves an otherwise
+well-colored table in the wrong, unbranded gray rather than undivided),
+and (6)
 ``finalize(gt, path="table.png")`` as the final call. These six are
 unconditional, unlike the stub/group/spanner/status-chip/summary-row
 choices below, which stay genuinely data-dependent — and unlike striping
