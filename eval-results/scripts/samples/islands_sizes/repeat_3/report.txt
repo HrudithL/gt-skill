@@ -8,23 +8,23 @@ TOTAL: 72/82 (87.8%)
 [PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 1/1 canonical measures have a value-matching candidate column
 [PASS] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 6/6 -- ≤2 measures OK; 1/1 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
-[N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
+[PASS] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
 [PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- The candidate does not group at all, whereas the ground truth visibly groups by continent (Asia, Africa, etc.) at the top, then shows individual islands. However, REQUIRED_INSTRUCTIONS contains no 'grouping' key, so grouping is a discretionary editorial choice. The candidate's flat presentation lacks the continent-grouping structure, but since the ground truth's grouping is not mandated by explicit instruction, this dimension cannot be fairly assessed without clear guidance on whether non-grouping is deemed acceptable. Per instructions, when discretionary grouping choice applies, the dimension is assessable—but here the candidate makes a reasoned choice to sort alphabetically instead. This is discretionary. Applicable should be true; score reflects that choice.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
-[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate's column header reads simply 'size', which is ambiguous and does not clearly state the underlying concept of 'land area' that the ground truth's label 'Size (thousand sq. mi.)' makes explicit. The units are also stated in the subtitle rather than the label itself, reducing clarity at point-of-reference.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=48, fully_filled=True -> expected striping=False, actual=True
 [PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; expected hue family 'navy' for palette 'blues', got 'navy'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
-[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
-[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
-[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- gtsave()/finalize() call(s) found, but none targets the required table.png output
+[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'Island Sizes' is accurate and names the core subject, but it is generic and flat compared to the ground truth's 'Islands of the World, by Size,' which adds scope ('of the World') and explicitly frames the ordering principle ('by Size'). The candidate's title is technically correct but does not capture the framing richness of the ground truth's title.
 [FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate places the island/landmass name in the stub (left) and size on the right, which mirrors the ground truth's structure. However, the candidate sorts alphabetically (Africa, Antarctica, Asia, Australia, Axel Heiberg...), scattering the largest continents throughout the list, whereas the ground truth orders largest-to-smallest, keeping the largest items (Asia, Africa, North America) at the top. This alphabetical ordering actively obscures the analytical story—a reader cannot quickly see the ranking or hierarchy that the prompt and caption emphasize ('largest to smallest').

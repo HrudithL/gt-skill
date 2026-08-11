@@ -8,23 +8,23 @@ TOTAL: 50/85 (58.8%)
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/2 canonical measures have a value-matching candidate column; unmatched: ['msrp', 'hp']
 [FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/1 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
-[N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
+[PASS] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
 [FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.50 (candidate-only=['model'], missing=['car'])
 [FAIL] [MECHANICAL] Grouping existence: 0/3 -- candidate grouping_present=True, truth=False
 [PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by manufacturer (Ford, Ferrari, Acura, etc.) while the ground truth presents an ungrouped flat list sorted by price descending. The grouping structure in the candidate is sensible for navigating a large dataset and reveals structural organization by brand, serving the prompt's goal equally well or better than the ground truth's single-sort approach, since it makes finding cars by manufacturer intuitive.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
-[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate uses abbreviated column labels 'hp' and 'msrp' instead of the clear full names 'Horsepower' and 'Price (MSRP)' shown in the ground truth. While these abbreviations are technically correct, they are less immediately clear than the ground truth's explicit labels, and the candidate fails to include the disambiguating suffix '(MSRP)' that the ground truth uses to clarify the price concept.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=47, fully_filled=False -> expected striping=True, actual=True
 [PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; expected hue family 'navy' for palette 'blues', got 'navy'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
-[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/2 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['hp', 'msrp']
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
-[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'GT Cars: Horsepower and Price' matches the core framing of the ground truth's title exactly. However, the candidate's subtitle 'A collection of high-performance vehicles with their key specifications' is generic and does not capture the specific analytical story mentioned in the ground truth's subtitle ('All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP').
 [PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's column order—Car (stub), hp (horsepower), msrp (price)—follows a logical left-to-right reading sequence: identify the vehicle first, then its power, then its cost. This order mirrors the ground truth's own progression and is equally sensible for the analytical story of comparing cars by these two attributes.

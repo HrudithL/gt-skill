@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124542_scripts_6prompts/prompts/towny_growth_trends/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 69/87 (79.3%)
+TOTAL: 71/87 (81.6%)
   Data-compliance:        41/48
-  Formatting-compliance:  28/39
+  Formatting-compliance:  30/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
@@ -14,17 +14,17 @@ TOTAL: 69/87 (79.3%)
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping, so this is not a discretionary choice being tested. Grouping is not mentioned in REQUIRED_INSTRUCTIONS either.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=True, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
-[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate's column headers are severely degraded: they display raw column names like 'density_1996', 'density_2001', 'pop_change_1996_2001_pct' instead of readable labels. Critically, the candidate is missing the rank column (#), missing the 'Total growth 1996–2021' column entirely, and only shows the first inter-Census percentage change column before the table cuts off—making it impossible to assess correctness of the full set of expected labels. The visible labels that are present name the right concepts but are presented in raw technical form rather than user-friendly labels.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 6/6 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=15, fully_filled=False -> expected striping=True, actual=True
 [FAIL] [MECHANICAL] Heading band hue harmonization: 0/5 -- shade expected=light actual=unknown; expected hue family 'navy' for palette 'blues', got 'unknown'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 6/6, truncate=False correct 6/6, autocolor_text=True correct 6/6, reverse orientation matches truth 6/6
-[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 3/4 -- 11/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct']
-[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
-[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
+[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 1/3 -- judge score 2/5 -- The candidate's title is 'Population Growth in Ontario's' (incomplete, missing colon and town type) with subtitle 'Density changes and growth rates acro' (incomplete and clipped). The ground truth's title 'Ontario's Fastest-Growing Towns, 1996–2021' clearly names the geographic focus, the ranking criterion, and the time period. The candidate's title is neither grammatically complete nor does it capture the 'fastest-growing' framing or the full time range required by the prompt.
 [FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate's visible column order shows density values first (1996–2021), followed by the first inter-Census percentage change, but the critical rank and total growth columns that should anchor the table's story are either missing or obscured. The ground truth logically places Town, then rank, then total growth as the identifying/hero columns, followed by densities grouped together, then inter-Census percentages grouped together. The candidate's order appears arbitrary and lacks the logical grouping of related measures that the ground truth demonstrates.

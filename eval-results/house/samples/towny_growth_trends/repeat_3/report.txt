@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124540_house_6prompts/prompts/towny_growth_trends/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 66/87 (75.9%)
+TOTAL: 68/87 (78.2%)
   Data-compliance:        40/48
-  Formatting-compliance:  26/39
+  Formatting-compliance:  28/39
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
@@ -14,17 +14,17 @@ TOTAL: 66/87 (75.9%)
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor candidate uses row grouping, so there is no discretionary grouping choice to evaluate. The REQUIRED_INSTRUCTIONS also contains no 'grouping' key, confirming grouping was not a mandated instruction.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=True, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
-[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate includes 'Population' columns alongside density columns, which dilutes focus from the density/growth story. The ground truth correctly centers on density trends and inter-census percentage growth (the core requirement), while the candidate's Population columns are extraneous and make labels harder to scan. Additionally, percentage-change columns lack the directional clarity of the ground truth (no ± indicators in headers).
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 6/6 colored measures have a shape-appropriate domain
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=OK; hairlines=MISSING (Step 5a, always required); dividers=expected=True (gated on spanners), got=False
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=15, fully_filled=False -> expected striping=True, actual=True
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=light actual=unknown; expected hue family 'forest' for palette 'greens', got 'forest'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 6/6, truncate=False correct 6/6, autocolor_text=True correct 6/6, reverse orientation matches truth 6/6
-[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 2/4 -- 6/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']
-[FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 0/2 -- no gtsave()/finalize() call found -- the required table image was never rendered
-[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
+[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Population Growth Trends — Top 15 Fastest-Growing Ontario Towns' accurately frames the subject and captures the core story. The ground truth's title 'Ontario's Fastest-Growing Towns, 1996–2021' is slightly more direct. Both clearly convey the main framing; the candidate's title is accurate and well-structured, differing only in minor wording emphasis.
 [FAIL] [JUDGE] Column order quality: 0/2 -- judge score 1/5 -- The candidate's column order is problematic. It groups by census year (1996, 2001, 2006, ...) with Population–Density–Change % repeating, forcing readers to hunt horizontally across many columns for related density values. The ground truth places all six density columns together, then all five inter-census growth percentages together, allowing a natural left-to-right read of the analytical story. This flat year-by-year layout makes it much harder to compare density trends or growth trajectories.

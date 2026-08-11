@@ -14,17 +14,17 @@ TOTAL: 51/87 (58.6%)
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- Grouping is mandated by the REQUIRED_INSTRUCTIONS metadata ("grouping": true), so it is not a discretionary editorial choice being tested here—it is verified by a separate deterministic mechanism.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
-[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
-[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The Drivetrain and Transmission columns use abbreviated labels ('rwd', 'awd', '7a', '8a', '8am') instead of the full, clear descriptions shown in the ground truth ('RWD', 'AWD', '7-speed automatic', '8-speed automatic', '8-speed automated-manual'). The MSRP label is correct, but the abbreviated transmission and drivetrain values obscure the underlying concepts they represent.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=10, fully_filled=False -> expected striping=True, actual=False
 [PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; expected hue family 'navy' for palette 'blues', got 'navy'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
-[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
-[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' with subtitle 'Grouped by Country of Origin' captures the core framing of the ground truth's title. The phrasing differs slightly and omits explicit mention of MSRP, drivetrain, and transmission details, but it correctly identifies the subject and analytical focus.
 [FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate's column order (Model, Drivetrain, Transmission, MSRP) reorders the columns compared to the ground truth (Model, MSRP, Drivetrain, Transmission). While placing MSRP at the far right is workable, moving it away from the Model label weakens the visual proximity between the identifying column and the primary measure; the ground truth's order more naturally associates price with the car model.

@@ -7,24 +7,24 @@ TOTAL: 49/74 (66.2%)
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
 [FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/11 canonical colored measures covered by a candidate color call
-[N/A] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/0 -- no colored measure had usable numeric values to classify
+[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/0 -- no colored measure had usable numeric values to classify
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
 [FAIL] [MECHANICAL] Column set shown vs. hidden: 3/4 -- visible-column overlap 0.73 (candidate-only=['Town'], missing=['name', 'rank', 'total_growth_pct']); value-matched renamed columns: {'density_1996': 'D-1996', 'density_2001': 'D-2001', 'density_2006': 'D-2006', 'density_2011': 'D-2011', 'density_2016': 'D-2016', 'density_2021': 'D-2021', 'pop_change_1996_2001_pct': 'Δ 96-01', 'pop_change_2001_2006_pct': 'Δ 01-06', 'pop_change_2006_2011_pct': 'Δ 06-11', 'pop_change_2011_2016_pct': 'Δ 11-16', 'pop_change_2016_2021_pct': 'Δ 16-21'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping, so grouping choice is not a discretionary editorial decision being tested here.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=True, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
-[N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
+[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[PASS] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- Critical issue: The candidate includes 'Cockburn Island' as the first town with effectively zero density across most years, which is explicitly mentioned in the ground truth's caption as an exclusion criterion ('Municipalities missing a population figure for any Census year...are excluded'). Additionally, the inter-census growth columns are labeled 'Δ 96-01', 'Δ 01-06', etc., which uses delta notation rather than clear period labels; this is ambiguous compared to the ground truth's '1996–2001' style. The density columns use 'D-1996' notation instead of just '1996', adding unnecessary prefix notation.
-[N/A] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/0 -- no colored measure had usable numeric values to classify
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/0 -- no colored measure had usable numeric values to classify
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=MISSING (global constant, always required); hairlines=OK; dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=15, fully_filled=False -> expected striping=True, actual=False
 [FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=dark actual=none; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
-[N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct', 'density_1996', 'density_2001', 'density_2006', 'density_2011', 'density_2016', 'density_2021', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']
 [FAIL] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 1/2 -- zoom=1.0 < 2.0, but expand was raised first (partial credit per the fit-order rule)
-[N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
+[PASS] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'Top 15 Fastest-Growing Ontario Towns' is accurate and framing-appropriate, but it is more generic than the ground truth's 'Ontario's Fastest-Growing Towns, 1996–2021', which explicitly anchors the framing to the time period. The subtitle 'Population Density Trends and Growth Rates Across Census Years (1996–2021)' is descriptive but flatter in tone than the ground truth's editorial context.
 [FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate groups columns logically by density and then growth rates, separating the two conceptual categories with a visual divider. However, the ground truth's order is more effective: it places Town, Rank, and Total Growth first as the primary identification and ranking, then density progression, then inter-census changes. The candidate's ordering of density columns first then growth percentages creates a less natural reading flow for identifying which town is rank 1 and its total growth metric.
