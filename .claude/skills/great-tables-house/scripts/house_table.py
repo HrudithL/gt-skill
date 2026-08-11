@@ -225,21 +225,24 @@ def frame(gt, color=None, width="1px", style="solid"):
 
 
 def hairlines(gt, color=None, width="1px", style="solid"):
-    """Apply the light hairline rule between every body row.
+    """Pin the body-row hairline to the house palette's neutral hex.
 
     WHAT: sets ``table_body_hlines_style``/``_color``/``_width`` — the thin
-    rule BETWEEN ordinary rows. Defaults to ``PALETTE["neutral"]["hairline"]``
-    (``#E8E8E8``).
+    rule BETWEEN ordinary rows. `great_tables` renders this line ON BY
+    DEFAULT (``style="solid"``, ``color="#D3D3D3"``) even if nothing ever
+    calls this helper — the gap this closes is not "no line at all," it's
+    "the raw library default gray instead of the house palette's specific
+    washed neutral" (``PALETTE["neutral"]["hairline"]``, ``#E8E8E8``).
 
     WHY this is its own helper, not folded into ``frame()``: a hairline is a
     body-row separator, a completely different `great_tables` option family
-    from ``frame()``'s outer table border — conflating the two by only
-    calling ``frame()`` is exactly how a table ends up with a boxed outline
-    but a bare, undivided body (no hairlines defined anywhere is a silent
-    gap, not a rendering error, so it's easy to never notice). This is UNCON-
-    DITIONAL — every table gets it, the same as `frame()` and the heading
-    band's bottom rule, regardless of row count or whether the table has Big
-    Color. See ``references/RULES.md``'s "THE NON-NEGOTIABLE BASE".
+    from ``frame()``'s outer table border — conflating the two, or assuming
+    `frame()` already covers it, is how a table ends up with a boxed
+    outline and the library's raw default gray between rows instead of a
+    deliberately-chosen house tone. This is UNCONDITIONAL — every table
+    gets it, the same as `frame()` and the heading band's bottom rule,
+    regardless of row count or whether the table has Big Color. See
+    ``references/RULES.md``'s "THE NON-NEGOTIABLE BASE".
     """
     if color is None:
         color = PALETTE["neutral"]["hairline"]
