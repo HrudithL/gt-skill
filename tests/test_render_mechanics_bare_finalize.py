@@ -45,3 +45,18 @@ def test_bare_call_other_than_finalize_does_not_pull_a_throwaway_chain_into_scop
 
 def test_chained_gtsave_still_targets_the_receiver():
     assert _targets('gt.tab_header(title="x").gtsave("table.png")', "gt") is True
+
+
+def test_bare_finalize_only_checks_the_first_argument_not_any_argument():
+    # `name` appearing as a LATER argument doesn't count -- only finalize's
+    # first positional argument is its render target (matches
+    # `_exported_gt_name`'s own convention).
+    assert _targets('finalize(other, gt)', "gt") is False
+
+
+def test_plain_assignment_still_targets_the_name():
+    assert _targets("gt = GT(df)", "gt") is True
+
+
+def test_bare_finalize_with_no_positional_args_does_not_target_anything():
+    assert _targets("finalize()", "gt") is False
