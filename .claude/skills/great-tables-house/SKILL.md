@@ -1,12 +1,12 @@
 ---
 name: great-tables-house
-description: Use when building a table with `great_tables`, `gt.GT`, or `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG — including requests that look simple (a plain list, one or two numeric columns), since the house style still applies. This is the THIN variant — one worked reference table plus a short per-column-kind rules file, no flowchart and no archetype directory. Prefer this over `great-tables`/`great-tables-ci` when you want the minimal path — read one annotated script, pattern-match the section that fits your data, adapt it, done. Prefer the sibling `great-tables`/`great-tables-ci` skills instead when you want the full deterministic 7-step procedure with a per-data-shape reference router and (for `great-tables-ci`) a mechanical checker. Invoke before reading the data or writing any Python.
+description: Use when building a table with `great_tables`, `gt.GT`, or `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG — including requests that look simple (a plain list, one or two numeric columns), since the house style still applies. This is the THIN variant — one worked reference table plus a short per-column-kind rules file and a short data/measure-definitions file, no flowchart and no archetype directory. Prefer this over `great-tables`/`great-tables-ci` when you want the minimal path — read one annotated script, pattern-match the section that fits your data, adapt it, done. Prefer the sibling `great-tables`/`great-tables-ci` skills instead when you want the full deterministic 7-step procedure with a per-data-shape reference router and (for `great-tables-ci`) a mechanical checker. Invoke before reading the data or writing any Python.
 ---
 
 # Great Tables — House Format
 
-The mechanism is deliberately thin: **one script, one rules file, no
-procedure.**
+The mechanism is deliberately thin: **one script, one rules file, one
+data/measure-definitions file, no procedure.**
 
 1. Read `scripts/house_table.py` once. It is both the worked example (run
    it directly to see `house_table.png`, the canonical reference render)
@@ -36,7 +36,7 @@ procedure.**
    column kind you just matched (it points back at the function/section
    in `house_table.py` by name — it does not duplicate the code).
 
-That's the whole workflow. Nothing else to read.
+That's the whole workflow. Nothing else to read beyond the three files above.
 
 ## The non-negotiable base — every table, no exceptions
 
@@ -52,9 +52,10 @@ unconditional, regardless of how simple the request looks:
    column. Three or more `heatmap(...)`/`data_color(...)` calls in one
    script is a bug, not a choice.
 5. **Body-row hairlines** — `hairlines(gt)`. A separate option family from
-   item 3's frame, not covered by it — a boxed table with no hairlines
-   between rows still reads as bare. Small polish counts as much as Big
-   Color.
+   item 3's frame, not covered by it — `great_tables` already renders a
+   raw gray hairline by default, so skipping this call doesn't leave the
+   table undivided, it leaves it in the wrong (unbranded) gray. Small
+   polish counts as much as Big Color.
 6. **`finalize(gt, path="table.png")`** as the final call.
 
 Full detail and the reasoning for each lives in `references/RULES.md`'s
