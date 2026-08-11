@@ -9,48 +9,101 @@ The agent's north star: **ship small, reviewable, reversible slices; keep it sim
 ## Table of Contents
 
 1. [Core Principles](#1-core-principles)
-2. [Phase 1 — Plan Before You Touch Code](#2-phase-1--plan-before-you-touch-code)
-3. [Phase 2 — The Branch Tree](#3-phase-2--the-branch-tree)
-4. [Phase 3 — Executing Slices (Subagents)](#4-phase-3--executing-slices-subagents)
-5. [Phase 4 — Pull Requests](#5-phase-4--pull-requests)
-6. [Phase 5 — Codex Review](#6-phase-5--codex-review)
-7. [Phase 6 — Merging Up the Tree](#7-phase-6--merging-up-the-tree)
-8. [Phase 7 — Merging to `main`](#8-phase-7--merging-to-main)
-9. [Phase 8 — Branch Cleanup](#9-phase-8--branch-cleanup)
-10. [Subjective vs. Objective Decisions](#10-subjective-vs-objective-decisions)
-11. [Hard Prohibitions](#11-hard-prohibitions)
-12. [Quick Reference Checklist](#12-quick-reference-checklist)
+2. [Model Assignment (Mandatory)](#2-model-assignment-mandatory)
+3. [Phase 1 — Plan Before You Touch Code](#3-phase-1--plan-before-you-touch-code)
+4. [Phase 2 — The Branch Tree](#4-phase-2--the-branch-tree)
+5. [Phase 3 — Executing Slices (Subagents)](#5-phase-3--executing-slices-subagents)
+6. [Phase 4 — Pull Requests](#6-phase-4--pull-requests)
+7. [Phase 5 — Review Agent](#7-phase-5--review-agent)
+8. [Phase 6 — Merging Up the Tree](#8-phase-6--merging-up-the-tree)
+9. [Phase 7 — Merging to `main`](#9-phase-7--merging-to-main)
+10. [Phase 8 — Branch Cleanup](#10-phase-8--branch-cleanup)
+11. [Subjective vs. Objective Decisions](#11-subjective-vs-objective-decisions)
+12. [Hard Prohibitions](#12-hard-prohibitions)
+13. [Quick Reference Checklist](#13-quick-reference-checklist)
 
 ---
 
 ## 1. Core Principles
 
 - **Keep it simple and linear.** Build the smallest thing that satisfies the spec. Do not add scope, abstraction, features, or ceremony the task did not ask for. Do not make the project more than it is. When two paths both work, take the simpler one. When in doubt, do less.
-- **Use senior-developer discretion.** Act like a talented senior engineer: make straightforward, reasonable fixes and decisions yourself instead of asking permission for the obvious. Don't make silly mistakes, and know where the boundaries are (§10). The bar for interrupting the human is high — see [§10.1](#101-when-to-decide-vs-ask).
+- **Use senior-developer discretion.** Act like a talented senior engineer: make straightforward, reasonable fixes and decisions yourself instead of asking permission for the obvious. Don't make silly mistakes, and know where the boundaries are (§11). The bar for interrupting the human is high — see [§11.1](#111-when-to-decide-vs-ask).
 - **Plan, then read your plan, then execute.** Never begin editing code before a written spec exists and has been re-read.
 - **One small feature per branch.** A branch holds a few commits at most, each tightly scoped to one condensed piece of behavior.
 - **Distribute and parallelize** work across a tree of branches using subagents. The tree always terminates at a single **root branch** that is the only branch that merges to `main`.
-- **The agent does not make *genuine-fork* calls alone.** Product/UX, public API shape, naming, dependencies, architecture, security posture — the categories in [§10](#10-subjective-vs-objective-decisions) — are escalated. Straightforward, obviously-right fixes are made at the agent's discretion, not escalated (see [§10.1](#101-when-to-decide-vs-ask)).
-- **Automated review is triaged each round, not chased to zero.** Wait for the Codex review, decide which of its suggestions actually warrant a change (§10.1), make only those, and re-review if warranted. More than one review-fix round is normal — but each round must be earning its keep. Stop once a round's comments stop being substantive (§6); do not keep looping in pursuit of a perfectly silent report.
+- **The agent does not make *genuine-fork* calls alone.** Product/UX, public API shape, naming, dependencies, architecture, security posture — the categories in [§11](#11-subjective-vs-objective-decisions) — are escalated. Straightforward, obviously-right fixes are made at the agent's discretion, not escalated (see [§11.1](#111-when-to-decide-vs-ask)).
+- **The internal review agent is triaged each round, not chased to zero.** Wait for the review subagent's pass ([§7](#7-phase-5--review-agent)), decide at the Opus tier which of its findings actually warrant a change (§11.1), make only those, and re-review if warranted. More than one review-fix round is normal — but each round must be earning its keep. Stop once a round's findings stop being substantive (§7); do not keep looping in pursuit of a perfectly silent report.
 - **`main` is sacred.** No direct pushes, no force pushes, no auto-merge, no shortcuts.
 
 ---
 
-## 2. Phase 1 — Plan Before You Touch Code
+## 2. Model Assignment (Mandatory)
+
+This project's agent runs as a fleet of subagents, and **each subagent's model is dictated by the
+kind of work it does — never by whatever model the parent chat session happens to be running.**
+If you are the parent/orchestrating agent, you are very likely running as a different model than
+the one required below for a given piece of work. That does not exempt you: when you spawn a
+subagent to do that work, you MUST explicitly pin its model to the assignment below. This rule is
+not a default or a suggestion — it is a hard requirement, checked on every subagent spawn.
+
+| Kind of work | Required tier | Notes |
+|---|---|---|
+| **Writing/editing code** (implementing a slice, fixing a bug, writing tests) | **Sonnet** (`model: "sonnet"`) | All "coding" subagents from [§5](#5-phase-3--executing-slices-subagents). |
+| **Thinking and planning** — writing/updating the plan in `memory/`, deciding branch/slice breakdown, triaging review findings ([§7](#7-phase-5--review-agent)), deciding whether a proposed doc/fix change should be made at all | **Opus** (`model: "opus"`) | This is the "judgment" layer — anywhere the agent is deciding *what* to do or *whether* something is worth doing, not executing an already-decided mechanical step. |
+| **Documentation and simple mechanical fixes** — writing/updating docs, README content, changelog entries, and applying already-decided, already-verified simple fixes after a PR has passed review | **Haiku** (`model: "haiku"`) | Only for execution of a change that Opus has already decided should happen (see above). Haiku does not decide anything — it writes what it's told to write. |
+| **The review agent itself** ([§7](#7-phase-5--review-agent)) | **Opus** (`model: "opus"`) | An elite adversarial review is a judgment task (finding defects, weighing severity), not a code-writing task — it uses the thinking-tier model, not the coding-tier model. |
+
+`model: "..."` above is the tier label passed at the actual subagent-spawn call
+site (e.g. the `Agent`/`Task` tool's `model` parameter) — it always resolves to
+whatever concrete model currently backs that tier, so this table never needs
+updating when a tier's underlying model version changes. For code that needs a
+concrete model ID directly, `runner/spec.py`'s `MODELS` dict is the single
+authoritative source — it is documented in-file as "the one place to bump an
+id"; do not hardcode a model ID anywhere else, including in this document.
+(`GTSKILL_JUDGE_MODEL` is a deliberate runtime override that *bypasses*
+`runner/spec.py`'s default, not an example of it — see `runner/judge.py`'s own
+comments on why that override exists.) This document previously named specific
+concrete IDs here and drifted out of sync with `runner/spec.py`'s actual
+pins — a related but distinct failure mode from the one `runner/judge.py`'s
+comments record (a model *capability* mismatch, not a doc-vs-pin drift).
+Tier labels don't have either failure mode.
+
+Rules for applying this table:
+
+- **Pin the model tier explicitly on every spawn.** Never rely on inheritance from the parent session.
+- **Never downgrade a thinking/review task to save cost.** Planning, triage, and review stay on the
+  Opus tier — do not fall back to Sonnet or Haiku for these regardless of which concrete Opus
+  version is currently available.
+- **Never upgrade a mechanical task "just in case."** Docs and already-decided simple fixes stay on
+  Haiku; if a "simple fix" turns out to need judgment once a subagent is in it, that subagent
+  escalates back to the parent rather than silently deciding on its own tier.
+- **Parallelize aggressively, serialize only real dependencies.** Independent coding slices spawn
+  as multiple concurrent Sonnet-tier subagents in one batch. A slice that depends on another's output
+  waits for it — do not parallelize dependent work just because subagents are cheap to spawn. This
+  applies at every layer: independent sub-branches within a feature, independent feature branches
+  within the root, and independent review/fix cycles across sibling PRs.
+
+---
+
+## 3. Phase 1 — Plan Before You Touch Code
 
 For every task, spec, or feature request:
 
 1. Create a working plan file at:
    ```
-   .planning/<spec-name>.md
+   memory/<spec-name>.md
    ```
-   The `.planning/` directory MUST be listed in `.gitignore`. These are the agent's private working notes — not artifacts of the PR.
+   The `memory/` directory MUST be listed in `.gitignore`. This is the agent's private working
+   memory for this project — planning notes, specs, and progress state — not artifacts of the PR.
+   (Some in-flight and historical plans in this specific repo predate this convention and live in
+   `.planning/` instead — also gitignored, not being migrated by this rewrite. New plans go in
+   `memory/`; don't assume a `memory/<spec-name>.md` path resolves for older work.)
 
 2. The plan file MUST include:
    - **Goal** — one paragraph.
    - **Scope in / Scope out** — bulleted.
    - **Assumptions** — anything the agent inferred.
-   - **Subjective items to escalate** — list every decision the agent identifies as opinion-shaped (see [§10](#10-subjective-vs-objective-decisions)). Ask the human before proceeding on any of these.
+   - **Subjective items to escalate** — list every decision the agent identifies as opinion-shaped (see [§11](#11-subjective-vs-objective-decisions)). Ask the human before proceeding on any of these.
    - **Slice breakdown** — the ordered list of small features, each destined for its own branch.
    - **Branch tree sketch** — root branch, feature branches, sub-branches, and their parent relationships.
    - **Acceptance criteria** — per slice, measurable and testable.
@@ -58,11 +111,11 @@ For every task, spec, or feature request:
 
 3. **Re-read the plan** in a fresh step before executing. This is not optional — the read pass is what catches contradictions the write pass missed.
 
-4. If the plan changes mid-flight, update `.planning/<spec-name>.md` first, then continue.
+4. If the plan changes mid-flight, update `memory/<spec-name>.md` first, then continue.
 
 ---
 
-## 3. Phase 2 — The Branch Tree
+## 4. Phase 2 — The Branch Tree
 
 Work is organized as a **worktree**: many small branches that all trace back to one root branch, which is the only branch permitted to open a PR into `main`.
 
@@ -84,13 +137,13 @@ main
 - **Feature branches:** branch off the root. Each represents one cohesive capability from the plan.
 - **Sub-branches:** branch off a feature. Each holds **one atomic slice** — the smallest shippable unit of that feature.
 - **Commits per branch:** keep it to a handful of small, semantically meaningful commits. If a branch grows large, split it into more sub-branches.
-- **Parallelism:** independent slices MUST be developed in parallel via subagents (see [§4](#4-phase-3--executing-slices-subagents)). Dependent slices are serialized behind their parent.
+- **Parallelism:** independent slices MUST be developed in parallel via subagents (see [§5](#5-phase-3--executing-slices-subagents)). Dependent slices are serialized behind their parent.
 - **Isolation:** a single repository checkout can only have one branch checked out at a time — if two subagents share it, one switching branches yanks the working tree out from under the other, and edits or commits can land on the wrong branch. Each subagent working an in-flight branch in parallel with another MUST get its own git worktree (or clone). If isolated worktrees genuinely aren't available, serialize the branch work instead of sharing one checkout.
 - **Every branch is a leaf until proven otherwise.** Only create children when needed.
 
 ---
 
-## 4. Phase 3 — Executing Slices (Subagents)
+## 5. Phase 3 — Executing Slices (Subagents)
 
 The agent MUST delegate slice work to subagents to parallelize and to keep each unit of work optimally scoped.
 
@@ -109,7 +162,7 @@ Each subagent invocation MUST include a **context contract** in its prompt:
 3. **Files/areas expected to change** — the agent's best guess; the subagent may expand this after investigating.
 4. **Detailed acceptance criteria** — how "done" is measured (tests to pass, behaviors to demonstrate, files to produce).
 5. **Non-goals** — what the subagent MUST NOT touch or refactor.
-6. **Escalation triggers** — the categories from [§10](#10-subjective-vs-objective-decisions) that, if encountered, must be surfaced to the parent agent (which surfaces to the human) rather than decided unilaterally.
+6. **Escalation triggers** — the categories from [§11](#11-subjective-vs-objective-decisions) that, if encountered, must be surfaced to the parent agent (which surfaces to the human) rather than decided unilaterally.
 
 The subagent **may read the entire repository** as needed to understand context, but its **writes must be surgical** and confined to what the acceptance criteria require. Broad reads, narrow writes.
 
@@ -120,11 +173,11 @@ A subagent's final message back to the parent MUST include:
 - Any assumptions it made.
 - Any items it flagged as subjective and did **not** decide.
 - Test/lint results.
-- The PR URL (see [§5](#5-phase-4--pull-requests)).
+- The PR URL (see [§6](#6-phase-4--pull-requests)).
 
 ---
 
-## 5. Phase 4 — Pull Requests
+## 6. Phase 4 — Pull Requests
 
 Every branch (sub → feature, feature → root) is integrated via a PR. No exceptions.
 
@@ -133,147 +186,185 @@ Every branch (sub → feature, feature → root) is integrated via a PR. No exce
 - **Base branch:** the direct parent in the tree. Sub-branch PRs target their feature branch. Feature PRs target the root branch. Only the root branch PR targets `main`.
 - **Title:** concise, imperative, scoped to the slice.
 - **Description MUST contain:**
-  - The relevant excerpt from the parent plan section in `.planning/<spec-name>.md`, pasted directly into the description — `.planning/` is gitignored, so a link to it would 404 for reviewers; the pasted excerpt is the only thing that actually resolves.
+  - The relevant excerpt from the parent plan section in `memory/<spec-name>.md`, pasted directly into the description — `memory/` is gitignored, so a link to it would 404 for reviewers; the pasted excerpt is the only thing that actually resolves.
   - Summary of behavior change.
   - Explicit list of what was **not** changed / left for later slices.
   - Test evidence (commands run, output summary).
   - Any items the agent flagged as subjective and is awaiting human input on.
 - **Size:** small. If a PR's diff is sprawling, split it into more sub-branches.
 - **Draft first** if the agent is still iterating; mark ready for review only when it believes the slice is complete.
-- **Request Codex review immediately.** Codex does not auto-review — as soon as the PR is opened (or marked ready), post `@codex review` as a comment. See [§6](#6-phase-5--codex-review) for the full detection/polling protocol.
+- **Request the review agent immediately.** As soon as the PR is opened (or marked ready), spawn the review subagent. See [§7](#7-phase-5--review-agent) for the full context-contract and triage protocol.
 
 ---
 
-## 6. Phase 5 — Codex Review
+## 7. Phase 5 — Review Agent
 
-The agent MUST wait for automated review before merging any PR up the tree. More than one review-fix round is normal and expected for a PR with real findings — but the loop has a **stopping condition** (see "When to stop reviewing" below), and it isn't "keep re-reviewing until Codex has literally nothing left to say." Each round must justify itself with substantive findings; once it stops doing that, the PR is done.
+There is no external Codex/ChatGPT review available to this project (Codex review credits are
+exhausted). The agent MUST NOT wait for, poll for, or otherwise depend on an external
+`chatgpt-codex-connector[bot]` review — none is coming. Instead, the orchestrating agent runs its
+**own internal review subagent** for every PR, and that self-hosted review is the mandatory gate
+before any PR merges up the tree. Default to this self-review even if an external trigger appears
+available in `.github/workflows/` (e.g. a `claude.yml` responding to `@claude` mentions) — an
+`@claude`-mention reply is not the adversarial, diff-scoped review this section requires, and
+treating it as a substitute would silently skip the gate. More than one review-fix round is
+normal and expected for a PR with real findings — but the loop still has a **stopping condition**
+(see "When to stop reviewing" below): it isn't "re-review forever until there is literally
+nothing left to say."
 
-**Codex no longer auto-reviews.** Automatic review on PR open has been turned off — a newly opened PR gets no bot activity at all until asked. There is no "first pass" distinct from later passes anymore: **every** review, including the very first one, is manually requested by the agent. Do not wait for a reaction or comment to appear unprompted; if you didn't request it, it isn't coming.
+### The review agent's context contract — PR only, nothing more
 
-### Request review as part of opening the PR
+This is the load-bearing rule of this section. The review subagent MUST be spawned with:
 
-As soon as a PR is opened (or a draft is marked ready for review), the agent MUST request review by posting a comment with exactly:
+- the PR's **full diff** (every changed file, not just hunks),
+- the PR **title and description**,
+- and **nothing else** from the surrounding task.
 
-```
-@codex review
-```
+"Nothing else" bounds *sources of context*, not *tools*: the review subagent MAY read any
+changed file's full current content directly from the repo (a raw diff hunk's few lines of
+surrounding context are often not enough to judge correctness) and MAY run read-only commands
+(tests, greps, a self-comparison) to verify a claim. It MUST NOT be given, and must not go
+looking for: the parent session's conversation history, the working plan (`memory/` for new plans,
+`.planning/` for this repo's pre-existing ones — see [§3](#3-phase-1--plan-before-you-touch-code)),
+the implementer's rationale for why it made the choices it made, or prior review rounds' comments
+on this same PR. This is deliberate, not an oversight — a reviewer that only sees the diff, the
+PR's own stated intent, and the repo's own current state reviews what the code actually does, not
+what the implementer intended it to do, and cannot be talked out of a finding by context the code
+itself doesn't carry. If a later round is needed after fixes, spawn a **fresh** review subagent
+with the same restricted contract against the new diff — do not reuse or carry forward the prior
+round's subagent state, and do not pass it prior rounds' comments (see the "note why in the PR
+description" rule in the triage section below for how a declined finding is meant to stay
+suppressed across rounds instead).
 
-Treat this as part of the act of creating the PR, not a separate later step — do not leave a PR sitting unreviewed. The same request is repeated after every subsequent push, since a prior review is stale as soon as new commits land.
+### Model and goal
 
-### Wait for the complete signal before adjusting
+Per [§2](#2-model-assignment-mandatory), the review subagent runs on the **Opus tier**
+(`model: "opus"`) — review is a judgment task, not a code-writing task, so it uses the
+thinking-tier model regardless of what tier wrote the code under review.
 
-Do not react to partial results. Before making ANY fix on a PR, wait until **both** signals have
-fully finished:
+Brief the review subagent to be an **elite, adversarial reviewer**, not a friendly pass. Its job
+is to find every way the diff is wrong, unsafe, or wasteful — not to summarize what it does. At
+minimum it must actively hunt for:
 
-- **The entire CI run** — every job configured for this specific repository, not just the first one
-  to report. Check what's actually defined under `.github/workflows/` before waiting — a green fast
-  job while another job is still running is **not** a pass. (If a repo has no test/CI workflow beyond
-  a trigger-only action like an `@claude`-mention responder, this gate is trivially satisfied — there
-  is nothing else to wait for.)
-- **The entire Codex review** — the fresh bot review *comment* for your requested pass, not a partial
-  or stale one. After each `@codex review`, wait for the new comment rather than assuming an earlier
-  pass still applies.
+- **Correctness bugs** — logic errors, off-by-one errors, incorrect edge-case handling, wrong
+  operator/boundary, race conditions, incorrect assumptions about inputs, silently swallowed
+  exceptions.
+- **Security issues** — injection (SQL/shell/path), unsafe deserialization, secrets or credentials
+  handling, SSRF, unsafe use of `eval`/`exec`/pickle, missing input validation at trust boundaries.
+- **Inefficiencies** — quadratic-or-worse algorithms where linear is available, redundant
+  recomputation, unnecessary I/O or subprocess spawns in a loop, re-rendering a table/re-running
+  the judge when a cheaper deterministic check would answer the same question.
+- **Poorly managed data / eval integrity** — a corpus ground truth or checked-in golden PNG mutated
+  without regenerating what depends on it, a comparator or judge scoring change silently applied
+  to some but not all of `eval-results/**` (candidate-set vs. scoring-method confounds — this repo
+  has hit this exact bug before), non-reproducible eval runs (missing seeds, a judge call made
+  without pinning the model/temperature contract), skill-file content (`.claude/skills/**`) that
+  drifts from what `runner/comparator.py`'s checks or `runner/spec.py`'s model pins actually
+  enforce, silent `NaN`/null handling in a check that changes its score.
+- **Missing or weak tests** for the behavior the PR claims to add.
 
-Reacting to a partial signal is the failure mode this rule prevents: pushing a fix while CI is still
-running or the review is mid-flight wastes CI minutes on a commit that's about to change, and it
-fragments one review into several passes. Collect **all** CI failures and **all** review comments
-first, then address them in a single follow-up pass and re-request review.
+Findings must be reported **ordered most-severe-first**, each with a concrete failure
+scenario (specific input/state → specific wrong output or crash) — not vague style commentary.
+End with a short verdict on whether the PR is safe to merge up as-is.
 
-### Detecting the Codex review
+### When the review agent runs
 
-Codex is driven by the **`chatgpt-codex-connector[bot]`** account. **Consult this section every time you request a review** — getting the completion signal wrong means either acting on a stale approval or waiting forever for a signal that will never come.
+- **On every PR open (or draft → ready transition)** — spawn the review subagent against the
+  initial diff before any merge-up consideration.
+- **After every subsequent push** — a prior round's review is stale the moment new commits land;
+  spawn a fresh review subagent against the new diff.
+- **Wait for CI too.** Before triaging a round of findings, also wait for the **entire CI run**
+  (every job configured for this repo, not just the fastest one) to finish. Collect all CI
+  failures and all review findings together, then address them in one follow-up pass — do not
+  react to a partial signal from either source. If a repo has no test/CI workflow beyond a
+  trigger-only action (e.g. an `@claude`-mention responder with no automated test job), this gate
+  is trivially satisfied — there is nothing else to wait for.
+- **If the review subagent itself fails** (errors, times out, or returns no usable report): retry
+  once with a fresh spawn against the same diff. If it fails again, do not treat that as "review
+  passed" or merge around it — either perform the adversarial review yourself at the Opus tier
+  using the same context contract (diff + description only) and note in the PR that this round was
+  self-reviewed and why, or escalate to the human if you cannot do the review yourself with
+  confidence. A PR never merges up on the theory that the gate "would have passed."
+- **A background review subagent's completion is a claim, not a fact until directly confirmed.**
+  If the review is running in the background (the default for subagents), do not assert "still
+  waiting" or "review passed" from memory of when it was spawned — a completion notification can
+  arrive during a gap in the conversation and go unprocessed. Check its actual current status
+  directly before triaging or before telling anyone the PR is ready.
 
-After posting `@codex review`, `chatgpt-codex-connector[bot]` responds through **one of two channels depending on the outcome**, and **both embed the reviewed commit SHA** — that SHA (matched to your latest HEAD) is the completion signal:
+### Triage the findings — this is an Opus decision
 
-- **Findings** → a **pull-request review** on `pulls/<pr>/reviews` (a `### 💡 Codex Review` body) plus **inline review comments** on the diff, with the review's **`commit_id`** set to the reviewed commit.
-- **Clean** → an **issue comment** on `issues/<pr>/comments` like *"Codex Review: Didn't find any major issues…"* containing a **`Reviewed commit: <sha>`** line. A clean pass does **not** post a `pulls/reviews` entry, so watching only the review endpoint will miss it.
+Reading the review subagent's report and deciding what to do about each finding is **thinking
+work**: per [§2](#2-model-assignment-mandatory), this triage happens at the Opus tier, never
+delegated to the Sonnet coding subagent and never done by skimming. For each finding, apply the
+[§11.1](#111-when-to-decide-vs-ask) test:
 
-So after `@codex review`, poll **both** channels for the reviewed-commit SHA equal to your latest HEAD; if it's a `pulls/reviews` entry, read that review's inline comments and address findings; if it's the clean issue comment, the review passed.
-
-### Polling for the signal
-
-The signal is not pushed to you — you must **poll** for it. After each `@codex review`, check periodically until the signal lands. Always `--paginate` (GitHub returns 30 per page; on a busy PR the bot's entry can fall on a later page and be missed):
-
-```sh
-# FINDINGS channel — a bot review whose commit_id == your latest HEAD, then that
-# review's own inline comments (the PR-wide list also holds earlier passes' stale findings):
-gh api --paginate repos/<owner>/<repo>/pulls/<pr-number>/reviews   # pick user==bot AND commit_id==HEAD -> review_id
-gh api --paginate repos/<owner>/<repo>/pulls/<pr-number>/reviews/<review_id>/comments   # this review's findings
-# CLEAN channel — a bot issue comment whose "Reviewed commit:" line == your latest HEAD:
-gh api --paginate repos/<owner>/<repo>/issues/<pr-number>/comments   # look for "Didn't find any major issues" + Reviewed commit
-```
-
-A review is complete when the reviewed-commit SHA equals your latest HEAD in **either** channel. Read only the inline comments of the matched review (via `pulls/<pr>/reviews/<review_id>/comments`, or by filtering PR-wide `pulls/<pr>/comments` to `commit_id == HEAD`); the PR-wide list keeps every earlier pass's comments, so treating all of them as "the fresh review" makes you re-address already-fixed findings.
-
-Poll on a **modest cadence (~every 30s) within a bounded window (~15–20 min)**, ideally as a background loop that exits the moment the signal appears. Two distinct gates use different bars:
-
-- **To begin the FIX pass** — proceed once the **full CI run has completed (green OR red)** *and* the requested review signal is in (a `pulls/reviews` entry with findings, or the clean issue comment) referencing your latest commit. You need CI *finished*, not passing, so you can collect and fix its failures. Match on the **reviewed-commit SHA**, not merely "a review exists" — a review of a prior commit is stale.
-- **To MERGE up** — CI must be **fully green** (all jobs), and the review must have reached its stopping condition per "When to stop reviewing" below (see [§7](#7-phase-6--merging-up-the-tree)). This does not mean the report is spotless — it means the agent has kept reviewing while it was worth it and stopped once it wasn't.
-
-Re-request after each round of fixes, for as many rounds as the findings stay substantive. If, after the full polling window, **no signal appears at all** for your requested review, or Codex reports it is **rate-limited**, Codex is unavailable for this PR — fall back to the **Claude self-review** below rather than inventing some other substitute or silently skipping review.
-
-### Verifying the signal was actually caught
-
-A background polling loop can complete without you ever acting on it: it can be killed by its own timeout before the review lands, its completion can arrive during a gap in the conversation and never get processed, or you can simply move on to other work and not circle back. **"Waiting on review" is a claim, not a fact — verify it fresh every time before making it, rather than trusting that a background monitor already caught it.**
-
-- **Before stating that a review is still pending, or resuming work that assumes one is, run the direct check yourself** — the same `gh api pulls/<pr>/reviews` + `issues/<pr>/comments` query above, matched against **the PR's own head SHA** (`gh pr view <pr> --json headRefOid`, or the SHA you captured when you pushed/requested this review) — rather than relying on an earlier monitor's presumed-still-running status. Do not match against your local git `HEAD`: across a multi-worktree session your current checkout may belong to a different branch entirely, so a local-HEAD comparison can miss a review that already landed on the PR in question. This is mandatory whenever: you're resuming after any gap or a bare "continue"-type message, a monitor started for this exact review hasn't reported back yet, or the next thing you're about to say is some form of "still waiting" or "watching for it."
-- **A quiet background monitor is not evidence that nothing happened.** It only means the monitor stopped looking (timeout, or otherwise) — not that the review hasn't landed. Any time you have an open PR with a review outstanding, check its live state directly before reporting status on it, and definitely before ending a turn on an unverified "waiting" claim.
-- **If you discover the review already landed while you were doing something else, stop and triage it before continuing** whatever else you were doing — don't set it aside for later, since deferring it is exactly the failure this rule exists to prevent.
-
-### Fallback when Codex is unavailable (rate limits)
-
-Codex code review runs against the account's usage limits and can be **rate-limited** — instead of reviewing, `chatgpt-codex-connector[bot]` posts an issue comment such as *"You have reached your Codex usage limits for code reviews."* When Codex is unavailable this way (or gives no signal within the polling window), the Claude Code agent driving the branch **performs the review itself and posts it as a PR comment**, standing in for Codex:
-
-- Review with the same rigor Codex would: read the **full diff** and post a single PR comment (`gh pr review <pr> --comment`, or `gh pr comment <pr>`), clearly labelled as the stand-in review. List findings **ordered most-severe first**, each with a concrete failure scenario, then a short **verdict** on whether it is safe to merge up. Say in the comment that it stands in for the rate-limited Codex.
-- Then apply the same [§10.1](#101-when-to-decide-vs-ask) discipline to your own findings: fix what is clear, escalate only genuine forks, decline what would overcomplicate.
-
-This self-review **satisfies the review gate** for merging up the tree — it is not a licence to skip review, it is the *same* review performed by the agent when the external reviewer cannot run. Only if a self-review genuinely cannot be produced should the agent instead **ask the human** how review should be handled.
-
-> Default to the self-review above rather than an external `@claude review` GitHub Action, even if
-> one is configured in this repo's `.github/workflows/` (e.g. a `claude.yml` responding to `@claude`
-> mentions): that action runs a *separate* Claude instance inside CI, with no context of this session's
-> work, and depends on CI-side auth (an OAuth token or `ANTHROPIC_API_KEY` secret) that may or may not
-> be provisioned. The Claude Code agent already driving the work provides the equivalent review at no
-> extra cost and with full context — reserve the CI action for cases where a human explicitly wants an
-> independent, out-of-session pass.
-
-### Acting on review feedback
-
-Read the whole review, decide what is reasonable to fix, and **make those specific fixes yourself**. Do not turn the review into a checklist of questions for the human — that is one failure mode. Grinding through round after round chasing a perfectly silent report is the other. A review is a set of suggestions to weigh each round, not a queue to empty.
-
-For each Codex comment, apply the [§10.1](#101-when-to-decide-vs-ask) test:
-
-1. **If the fix is clear and reasonable — make it.** A defect, an inconsistency, a missed test, a straightforward correctness/security fix, or a change with one obviously-right implementation is the agent's to make at its own discretion.
-2. **Escalate only a genuine fork:** a fix that has **multiple materially-different reasonable implementations**, or that is a true product/policy/naming/architecture decision per [§10](#10-subjective-vs-objective-decisions). Then ask one focused question — "implement it this way or that way?" — with a recommendation. Do not ask about fixes that are straightforward to make.
-3. **Decline what would overcomplicate.** A suggestion that adds scope, abstraction, or infrastructure beyond what the spec needs may be declined or deferred — briefly note why on the PR. Keeping it simple (§1) outranks satisfying every suggestion.
-4. **Push a follow-up commit with those changes and re-request review.** If that next round comes back with more substantive findings, repeat the same triage on them — a second or third round of real findings is normal. If it doesn't (see below), stop.
+1. **If the fix is clear and reasonable — decide to make it**, then hand the specific, scoped fix
+   to a Sonnet-tier coding subagent (or, if it is genuinely just prose/doc/no-judgment-required, a
+   Haiku subagent per [§2](#2-model-assignment-mandatory)). A defect, an inconsistency, a missed
+   test, a straightforward correctness/security/data-integrity fix is the agent's to decide and
+   delegate at its own discretion.
+2. **Escalate only a genuine fork:** a fix with **multiple materially-different reasonable
+   implementations**, or a true product/policy/naming/architecture/security-posture decision per
+   [§11](#11-subjective-vs-objective-decisions). Ask one focused question — "implement it this way
+   or that way?" — with a recommendation. Do not ask about fixes that are straightforward.
+3. **Decline what would overcomplicate.** A suggestion adding scope/abstraction/infrastructure
+   beyond what the spec needs may be declined or deferred — note why **in the PR description**
+   (not just a comment). This matters mechanically, not just for the human record: the next
+   round's review subagent is spawned fresh with only the diff and the PR's title/description
+   (see the context contract above) — it never sees prior comments, so a declined item only stays
+   suppressed if the reasoning lives in the description itself. Simplicity (§1) outranks satisfying
+   every finding.
+4. **Push a follow-up commit with the decided fixes and spawn a fresh review subagent** against
+   the new diff. If that round surfaces more substantive findings, repeat the same Opus-tier
+   triage. If it doesn't (see below), stop.
 
 ### When to stop reviewing
 
-The goal is never a literally empty report — it's a round whose comments stop being worth acting on. After each round, ask whether it raised anything substantive: a real defect, an inconsistency, a gap in test coverage, a genuine fork. If yes, fix it (or escalate it) and go again. Stop the loop once a round's remaining comments are:
+The goal is never a literally empty report — it's a round whose findings stop being worth acting
+on. After each round, ask (at the Opus tier) whether it raised anything substantive: a real
+defect, a security issue, a data-integrity problem, a genuine fork. If yes, fix or escalate it and
+go again. Stop the loop once a round's remaining findings are:
 
 - restating something already declined or deferred with a reason on the PR,
-- purely stylistic/cosmetic with no behavior or clarity impact,
+- purely stylistic/cosmetic with no behavior, security, or data-integrity impact,
 - scope the PR deliberately doesn't cover, or
-- otherwise not clearing the [§10.1](#101-when-to-decide-vs-ask) bar for "worth changing."
+- otherwise not clearing the [§11.1](#111-when-to-decide-vs-ask) bar for "worth changing."
 
-Note the outcome briefly on the PR ("remaining comments are stylistic nits / already addressed — stopping here") and move on. This is a judgment call the agent makes itself, the same way it makes any other §10.1 call — it is not a genuine fork to escalate.
+Note the outcome briefly on the PR ("remaining findings are stylistic nits / already addressed —
+stopping here") and move on. This is an Opus-tier judgment call the agent makes itself, not a
+genuine fork to escalate to the human.
 
-**Repeated out-of-scope findings cap the loop at 2-3 rounds.** If a round's findings are out-of-scope and the agent tells Codex (in the `@codex review` request) to stay within the PR's scope, and the next round comes back with the same or other out-of-scope content anyway, that is not a signal to keep re-requesting in hopes of a cleaner pass — Codex re-flagging out-of-scope items after being told the scope is itself evidence the loop has stopped being productive. Note this on the PR ("Codex kept raising out-of-scope items after being scoped down — stopping after round N") and move on rather than requesting further reviews on the same PR.
+**Repeated out-of-scope findings cap the loop at 2–3 rounds.** Each fresh review subagent sees
+only the diff and the PR description (not prior rounds' comments), so a declined item can only
+stop recurring if its rationale was added to the description per the triage step above. If a
+round's findings are out-of-scope and the next fresh-diff round comes back with the same or other
+out-of-scope content anyway *despite* the description already covering it, that is evidence the
+loop has stopped being productive, not a reason to keep spawning review subagents hoping for a
+cleaner pass. Note this on the PR ("review agent kept raising out-of-scope items already declined
+in the description — stopping after round N") and move on.
 
-The PR is eligible to merge up once **both** are true: the review has reached this stopping point — the requested review (findings or the clean issue comment) has, on its most recent round, either come back clean or surfaced nothing left worth fixing per the criteria above; or, when Codex is unavailable (rate-limited / no signal), the agent's **self-review** posted for your latest commit per the fallback above has been triaged the same way — AND any escalated forks are resolved by the human. None of this requires a spotless report; it requires that the feedback was actually considered each round and acted on where it mattered.
+The PR is eligible to merge up once **both** are true: the review has reached its stopping point
+per the criteria above, and any escalated forks are resolved by the human. None of this requires a
+spotless report — it requires that every round's findings were actually triaged at the Opus tier
+and acted on where it mattered.
+
+### Posting the review for auditability
+
+Post the review subagent's findings (or a summary of them, for a long report) as a PR comment,
+clearly labelled as the internal review agent's pass and the model tier it ran on, so the record
+of what was reviewed and decided is visible on the PR itself rather than only in the agent's own
+working memory.
 
 ---
 
-## 7. Phase 6 — Merging Up the Tree
+## 8. Phase 6 — Merging Up the Tree
 
-- Merges from sub → feature and feature → root are **allowed and expected** without additional user gating, provided **CI is green (all jobs)** and the Codex review in [§6](#6-phase-5--codex-review) has been triaged.
+- Merges from sub → feature and feature → root are **allowed and expected** without additional user gating, provided **CI is green (all jobs)** and the review agent pass in [§7](#7-phase-5--review-agent) has been triaged.
 - **Use merge commits everywhere** (not squash, not rebase-and-merge). Full history is preserved so the small-commit trail up the tree stays intact and auditable.
-- After each successful merge, propose branch cleanup per [§9](#9-phase-8--branch-cleanup).
+- After each successful merge, propose branch cleanup per [§10](#10-phase-8--branch-cleanup).
 
 ---
 
-## 8. Phase 7 — Merging to `main`
+## 9. Phase 7 — Merging to `main`
 
 The root-branch → `main` merge is the **only** merge that requires the human user's explicit, complete review and acceptance.
 
@@ -287,7 +378,7 @@ Auto-merge MUST NOT be enabled on any PR targeting `main`. Merge only happens af
 
 ---
 
-## 9. Phase 8 — Branch Cleanup
+## 10. Phase 8 — Branch Cleanup
 
 **Merged branches MUST be removed once they are no longer relevant.** Stale branches clutter the tree and confuse future work.
 
@@ -302,11 +393,11 @@ Rules:
 
 ---
 
-## 10. Subjective vs. Objective Decisions
+## 11. Subjective vs. Objective Decisions
 
 The agent's job is to **think about what is important** and, for every change under consideration, ask: *"Is any part of this dependent on human opinion, product judgment, or repo-level policy?"* If yes — and it is a genuine fork — it escalates. Otherwise it decides and moves on.
 
-### 10.1 When to decide vs. ask
+### 11.1 When to decide vs. ask
 
 Default to **deciding**. Interrupt the human only when it is genuinely warranted. Before asking, run this test:
 
@@ -344,7 +435,7 @@ Batch genuinely-needed questions; never fan a single review out into many small 
 
 ---
 
-## 11. Hard Prohibitions
+## 12. Hard Prohibitions
 
 The agent MUST NOT:
 
@@ -355,16 +446,17 @@ The agent MUST NOT:
 - Enable auto-merge on any PR targeting `main`.
 - Delete any branch without user approval.
 - Commit secrets, tokens, credentials, or `.env` files. If one is discovered committed, stop and alert the user.
-- Make a genuine-fork decision on the human's behalf — a §10 category (product/UX, public API shape, naming, deps, architecture, security posture) or a choice with multiple materially-different reasonable implementations (see [§10.1](#101-when-to-decide-vs-ask)). Straightforward fixes are the agent's to make.
-- Merge a PR up the tree before the Codex review ([§6](#6-phase-5--codex-review)) — or the agent self-review stand-in when Codex is rate-limited/unavailable — has been read and triaged for HEAD.
-- Treat "the CI passed" as a substitute for the Codex review.
+- Make a genuine-fork decision on the human's behalf — a §11 category (product/UX, public API shape, naming, deps, architecture, security posture) or a choice with multiple materially-different reasonable implementations (see [§11.1](#111-when-to-decide-vs-ask)). Straightforward fixes are the agent's to make.
+- Merge a PR up the tree before the review agent's pass ([§7](#7-phase-5--review-agent)) has been read and triaged (at the Opus tier) for the latest diff.
+- Treat "the CI passed" as a substitute for the review agent's pass.
+- Spawn any subagent without pinning its model per [§2](#2-model-assignment-mandatory) — including spawning the review agent on anything other than the Opus tier, or having the review agent's context include anything beyond the PR diff and description as bounded in [§7](#7-phase-5--review-agent) (sources, not tools).
 
 ---
 
-## 12. Quick Reference Checklist
+## 13. Quick Reference Checklist
 
 Before every task:
-- [ ] Wrote `.planning/<spec-name>.md` with goal, scope, slices, acceptance criteria, and subjective items.
+- [ ] Wrote `memory/<spec-name>.md` with goal, scope, slices, acceptance criteria, and subjective items.
 - [ ] Re-read the plan.
 - [ ] Escalated all subjective items in the plan to the human and received answers.
 
@@ -375,12 +467,12 @@ Per slice:
 - [ ] Opened a PR to the parent branch with a complete description.
 
 Per PR:
-- [ ] Posted `@codex review` as part of opening the PR — Codex no longer auto-reviews, so this is required every time, including the first pass.
-- [ ] Waited for the **entire CI run** (completed, green or red) AND the **entire Codex review** to finish before making any fix — no reacting to partial signals.
-- [ ] Detected the requested Codex signal for HEAD: a findings review (`pulls/reviews` `commit_id`) or the clean issue comment (`Reviewed commit` SHA).
-- [ ] If Codex was unavailable (rate-limited / no signal), posted the Claude **self-review** stand-in for HEAD as a PR comment (or asked the human only if that wasn't possible).
+- [ ] Spawned the review subagent as part of opening the PR — on the Opus tier, context-limited to the PR diff + description only per [§7](#7-phase-5--review-agent)'s context contract (sources, not tools).
+- [ ] Waited for the **entire CI run** (completed, green or red) AND the **fresh review subagent pass** against the latest diff to finish before making any fix — no reacting to partial signals.
+- [ ] Triaged the review subagent's findings at the Opus tier per [§11.1](#111-when-to-decide-vs-ask); delegated decided fixes to the Sonnet tier (or Haiku for pure docs/no-judgment fixes).
+- [ ] Posted the review subagent's findings (or a summary) as a PR comment, labelled as the internal review agent's pass.
 - [ ] Made the reasonable fixes at own discretion each round; declined/deferred anything that would overcomplicate (noted why).
-- [ ] Escalated only genuine forks (multiple reasonable implementations, or a §10 decision); recorded the human's answer.
+- [ ] Escalated only genuine forks (multiple reasonable implementations, or a §11 decision); recorded the human's answer.
 - [ ] Repeated review-fix rounds only while findings stayed substantive; stopped once remaining comments were nits/already-addressed/out-of-scope, and noted that on the PR.
 - [ ] Merged up with a **merge commit** (not squash, not rebase).
 - [ ] Proposed branch deletion to the human.
