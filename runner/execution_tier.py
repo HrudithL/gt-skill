@@ -58,7 +58,16 @@ for name in ("gtskill_chrome", "_gtskill_sidecar"):
 _installed_gt_version = None
 try:
     import great_tables as _gt
-    _gt.GT.gtsave = lambda *a, **k: None
+    # Real gtsave() returns `self` (its signature is `(...) -> 'GT'`) so a
+    # script can chain or reassign `gt = gt.gtsave(...)` / `gt = finalize(gt,
+    # ...)` (a common, DOCUMENTED idiom -- see gt_consistency.finalize's own
+    # `return gt.gtsave(path, **opts)`). A stub that returns None instead of
+    # self breaks exactly that idiom: `gt` gets rebound to None even though
+    # the table itself is completely fine, and this runner then wrongly
+    # reports "no top-level `gt` GT instance" for a correct table. Preserve
+    # the real return-value contract so the stub is a faithful no-render
+    # substitute, not a different function shape.
+    _gt.GT.gtsave = lambda self, *a, **k: self
     _installed_gt_version = getattr(_gt, "__version__", None)
 except Exception:
     pass
