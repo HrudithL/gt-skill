@@ -47,6 +47,20 @@ default.
 The order is fixed: color intent (Step 3) is decided before the quiet polish
 (Step 5), and the band (Step 4) can only be decided once Big Color is known.
 
+## Step 7 is an audit, and `gt_check.py` only covers part of it
+
+`gt_check.py` mechanically enforces most of Step 5/6/7's small, easy-to-skip
+items (hairlines, column dividers, stub tint, the footer's two-call
+convention, the ≤2-measure ceiling, the frame) — a `PASS` means those are
+genuinely present, not just intended. It **cannot** check the one item that
+needs the prompt: **hero-uncolored measures must be bold, not bare.** If the
+request names 2+ measures and you colored both because both fit under the
+ceiling, that's still wrong even with a `PASS` — re-read Step 3's ceiling,
+color the one that's the request's actual topic, and `style.text(weight=
+"bold")` the other. `PASS` on the mechanical checks plus this one manual
+check is what completes Step 7 — small polish matters as much as Big Color,
+and the checker exists specifically so you stop treating it as optional.
+
 ## Withhold values, forbid guessing — open the file the action needs
 
 SKILL.md names *what* to decide; the *value* lives only in the reference file
