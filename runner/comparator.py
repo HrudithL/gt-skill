@@ -525,6 +525,21 @@ def _stmt_targets_name(stmt: ast.stmt, name: str) -> bool:
     is progressively reassigned to itself), or (b) is a bare expression
     statement whose own call-chain root is `name` (`gt.gtsave(...)`,
     `gt.tab_header(...).gtsave(...)`, a bare `finalize(gt, ...)`).
+
+    Internal review finding (2026-08-11): the bare-call branch below
+    previously compared the wrong thing for a call shaped like `finalize(gt,
+    ...)` -- `name` is
+    the SCRIPT's exported variable ("gt"), but the code compared it against
+    `func.id`, which is the CALLEE's own name ("finalize"), an equality
+    that can never hold. That silently excluded every bare `finalize(gt,
+    ...)` statement from `_walk_exported_scope`'s restricted walk -- so
+    `_has_real_call(source, "finalize", allow_bare=True)` (what `check_
+    render_mechanics` uses to detect a render call at all) never found it,
+    scoring a perfectly correct, actually-rendered candidate as "no
+    gtsave()/finalize() call found -- the required table image was never
+    rendered." A bare call's SUBJECT is its first positional argument (the
+    same convention `_exported_gt_name` above already uses to resolve
+    `finalize(gt, ...)`'s target), not the function name -- check that.
     """
     if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
         return stmt.targets[0].id == name
@@ -535,7 +550,9 @@ def _stmt_targets_name(stmt: ast.stmt, name: str) -> bool:
             if isinstance(func, ast.Attribute):
                 expr = func.value
             elif isinstance(func, ast.Name):
-                return func.id == name  # a bare call directly on the name, e.g. finalize(gt, ...)
+                # a bare call directly on the name, e.g. finalize(gt, ...)
+                # -- `name` is the call's first ARGUMENT, not its callee.
+                return bool(expr.args) and isinstance(expr.args[0], ast.Name) and expr.args[0].id == name
             else:
                 return False
         return isinstance(expr, ast.Name) and expr.id == name
