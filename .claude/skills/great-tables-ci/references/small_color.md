@@ -63,7 +63,9 @@ story ⇒ use `groupname_col=…`.** Prompt-named grouping is **MANDATORY** (Rul
 **IF a requested measure has more than one reasonable definition** (e.g. "highest
 single-day gain" = `close − open`? intraday `high − low`? day-over-day
 `close.diff()`?) **⇒ pick ONE canonical definition, compute it, and STATE the chosen
-definition** in the subtitle or a source note so the number is reproducible. Do
+definition** in the subtitle or a source note (on a table with ≥5 body rows, this
+definition is the analytical caption half of (f) below's two-call footer — put it
+there, not the subtitle) so the number is reproducible. Do
 **not** silently pick one — an unstated choice makes the same prompt yield different
 numbers across runs.
 

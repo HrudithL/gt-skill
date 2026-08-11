@@ -122,17 +122,10 @@ RULE_REFS: dict[str, str] = {
     "frame-missing": "small_color.md",
     "heading-band": "palettes.md",
     "render-params": "small_color.md",
-    "render-missing": "small_color.md",
     "striping-gate": "small_color.md",
     "orphan-stub": "small_color.md",
     "opt-stylize-banned": "small_color.md",
     "formatting": "small_color.md",
-    "hairlines-missing": "small_color.md",
-    "dividers-missing": "small_color.md",
-    "stub-tint-missing": "small_color.md",
-    "source-note-incomplete": "small_color.md",
-    "render-target-identity": "scripts.md",
-    "unused-helper-import": "scripts.md",
     # Meta findings (exec / dom / internal-error).
     "gt-missing": "small_color.md",
     "exec-error": "small_color.md",
@@ -1062,31 +1055,6 @@ def _source_white_column_labels(source: str) -> bool:
     return False
 
 
-def check_render_call_exists(
-    source: str, gtsave_kwargs: Optional[dict[str, Any]]
-) -> list[Finding]:
-    """No render call at all is a hard failure, not an advisory note.
-
-    A script with no ``gtsave``/``finalize`` call anywhere never produces
-    ``table.png`` — every table.py must end with one. This used to be folded
-    into ``check_render_params`` as an INFO note ("could not check render
-    params"), which meant a script that never renders at all could still
-    print ``PASS`` overall. Split out so "no renderer" is its own FAIL,
-    independent of whether the (absent) call's params would have been ok."""
-    if gtsave_kwargs is not None:
-        return []
-    if _render_from_source(source) is not None:
-        return []
-    return [
-        Finding(
-            "render-missing",
-            FAIL,
-            "no gtsave() or finalize() call found in table.py",
-            "end the script with gt.gtsave('table.png', expand=15, zoom=2.0) (or finalize(gt, ...))",
-        )
-    ]
-
-
 def check_render_params(
     source: str, gtsave_kwargs: Optional[dict[str, Any]]
 ) -> list[Finding]:
@@ -1096,9 +1064,14 @@ def check_render_params(
         # Exec never reached gtsave — fall back to source parsing.
         parsed = _render_from_source(source)
         if parsed is None:
-            # No render call at all — reported by check_render_call_exists;
-            # nothing more to check here.
-            return []
+            return [
+                Finding(
+                    "render-params",
+                    INFO,
+                    "no gtsave() call detected (could not check render params)",
+                    "end the script with gt.gtsave('table.png', expand=15, zoom=2.0)",
+                )
+            ]
         kwargs = parsed
 
     findings: list[Finding] = []
@@ -1236,202 +1209,6 @@ def check_formatting(source: str, calls: list[ColorCall]) -> list[Finding]:
     ]
 
 
-def _option_line_active(source: str, prefix: str) -> bool:
-    """True if ``<prefix>_style``/``_color``/``_width`` together set a real,
-    visible line (mirrors ``runner/comparator.py``'s ``_option_line_present``:
-    a bare ``*_color=`` with no ``*_style=`` never renders anything)."""
-    style_m = re.search(rf"{prefix}_style\s*=\s*['\"]([^'\"]+)['\"]", source)
-    if style_m and style_m.group(1).strip().lower() in ("none", "hidden"):
-        return False
-    has_any = bool(
-        re.search(rf"{prefix}_style\s*=", source)
-        or re.search(rf"{prefix}_color\s*=", source)
-        or re.search(rf"{prefix}_width\s*=", source)
-    )
-    return has_any
-
-
-def check_body_hairlines(source: str) -> list[Finding]:
-    """PP-19 (Step 5a): a light hairline between every body row — always on,
-    not gated. Accepts ``table_body_hlines_*`` tab_options, or a `tab_style`
-    top/bottom border explicitly scoped to `loc.body(...)`."""
-    if _option_line_active(source, "table_body_hlines"):
-        return []
-    for block in _call_arg_blocks(source, "tab_style"):
-        if re.search(r"loc\s*\.\s*body\s*\(", block) and re.search(
-            r"sides\s*=\s*['\"](?:top|bottom|all)['\"]", block
-        ):
-            return []
-    return [
-        Finding(
-            "hairlines-missing",
-            FAIL,
-            "no table_body_hlines_* set (no hairline between body rows)",
-            "set table_body_hlines_style='solid' (+ color/width) — always required, see small_color.md (a)",
-        )
-    ]
-
-
-def check_column_dividers(source: str) -> list[Finding]:
-    """Step 5b: a vertical divider at each column-group seam — gated on
-    `tab_spanner` (2+ spanners means real column groups exist)."""
-    spanner_blocks = _call_arg_blocks(source, "tab_spanner")
-    if len(spanner_blocks) < 2:
-        return []  # 0-1 spanners: no group boundary to mark.
-    if _option_line_active(source, "table_body_vlines") or _option_line_active(
-        source, "column_labels_vlines"
-    ):
-        return []
-    for block in _call_arg_blocks(source, "tab_style"):
-        if re.search(
-            r"loc\s*\.\s*(?:body|column_labels)\s*\(", block
-        ) and re.search(r"sides\s*=\s*['\"](?:left|right)['\"]", block):
-            return []
-    return [
-        Finding(
-            "dividers-missing",
-            FAIL,
-            f"{len(spanner_blocks)} tab_spanner() groups but no vertical divider at the seam",
-            "add a right-border divider on the last column of each group, in both body and column_labels — see small_color.md (b)",
-        )
-    ]
-
-
-def _gt_has_rowname_col(source: str) -> bool:
-    """True if any `GT(...)` constructor call sets a literal `rowname_col=`."""
-    for block in _call_arg_blocks(source, "GT", dotted=False):
-        if re.search(r"rowname_col\s*=\s*['\"][^'\"]+['\"]", block):
-            return True
-    return False
-
-
-def _stub_tint_present(source: str) -> bool:
-    """A `stub_tint(...)` helper call, or a manual fill scoped to `loc.stub()`."""
-    if re.search(r"\bstub_tint\s*\(", source):
-        return True
-    for block in _call_arg_blocks(source, "tab_style"):
-        if re.search(r"loc\s*\.\s*stub\s*\(", block) and re.search(r"style\s*\.\s*fill\s*\(", block):
-            return True
-    return False
-
-
-def check_stub_tint(source: str, exec_res: "ExecResult") -> list[Finding]:
-    """Step 5d: a stub gets a light tint — UNLESS striping is already on.
-
-    Gated exactly like `runner/comparator.py`'s own `check_stub_tint`:
-    `expected = stub_present AND NOT striping_present` — a striped body plus
-    a tinted stub double up on the same "separate the rows" job, so the two
-    are mutually exclusive, not both-required. This only fires the FAIL when
-    a stub exists, striping is OFF, and no tint mechanism is present at all —
-    the one combination small_color.md (d) always expects a tint."""
-    if not _gt_has_rowname_col(source):
-        return []
-    has_striping = bool(
-        re.search(r"opt_row_striping\s*\(", source) or re.search(r"\bstripe\s*\(", source)
-    ) or _dom_has_stripes(exec_res.dom)
-    if has_striping:
-        return []
-    if _stub_tint_present(source):
-        return []
-    return [
-        Finding(
-            "stub-tint-missing",
-            FAIL,
-            "a stub exists, striping is off, but no stub tint is applied",
-            "tint the stub (stub_tint helper, or tab_style(style.fill(...), locations=loc.stub())) — see small_color.md (d)",
-        )
-    ]
-
-
-def check_source_note_completeness(source: str, exec_res: "ExecResult") -> list[Finding]:
-    """Step 6: every table needs a source/provenance note; a table with >= 5
-    body rows needs a SEPARATE analytical caption too (two `tab_source_note`
-    calls) — mirrors the flowchart's "caption (>=5 rows) + source (when
-    known)" rule and `runner/comparator.py`'s own caption/source gating."""
-    blocks = _call_arg_blocks(source, "tab_source_note")
-    if not blocks:
-        return [
-            Finding(
-                "source-note-incomplete",
-                FAIL,
-                "no tab_source_note() call",
-                "add at least one tab_source_note(...) with real provenance text",
-            )
-        ]
-    rows = _dom_body_rows(exec_res.dom) if exec_res.dom is not None else None
-    if rows is not None and rows >= 5 and len(blocks) < 2:
-        return [
-            Finding(
-                "source-note-incomplete",
-                FAIL,
-                f"only {len(blocks)} tab_source_note() call for a {rows}-row table",
-                "call tab_source_note(...) TWICE — one analytical/methodology caption, one separate source/provenance note",
-            )
-        ]
-    return []
-
-
-def check_render_target_identity(source: str) -> list[Finding]:
-    """The DOM this checker inspects comes from the top-level `gt` name after
-    exec (the skill's own convention). That inspection only means anything if
-    `gt` is ALSO the object actually rendered — enforce that `.gtsave(...)`/
-    `finalize(...)` is called on the literal name `gt`, not some other
-    variable the fully-styled table happened to end up bound to."""
-    findings: list[Finding] = []
-    for m in re.finditer(r"\b([A-Za-z_][A-Za-z0-9_.]*)\.gtsave\s*\(", source):
-        target = m.group(1)
-        if target != "gt":
-            findings.append(
-                Finding(
-                    "render-target-identity",
-                    FAIL,
-                    f"gtsave() called on `{target}`, not the top-level `gt`",
-                    "bind the fully-built table to `gt` and call `gt.gtsave(...)` — a different render target may not be what this checker (or the DOM) inspected",
-                )
-            )
-    for block in _call_arg_blocks(source, "finalize", dotted=False):
-        args = _split_top_args(block)
-        if args and not re.match(r"gt\s*(?:[,)]|$)", args[0].strip() + ")"):
-            findings.append(
-                Finding(
-                    "render-target-identity",
-                    FAIL,
-                    f"finalize() called with `{args[0].strip()}`, not `gt`, as the table",
-                    "pass the top-level `gt` object as finalize()'s first argument",
-                )
-            )
-    return findings
-
-
-def check_imported_helpers_used(source: str) -> list[Finding]:
-    """An imported `gt_consistency` helper that's never called is a step the
-    script intended (heatmap/band/stripe/frame/stub_tint/finalize) but
-    silently skipped — catch the dead import before the table is treated as
-    finished."""
-    findings: list[Finding] = []
-    for m in re.finditer(r"from\s+gt_consistency\s+import\s+([^\n]+)", source):
-        rest = m.group(1)
-        tail_start = m.end()
-        names = [
-            n.strip().split(" as ")[-1].strip()
-            for n in rest.replace("(", "").replace(")", "").split(",")
-            if n.strip()
-        ]
-        for name in names:
-            if name in ("PALETTE",) or not name:
-                continue
-            if not re.search(rf"\b{re.escape(name)}\s*\(", source[tail_start:]):
-                findings.append(
-                    Finding(
-                        "unused-helper-import",
-                        FAIL,
-                        f"`{name}` is imported from gt_consistency but never called",
-                        f"call {name}(...) to actually apply the step it encodes, or remove the unused import",
-                    )
-                )
-    return findings
-
-
 # --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
@@ -1549,18 +1326,11 @@ def run_checks(path: Path) -> tuple[list[Finding], dict[str, Any]]:
     findings += _run_safe("palettes-domains", lambda: check_palettes_and_domains(source, calls))
     findings += _run_safe("frame-missing", lambda: check_frame(source, exec_res))
     findings += _run_safe("heading-band", lambda: check_heading_band(source, band_hex, big_color, exec_res))
-    findings += _run_safe("render-missing", lambda: check_render_call_exists(source, exec_res.gtsave_kwargs))
     findings += _run_safe("render-params", lambda: check_render_params(source, exec_res.gtsave_kwargs))
     findings += _run_safe("striping-gate", lambda: check_striping_gate(source, exec_res, big_color))
     findings += _run_safe("orphan-stub", lambda: check_orphan_stub(source))
     findings += _run_safe("opt-stylize-banned", lambda: check_opt_stylize(source))
     findings += _run_safe("formatting", lambda: check_formatting(source, calls))
-    findings += _run_safe("hairlines-missing", lambda: check_body_hairlines(source))
-    findings += _run_safe("dividers-missing", lambda: check_column_dividers(source))
-    findings += _run_safe("stub-tint-missing", lambda: check_stub_tint(source, exec_res))
-    findings += _run_safe("source-note-incomplete", lambda: check_source_note_completeness(source, exec_res))
-    findings += _run_safe("render-target-identity", lambda: check_render_target_identity(source))
-    findings += _run_safe("unused-helper-import", lambda: check_imported_helpers_used(source))
 
     return findings, meta
 

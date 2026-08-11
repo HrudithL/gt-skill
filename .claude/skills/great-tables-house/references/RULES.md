@@ -27,14 +27,16 @@ unchecked, the table isn't done yet.
    request and leave the rest uncolored (bold text at most). Three or more
    `heatmap(...)` calls in one script is always a bug, never a stylistic
    choice — if you catch yourself writing a third one, delete it.
-5. **Body-row hairlines, always** — `hairlines(gt)`. This is a completely
-   separate `great_tables` option family from item 3's outer `frame()`
-   border, not a duplicate of it — a table can have a perfect boxed frame
-   and STILL have zero rule between its body rows, which is exactly what
-   makes an otherwise well-colored table read as bare and undivided. Small
-   polish like this is not optional filler around the "real" work of Big
-   Color — a table with a heatmap but no hairlines is still an unfinished
-   table.
+5. **Body-row hairlines pinned to the house tone, always** — `hairlines(gt)`.
+   `great_tables` renders a hairline between body rows ON BY DEFAULT (a
+   raw library gray, `#D3D3D3`) even without this call — the gap this
+   closes is not "no line at all," it's "the wrong gray." This is a
+   completely separate `great_tables` option family from item 3's outer
+   `frame()` border, not a duplicate of it — calling `frame()` alone still
+   leaves the body-row lines at the library default, unrelated to whatever
+   the frame itself looks like. Small polish like this is not optional
+   filler around the "real" work of Big Color — a table with a heatmap but
+   the raw default hairline gray is still an unfinished table.
 6. **`finalize(gt, path="table.png")`** — the mandatory render, always last.
 
 Everything else in this file — a stub, a group, a spanner, a status chip,
