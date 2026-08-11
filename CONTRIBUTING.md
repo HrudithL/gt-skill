@@ -56,14 +56,17 @@ not a default or a suggestion — it is a hard requirement, checked on every sub
 `model: "..."` above is the tier label passed at the actual subagent-spawn call
 site (e.g. the `Agent`/`Task` tool's `model` parameter) — it always resolves to
 whatever concrete model currently backs that tier, so this table never needs
-updating when a tier's underlying model version changes. For code that pins a
-concrete model ID directly (e.g. `GTSKILL_JUDGE_MODEL`, `runner/spec.py`'s
-`MODELS` dict), `runner/spec.py` is the single authoritative source — it is
-documented in-file as "the one place to bump an id"; do not hardcode a model
-ID anywhere else, including in this document. (This document previously named
-specific IDs here and drifted out of sync with `runner/spec.py`'s actual pins
-— exactly the kind of mismatch `runner/judge.py`'s own comments record a past
-incident of. Tier labels don't have that failure mode.)
+updating when a tier's underlying model version changes. For code that needs a
+concrete model ID directly, `runner/spec.py`'s `MODELS` dict is the single
+authoritative source — it is documented in-file as "the one place to bump an
+id"; do not hardcode a model ID anywhere else, including in this document.
+(`GTSKILL_JUDGE_MODEL` is a deliberate runtime override that *bypasses*
+`runner/spec.py`'s default, not an example of it — see `runner/judge.py`'s own
+comments on why that override exists.) This document previously named specific
+concrete IDs here and drifted out of sync with `runner/spec.py`'s actual
+pins — a related but distinct failure mode from the one `runner/judge.py`'s
+comments record (a model *capability* mismatch, not a doc-vs-pin drift).
+Tier labels don't have either failure mode.
 
 Rules for applying this table:
 
@@ -75,7 +78,7 @@ Rules for applying this table:
   Haiku; if a "simple fix" turns out to need judgment once a subagent is in it, that subagent
   escalates back to the parent rather than silently deciding on its own tier.
 - **Parallelize aggressively, serialize only real dependencies.** Independent coding slices spawn
-  as multiple concurrent Sonnet 5 subagents in one batch. A slice that depends on another's output
+  as multiple concurrent Sonnet-tier subagents in one batch. A slice that depends on another's output
   waits for it — do not parallelize dependent work just because subagents are cheap to spawn. This
   applies at every layer: independent sub-branches within a feature, independent feature branches
   within the root, and independent review/fix cycles across sibling PRs.
@@ -200,9 +203,13 @@ There is no external Codex/ChatGPT review available to this project (Codex revie
 exhausted). The agent MUST NOT wait for, poll for, or otherwise depend on an external
 `chatgpt-codex-connector[bot]` review — none is coming. Instead, the orchestrating agent runs its
 **own internal review subagent** for every PR, and that self-hosted review is the mandatory gate
-before any PR merges up the tree. More than one review-fix round is normal and expected for a PR
-with real findings — but the loop still has a **stopping condition** (see "When to stop reviewing"
-below): it isn't "re-review forever until there is literally nothing left to say."
+before any PR merges up the tree. Default to this self-review even if an external trigger appears
+available in `.github/workflows/` (e.g. a `claude.yml` responding to `@claude` mentions) — an
+`@claude`-mention reply is not the adversarial, diff-scoped review this section requires, and
+treating it as a substitute would silently skip the gate. More than one review-fix round is
+normal and expected for a PR with real findings — but the loop still has a **stopping condition**
+(see "When to stop reviewing" below): it isn't "re-review forever until there is literally
+nothing left to say."
 
 ### The review agent's context contract — PR only, nothing more
 
@@ -216,15 +223,17 @@ This is the load-bearing rule of this section. The review subagent MUST be spawn
 changed file's full current content directly from the repo (a raw diff hunk's few lines of
 surrounding context are often not enough to judge correctness) and MAY run read-only commands
 (tests, greps, a self-comparison) to verify a claim. It MUST NOT be given, and must not go
-looking for: the parent session's conversation history, the working plan in `memory/`, the
-implementer's rationale for why it made the choices it made, or prior review rounds' comments on
-this same PR. This is deliberate, not an oversight — a reviewer that only sees the diff, the PR's
-own stated intent, and the repo's own current state reviews what the code actually does, not what
-the implementer intended it to do, and cannot be talked out of a finding by context the code
+looking for: the parent session's conversation history, the working plan (`memory/` for new plans,
+`.planning/` for this repo's pre-existing ones — see [§3](#3-phase-1--plan-before-you-touch-code)),
+the implementer's rationale for why it made the choices it made, or prior review rounds' comments
+on this same PR. This is deliberate, not an oversight — a reviewer that only sees the diff, the
+PR's own stated intent, and the repo's own current state reviews what the code actually does, not
+what the implementer intended it to do, and cannot be talked out of a finding by context the code
 itself doesn't carry. If a later round is needed after fixes, spawn a **fresh** review subagent
 with the same restricted contract against the new diff — do not reuse or carry forward the prior
-round's subagent state, and do not pass it prior rounds' comments (see "Declined findings" below
-for how repeats are meant to be handled instead).
+round's subagent state, and do not pass it prior rounds' comments (see the "note why in the PR
+description" rule in the triage section below for how a declined finding is meant to stay
+suppressed across rounds instead).
 
 ### Model and goal
 
@@ -289,7 +298,7 @@ delegated to the Sonnet coding subagent and never done by skimming. For each fin
 [§11.1](#111-when-to-decide-vs-ask) test:
 
 1. **If the fix is clear and reasonable — decide to make it**, then hand the specific, scoped fix
-   to a Sonnet 5 coding subagent (or, if it is genuinely just prose/doc/no-judgment-required, a
+   to a Sonnet-tier coding subagent (or, if it is genuinely just prose/doc/no-judgment-required, a
    Haiku subagent per [§2](#2-model-assignment-mandatory)). A defect, an inconsistency, a missed
    test, a straightforward correctness/security/data-integrity fix is the agent's to decide and
    delegate at its own discretion.
@@ -440,7 +449,7 @@ The agent MUST NOT:
 - Make a genuine-fork decision on the human's behalf — a §11 category (product/UX, public API shape, naming, deps, architecture, security posture) or a choice with multiple materially-different reasonable implementations (see [§11.1](#111-when-to-decide-vs-ask)). Straightforward fixes are the agent's to make.
 - Merge a PR up the tree before the review agent's pass ([§7](#7-phase-5--review-agent)) has been read and triaged (at the Opus tier) for the latest diff.
 - Treat "the CI passed" as a substitute for the review agent's pass.
-- Spawn any subagent without pinning its model per [§2](#2-model-assignment-mandatory) — including spawning the review agent on anything other than the Opus tier, or having the review agent's context include anything beyond the PR diff and description.
+- Spawn any subagent without pinning its model per [§2](#2-model-assignment-mandatory) — including spawning the review agent on anything other than the Opus tier, or having the review agent's context include anything beyond the PR diff and description as bounded in [§7](#7-phase-5--review-agent) (sources, not tools).
 
 ---
 
@@ -458,9 +467,9 @@ Per slice:
 - [ ] Opened a PR to the parent branch with a complete description.
 
 Per PR:
-- [ ] Spawned the review subagent as part of opening the PR — on the Opus tier, context-limited to the PR diff + description only, nothing more.
+- [ ] Spawned the review subagent as part of opening the PR — on the Opus tier, context-limited to the PR diff + description only per [§7](#7-phase-5--review-agent)'s context contract (sources, not tools).
 - [ ] Waited for the **entire CI run** (completed, green or red) AND the **fresh review subagent pass** against the latest diff to finish before making any fix — no reacting to partial signals.
-- [ ] Triaged the review subagent's findings at the Opus tier per [§11.1](#111-when-to-decide-vs-ask); delegated decided fixes to Sonnet 5 (or Haiku for pure docs/no-judgment fixes).
+- [ ] Triaged the review subagent's findings at the Opus tier per [§11.1](#111-when-to-decide-vs-ask); delegated decided fixes to the Sonnet tier (or Haiku for pure docs/no-judgment fixes).
 - [ ] Posted the review subagent's findings (or a summary) as a PR comment, labelled as the internal review agent's pass.
 - [ ] Made the reasonable fixes at own discretion each round; declined/deferred anything that would overcomplicate (noted why).
 - [ ] Escalated only genuine forks (multiple reasonable implementations, or a §11 decision); recorded the human's answer.
