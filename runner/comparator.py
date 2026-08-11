@@ -533,9 +533,11 @@ def _stmt_targets_name(stmt: ast.stmt, name: str) -> bool:
     `func.id`, which is the CALLEE's own name ("finalize"), an equality
     that can never hold. That silently excluded every bare `finalize(gt,
     ...)` statement from `_walk_exported_scope`'s restricted walk -- so
-    `_has_real_call(source, "finalize", allow_bare=True)` (what `check_
-    render_mechanics` uses to detect a render call at all) never found it,
-    scoring a perfectly correct, actually-rendered candidate as "no
+    `_ast_call_blocks(source, tree, "finalize", allow_bare=True)` (called
+    from `_render_call_present`, which `check_render_mechanics` reads via
+    the `render_call_present` fingerprint field to detect a render call at
+    all) never found it, scoring a perfectly correct, actually-rendered
+    candidate as "no
     gtsave()/finalize() call found -- the required table image was never
     rendered." A bare call's SUBJECT is its first positional argument (the
     same convention `_exported_gt_name` above already uses to resolve

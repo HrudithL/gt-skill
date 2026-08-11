@@ -151,8 +151,9 @@ either way).
    targeting its first argument — not bare calls generally, which would
    reopen a different false-positive class (e.g. `print(gt)` wrongly
    counting as a render). Affected 16 of `house`'s 18 skill invocations
-   and a comparable share of `scripts`'; 0 for `prose` (its worked
-   example uses the assignment form). See
+   and 7 of `scripts`' 18 (its worked example leans on the assignment form
+   more often); 0 for `prose` (its worked example uses the assignment form
+   exclusively). See
    [`tests/test_render_mechanics_bare_finalize.py`](../tests/test_render_mechanics_bare_finalize.py).
 2. **`GT.gtsave`/`GT.save` no-render stubs returned `None` instead of
    `self`.** `runner/execution_tier.py` and `runner/convergence.py` each
@@ -174,9 +175,9 @@ either way).
    used everywhere else. It now scores 68/88 (77.3%).
 
 `eval-results/_recompute_mechanical_checks.py` (mechanical recompute) and
-a one-off script for the single real re-score above are both committed
-for auditability; see each skill's own `SUMMARY.md` for its exact
-before/after numbers.
+[`eval-results/_rescore_towny_repeat1.py`](_rescore_towny_repeat1.py) (the
+single real re-score above) are both committed for auditability; see each
+skill's own `SUMMARY.md` for its exact before/after numbers.
 
 ## Findings
 
