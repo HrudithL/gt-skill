@@ -103,10 +103,22 @@ SEQUENTIAL_NAMES: set[str] = {
     "Greens", "Reds", "Oranges", "Blues", "Purples", "Greys",
     "YlGnBu", "YlOrRd", "viridis", "magma", "plasma", "inferno", "cividis",
 }
+# §0 Branding tier — the FIXED, universal header/stub/stripe surface every
+# table now uses (2026-08-12 ground-truth redesign), independent of any
+# per-measure heatmap hue. ``stub_tint`` already equals ``WASHED["navy"]``
+# and ``stripe`` already equals ``NEUTRAL["row_stripe"]`` — both are listed
+# again here under their branding role for clarity; ``header`` (#08306B) is
+# a value no other tier carries.
+BRANDING: dict[str, str] = {
+    "header": "#08306B",
+    "stub_tint": WASHED["navy"],
+    "stripe": NEUTRAL["row_stripe"],
+}
 
 # The complete allowed hex set for a heading band (case-insensitive membership).
 ALL_PALETTE_HEXES: set[str] = {
-    h.upper() for h in (*SOLID.values(), *WASHED.values(), *NEUTRAL.values())
+    h.upper()
+    for h in (*SOLID.values(), *WASHED.values(), *NEUTRAL.values(), *BRANDING.values())
 }
 # Solid (dark) hexes — a legitimate no-Big-Color anchor band comes from here.
 SOLID_HEXES: set[str] = {h.upper() for h in SOLID.values()}
@@ -115,7 +127,6 @@ SOLID_HEXES: set[str] = {h.upper() for h in SOLID.values()}
 # Rule id -> the reference file that documents its fix (drives the output line).
 # --------------------------------------------------------------------------- #
 RULE_REFS: dict[str, str] = {
-    "too-many-measures": "palettes.md",
     "palette-signedness": "big_color/diverging_fill.md",
     "domain-symmetry": "big_color/diverging_fill.md",
     "domain-present": "big_color/column_gradient_fill.md",
@@ -123,6 +134,11 @@ RULE_REFS: dict[str, str] = {
     "heading-band": "palettes.md",
     "render-params": "small_color.md",
     "striping-gate": "small_color.md",
+    "stub-tint": "small_color.md",
+    "stripe-color": "small_color.md",
+    "force-sign": "small_color.md",
+    "hero-not-bold": "small_color.md",
+    "layout-advisory": "small_color.md",
     "orphan-stub": "small_color.md",
     "opt-stylize-banned": "small_color.md",
     "formatting": "small_color.md",
@@ -264,11 +280,6 @@ def _band_shade(hexstr: str) -> str:
     return "dark" if _relative_luminance(rgb) < 0.5 else "light"
 
 
-def _hex_in_palette(hexstr: Optional[str]) -> bool:
-    """True if ``hexstr`` is one of the allowed palette hexes (case-insensitive)."""
-    return bool(hexstr) and hexstr.strip().upper() in ALL_PALETTE_HEXES
-
-
 def _call_arg_blocks(source: str, func: str, *, dotted: bool = True) -> list[str]:
     """Return the argument text of every ``func(...)`` call in ``source``.
 
@@ -307,35 +318,16 @@ def _find_band_color(source: str) -> Optional[str]:
     return None
 
 
-def _band_helper(source: str) -> Optional[tuple[str, str]]:
-    """Parse a ``band(gt, *, shade, hue)`` helper call → ``(shade, hue)``.
-
-    The helper sets no literal ``column_labels_background_color=`` token in the
-    source (it is applied at runtime), so this recovers the band intent from the
-    call itself."""
-    for block in _call_arg_blocks(source, "band", dotted=False):
-        shade_m = re.search(r"shade\s*=\s*['\"]([^'\"]+)['\"]", block)
-        hue_m = re.search(r"hue\s*=\s*['\"]([^'\"]+)['\"]", block)
-        if shade_m:
-            return (shade_m.group(1), hue_m.group(1) if hue_m else "")
-    return None
-
-
 def _band_hex_from_helper(source: str) -> Optional[str]:
-    """The band background hex a ``band(shade=, hue=)`` call would apply.
+    """The band background hex a ``band(...)`` helper call would apply.
 
-    Resolves the same way ``gt_consistency.band`` does: light → washed tint (or
-    the neutral grey label band for ``hue='grey'``); dark → the DA solid."""
-    parsed = _band_helper(source)
-    if parsed is None:
-        return None
-    shade, hue = parsed
-    if shade == "light":
-        if hue == "grey":
-            return NEUTRAL["label_band"]
-        return WASHED.get(hue)
-    if shade == "dark":
-        return SOLID.get(hue)
+    2026-08-12 redesign: ``gt_consistency.band()`` now always paints the
+    fixed branding hex regardless of any ``shade``/``hue`` it's called with
+    (the header no longer follows a per-measure heatmap hue — see
+    ``check_heading_band``), so any recognised ``band(...)`` call resolves to
+    that one constant."""
+    if _call_arg_blocks(source, "band", dotted=False):
+        return BRANDING["header"]
     return None
 
 
@@ -649,8 +641,13 @@ def _dom_col_heading_text_white(dom: Optional[str]) -> bool:
             if cm:
                 inline_colors.append(cm.group(1))
     if inline_colors:
-        # Inline overrides the class rule: white iff any label cell is white.
-        return any(_is_white(c) for c in inline_colors)
+        # Inline overrides the class rule for the label cells that carry
+        # one. A single label explicitly forced to a non-white color is a
+        # FAIL regardless of how many other labels are correctly white
+        # (whether via their own inline override or via the default
+        # dark-band CSS) — so every EXPLICITLY-STYLED label must be white,
+        # not merely at-least-one of them.
+        return all(_is_white(c) for c in inline_colors)
     css = re.search(r"\.gt_col_heading\s*\{([^}]*)\}", dom)
     if css:
         cm = color_re.search(css.group(1))
@@ -666,6 +663,102 @@ def _dom_has_stripes(dom: Optional[str]) -> bool:
     or ``row_striping_include_table_body=True``)."""
     body = _dom_tbody(dom or "")
     return bool(body) and "gt_striped" in body
+
+
+def _dom_stripe_color(dom: Optional[str]) -> Optional[str]:
+    """The rendered row-stripe background hex, or ``None`` if unavailable.
+
+    Unlike the heading band / stub (which default to a CSS rule that a
+    literal option then overrides inline), ``row_striping_background_color``
+    compiles straight into the ``.gt_striped`` CSS rule, so that rule is
+    authoritative whether or not striping was ever explicitly colored."""
+    if not dom:
+        return None
+    m = re.search(r"\.gt_striped\s*\{([^}]*)\}", dom, re.IGNORECASE)
+    if not m:
+        return None
+    bg = re.search(r"background-color:\s*([^;]+);", m.group(1), re.IGNORECASE)
+    return bg.group(1).strip() if bg else None
+
+
+def _dom_col_heading_bold(dom: Optional[str]) -> bool:
+    """True if the rendered column-label band renders bold text.
+
+    Reads the compiled ``.gt_col_heading`` CSS rule's ``font-weight`` (the
+    only mechanism ``column_labels_font_weight=`` compiles to — there is no
+    inline per-cell override for this option, unlike the band background or
+    text color)."""
+    if not dom:
+        return False
+    m = re.search(r"\.gt_col_heading\s*\{([^}]*)\}", dom)
+    if not m:
+        return False
+    fw = re.search(r"font-weight:\s*([^;]+);", m.group(1))
+    if not fw:
+        return False
+    return fw.group(1).strip().lower() in ("bold", "bolder", "700", "800", "900")
+
+
+def _dom_stub_present(dom: Optional[str]) -> bool:
+    """True if the rendered DOM has a stub column (a ``<th ... gt_stub ...>``
+    cell in the body)."""
+    return bool(dom) and bool(re.search(r"<th\b[^>]*\bgt_stub\b[^>]*>", dom, re.IGNORECASE))
+
+
+def _dom_stub_non_default_bg(css_text: str) -> Optional[str]:
+    """Parse a ``background-color:`` declaration out of one CSS/inline-style
+    block, treating white/transparent as "no fill" (the default)."""
+    bg = re.search(r"background-color:\s*([^;]+);", css_text, re.IGNORECASE)
+    if not bg:
+        return None
+    hexv = bg.group(1).strip()
+    if hexv.upper() in ("#FFFFFF", "#FFF", "WHITE", "TRANSPARENT"):
+        return None
+    return hexv
+
+
+def _dom_stub_fills(dom: Optional[str]) -> list[Optional[str]]:
+    """The effective background fill of EVERY stub ``<th>`` cell in the
+    document, in document order.
+
+    Two distinct mechanisms tint the stub, and each compiles differently:
+    ``tab_style(style.fill(...), locations=loc.stub())`` applies an INLINE
+    ``background-color`` on the stub ``<th>`` (overriding the ``.gt_stub``
+    CSS rule) — and, critically, can target a SUBSET of rows (e.g.
+    ``loc.stub(rows=[0])``), so only some cells get the inline override;
+    ``stub_background_color=`` (a ``tab_options`` global option — what
+    ``gt_consistency.stub_tint()`` itself uses) compiles straight into the
+    ``.gt_stub`` CSS rule instead, with NO inline style at all, and therefore
+    applies uniformly to every stub cell. For each cell: inline wins when
+    present (same inline-overrides-class pattern the column-label band
+    uses); otherwise the CSS rule is read, ignoring its own white default.
+    Every cell must be checked individually — reading only the first cell
+    would let a partially-tinted stub (only some rows tinted) pass.
+
+    Grand-summary-row and per-group-summary-row label cells also carry the
+    ``gt_stub`` class (alongside ``gt_grand_summary_row`` / ``gt_summary_row``
+    — great_tables emits variants like ``gt_first_grand_summary_row_bottom``
+    too, always containing ``summary_row``), but ``loc.stub()`` can never
+    target them — it only reaches regular body-row stub cells. Excluding
+    them here keeps a correctly, uniformly tinted body stub from being
+    flagged as non-uniform just because a totals row's deliberately-untinted
+    label cell doesn't match."""
+    if not dom:
+        return []
+    tags = re.findall(r"<th\b[^>]*\bgt_stub\b[^>]*>", dom, re.IGNORECASE)
+    tags = [t for t in tags if "summary_row" not in t.lower()]
+    if not tags:
+        return []
+
+    css_m = re.search(r"\.gt_stub\s*\{([^}]*)\}", dom)
+    class_fill = _dom_stub_non_default_bg(css_m.group(1)) if css_m else None
+
+    fills: list[Optional[str]] = []
+    for tag in tags:
+        style_m = re.search(r'style\s*=\s*"([^"]*)"', tag, re.IGNORECASE)
+        inline = _dom_stub_non_default_bg(style_m.group(1)) if style_m else None
+        fills.append(inline if inline is not None else class_fill)
+    return fills
 
 
 def _dom_frame_ok(dom: Optional[str]) -> Optional[bool]:
@@ -815,31 +908,17 @@ def _render_from_source(source: str) -> Optional[dict[str, float]]:
 # --------------------------------------------------------------------------- #
 # The rule checks. Each takes the parsed context and returns a list[Finding].
 # --------------------------------------------------------------------------- #
-def check_too_many_measures(
-    source: str, calls: list[ColorCall], exec_res: "ExecResult"
-) -> list[Finding]:
-    """PP-2/PP-3: at most 2 colored measures.
+def _colored_column_names(calls: list[ColorCall]) -> set[str]:
+    """Flat set of column names targeted by any ``data_color``/``heatmap`` call.
 
-    Counts distinct value-coloring targets across ``data_color(...)`` AND
-    ``heatmap(...)`` calls (one call over several facet columns is one measure).
-    When no color call is recognised at source at all, falls back to the number
-    of distinct DOM-colored columns so an unrecognised fill path is still gated."""
-    distinct = {c.columns for c in calls}
-    n = len(distinct)
-    source_label = "distinct data_color/heatmap targets"
-    if not calls and exec_res.dom is not None:
-        n = _dom_colored_columns(exec_res.dom)
-        source_label = "distinct color-filled columns in the rendered DOM"
-    if n > 2:
-        return [
-            Finding(
-                "too-many-measures",
-                FAIL,
-                f"{n} colored measures ({n} {source_label})",
-                "at most 2 colored measures; drop color from all but the 1-2 hero measures",
-            )
-        ]
-    return []
+    ``ColorCall.columns`` is a normalised (whitespace-stripped) source
+    fragment like ``['msrp']`` or ``"msrp"``; this pulls the quoted names out
+    of it. Used by ``check_hero_not_bold`` to tell a genuinely-colored column
+    apart from an uncolored one."""
+    names: set[str] = set()
+    for c in calls:
+        names.update(re.findall(r"['\"]([^'\"]+)['\"]", c.columns))
+    return names
 
 
 def check_palettes_and_domains(source: str, calls: list[ColorCall]) -> list[Finding]:
@@ -970,76 +1049,68 @@ def check_frame(source: str, exec_res: "ExecResult") -> list[Finding]:
 def check_heading_band(
     source: str,
     band_hex: Optional[str],
-    big_color: bool,
     exec_res: "ExecResult",
 ) -> list[Finding]:
-    """PP-8/PP-9: heading band present and correct for the Big-Color state."""
+    """Header branding (2026-08-12 redesign): every table gets the SAME fixed
+    deep-navy band (``BRANDING["header"]``), bold column labels, and white
+    label text — unconditionally, regardless of whether (or which) measure is
+    colored. The old light-vs-dark-by-Big-Color branch is gone: branding
+    surfaces always resolve to the standard navy family rather than following
+    a heatmapped measure's own hue (every one of the 6 project ground truths
+    uses the identical hex no matter what each one's own body heatmaps)."""
     if band_hex is None:
-        expected = (
-            "a LIGHT washed-tint/grey band (Big Color present)"
-            if big_color
-            else "a DARK saturated Dark-Academia band (no Big Color)"
-        )
         return [
             Finding(
                 "heading-band",
                 FAIL,
                 "no column_labels_background_color set",
-                f"set a column-label band: {expected}",
+                f"set the header band to the fixed branding hex {BRANDING['header']} "
+                "(every table uses the same navy band, regardless of Big Color)",
             )
         ]
 
-    shade = _band_shade(band_hex)
-    if not _hex_in_palette(band_hex):
+    if band_hex.strip().upper() != BRANDING["header"]:
         return [
             Finding(
                 "heading-band",
                 FAIL,
-                f"band hex {band_hex} is not in the allowed palette",
-                "use a hex from palettes.md (washed tint / neutral grey for light, DA solid for dark)",
+                f"band hex {band_hex} is not {BRANDING['header']}",
+                f"use the fixed branding hex {BRANDING['header']} for every table's header band — "
+                "it no longer follows a heatmapped measure's own hue",
             )
         ]
 
-    if big_color and shade != "light":
+    if not _column_labels_bold(source, exec_res):
         return [
             Finding(
                 "heading-band",
                 FAIL,
-                f"Big Color present but band {band_hex} is not light",
-                "use a LIGHT washed-DA tint (or grey) band when the table has Big Color",
-            )
-        ]
-    if (not big_color) and shade != "dark":
-        return [
-            Finding(
-                "heading-band",
-                FAIL,
-                f"no Big Color but band {band_hex} is not a dark saturated anchor",
-                "use a DARK saturated Dark-Academia solid band (white text) when there is no Big Color",
+                "header band present but column labels are not bold",
+                "set column_labels_font_weight='bold' so the header text renders bold",
             )
         ]
 
-    # PP-9 completeness: a dark no-Big-Color anchor band needs WHITE column-label
-    # text for contrast. band(shade='dark') applies it; otherwise verify it in
-    # the DOM or in a tab_style(... loc.column_labels()) that sets white text.
-    if (not big_color) and shade == "dark":
-        dark_helper = _band_helper(source)
-        helper_dark = bool(dark_helper and dark_helper[0] == "dark")
-        white_text = (
-            helper_dark
-            or _dom_col_heading_text_white(exec_res.dom)
-            or _source_white_column_labels(source)
+    # A dark branding band needs WHITE column-label text for contrast. The
+    # rendered DOM is authoritative whenever it exists (real output beats a
+    # source-text guess about what a same-named `band(...)` call probably
+    # did); source-text inference (an explicit white tab_style, or a
+    # recognised band() helper call) is used ONLY when there is no DOM at all.
+    if exec_res.dom is not None:
+        white_text = _dom_col_heading_text_white(exec_res.dom)
+    else:
+        white_text = _source_white_column_labels(source) or bool(
+            _call_arg_blocks(source, "band", dotted=False)
         )
-        if not white_text:
-            return [
-                Finding(
-                    "heading-band",
-                    FAIL,
-                    f"dark band {band_hex} but column-label text is not white",
-                    "set white column-label text (band(shade='dark') does this, or "
-                    "tab_style(style.text(color='white'), loc.column_labels()))",
-                )
-            ]
+    if not white_text:
+        return [
+            Finding(
+                "heading-band",
+                FAIL,
+                f"band {band_hex} but column-label text is not white",
+                "set white column-label text (tab_style(style.text(color='white'), "
+                "loc.column_labels()))",
+            )
+        ]
     return []
 
 
@@ -1052,6 +1123,33 @@ def _source_white_column_labels(source: str) -> bool:
             r"color\s*=\s*['\"](?:white|#fff(?:fff)?)['\"]", block, re.IGNORECASE
         ):
             return True
+    return False
+
+
+def _find_column_labels_font_weight(source: str) -> Optional[str]:
+    """The literal ``column_labels_font_weight=`` value, if set in source."""
+    m = re.search(r"column_labels_font_weight\s*=\s*['\"]([^'\"]+)['\"]", source)
+    return m.group(1) if m else None
+
+
+def _column_labels_bold(source: str, exec_res: "ExecResult") -> bool:
+    """True if column labels render bold.
+
+    The rendered DOM's ``.gt_col_heading`` CSS rule is authoritative whenever a
+    DOM exists — it is the actual output, whereas a source-text token (an
+    explicit ``column_labels_font_weight='bold'``, or a bare ``band(...)``
+    call assumed to be ``gt_consistency.band()``) is only an inference about
+    what the source probably does and can be fooled by an unrelated
+    same-named helper. Source-text inference is used ONLY when there is no
+    DOM to check at all (e.g. exec failed, or a purely static source-review
+    mode)."""
+    if exec_res.dom is not None:
+        return _dom_col_heading_bold(exec_res.dom)
+    weight = _find_column_labels_font_weight(source)
+    if weight and weight.strip().lower() in ("bold", "bolder", "700", "800", "900"):
+        return True
+    if _call_arg_blocks(source, "band", dotted=False):
+        return True
     return False
 
 
@@ -1121,40 +1219,326 @@ def check_render_params(
     return findings
 
 
-def check_striping_gate(
-    source: str, exec_res: ExecResult, big_color: bool
-) -> list[Finding]:
-    """PP-12: >=10 body rows and body not fully filled ⇒ striping expected."""
+def _has_striping_enabled(source: str, exec_res: "ExecResult") -> bool:
+    """Striping must be ENABLED, not merely styled. A bare
+    ``row_striping_background_color=`` (color only) does NOT turn striping on.
+    Accept an actual ``opt_row_striping()`` / ``stripe()`` call, or stripes
+    verified in the rendered DOM."""
+    return bool(
+        re.search(r"opt_row_striping\s*\(", source) or re.search(r"\bstripe\s*\(", source)
+    ) or _dom_has_stripes(exec_res.dom)
+
+
+def check_striping_gate(source: str, exec_res: ExecResult) -> list[Finding]:
+    """Striping applies by DEFAULT, ALWAYS (2026-08-12 redesign — the old
+    ``>=10 body rows`` floor is gone: ``airquality_monthly_summary`` stripes
+    at just 5 rows, and ``towny_growth_trends`` stripes even though 11 of its
+    13 body columns are already heatmapped, both by explicit author
+    direction). The ONLY exemption is a body that is genuinely 100%
+    color-filled (``islands_sizes``'s single, fully-heatmapped column) — a
+    stripe has no plain cell left to ever show through on. This is a real
+    100%-coverage test, not the old ~90% approximation (a 95%-covered body no
+    longer gets a free pass)."""
     if exec_res.dom is None:
-        # No DOM — cannot count rows reliably; skip (dom-error is reported separately).
+        # No DOM — cannot count rows/fill reliably; skip (dom-error is
+        # reported separately).
         return []
     rows = _dom_body_rows(exec_res.dom)
-    if rows < 10:
-        return []  # under 10 rows: striping optional either way.
+    if rows == 0:
+        return []  # no body rows to stripe (e.g. an empty/degenerate table).
 
-    # Striping must be ENABLED, not merely styled. A bare
-    # ``row_striping_background_color=`` (color only) does NOT turn striping on,
-    # so it no longer counts. Accept an actual ``opt_row_striping()`` /
-    # ``stripe()`` call, or stripes verified in the rendered DOM.
-    has_striping = bool(
-        re.search(r"opt_row_striping\s*\(", source)
-        or re.search(r"\bstripe\s*\(", source)
-    ) or _dom_has_stripes(exec_res.dom)
-    if has_striping:
+    if _has_striping_enabled(source, exec_res):
         return []
 
     fill_fraction = _dom_fill_fraction(exec_res.dom)
-    if fill_fraction >= 0.9:
-        return []  # body essentially fully filled by color; stripes would fight it.
+    if fill_fraction >= 1.0 - 1e-9:
+        return []  # body is genuinely 100% color-filled; nothing for a stripe to show through on.
 
     return [
         Finding(
             "striping-gate",
             FAIL,
-            f"{rows} body rows, body not fully color-filled, but striping is not enabled",
-            "call opt_row_striping() (or stripe()) for a >=10-row table whose body is not fully filled",
+            f"{rows} body rows, body not 100% color-filled, but striping is not enabled",
+            "call opt_row_striping() (there is no row-count floor anymore — striping is the default; "
+            "skip it only when the body is genuinely 100% color-filled)",
         )
     ]
+
+
+def _fmt_percent_columns_force_sign(source: str) -> dict[str, bool]:
+    """``{column -> force_sign bool}`` for every column an ``fmt_percent(...)``
+    call targets. Absent ``force_sign=`` resolves to ``False`` (great_tables'
+    own default); a non-literal value is treated as ``False`` too (cannot be
+    proven ``True`` statically, so it does not satisfy the rule)."""
+    result: dict[str, bool] = {}
+    for block in _call_arg_blocks(source, "fmt_percent"):
+        cols_m = re.search(r"columns\s*=\s*(\[[^\]]*\]|['\"][^'\"]+['\"])", block)
+        if not cols_m:
+            continue
+        cols = re.findall(r"['\"]([^'\"]+)['\"]", cols_m.group(1))
+        fs_m = re.search(r"force_sign\s*=\s*(True|False)\b", block)
+        value = fs_m.group(1) == "True" if fs_m else False
+        for c in cols:
+            result[c] = value
+    return result
+
+
+def _column_crosses_zero(gt_obj: Any, column: str) -> Optional[bool]:
+    """True/False if ``column``'s underlying data spans both signs (a real
+    positive AND a real negative value present); ``None`` if it cannot be
+    determined (no exec'd ``gt``, missing column, non-numeric, or all-NaN)."""
+    if gt_obj is None:
+        return None
+    try:
+        series = gt_obj._tbl_data[column]
+        lo = float(series.min())
+        hi = float(series.max())
+    except Exception:
+        return None
+    if lo != lo or hi != hi:  # NaN != NaN
+        return None
+    return lo < 0 < hi
+
+
+def check_force_sign(source: str, exec_res: "ExecResult") -> list[Finding]:
+    """A percent column whose underlying TRUTH data genuinely crosses zero (a
+    real gain-or-loss measure — pct_change, growth %, best/worst day) must
+    format with ``force_sign=True`` so a reader can tell +3.8% from -3.8% at a
+    glance. An always-positive or always-negative percent has nothing to
+    force a sign onto, so this only fires when the column's own data is
+    genuinely signed (checked against the executed ``gt``'s own data, not
+    guessed from the column name)."""
+    force_sign_map = _fmt_percent_columns_force_sign(source)
+    if not force_sign_map:
+        return []
+    findings: list[Finding] = []
+    for col, force_sign in sorted(force_sign_map.items()):
+        if _column_crosses_zero(exec_res.gt, col) is not True:
+            continue
+        if not force_sign:
+            findings.append(
+                Finding(
+                    "force-sign",
+                    FAIL,
+                    f"fmt_percent(columns=[{col!r}]) has zero-crossing data (both positive and "
+                    "negative values present) without force_sign=True",
+                    "pass force_sign=True on fmt_percent for a signed (crosses-zero) percent measure",
+                )
+            )
+    return findings
+
+
+def _bold_full_column_body_styles(source: str) -> set[str]:
+    """Columns with a ``tab_style(style.text(weight='bold'), locations=loc.body(
+    columns=...))`` call that has NO ``rows=`` restriction — i.e. bolds the
+    ENTIRE column, not a row-scoped subset.
+
+    A row-scoped bold highlight (e.g. only the top-5/bottom-5 rows of an
+    otherwise-plain measure, as in ``sp500_monthly_performance``'s
+    ``pct_change``) is a distinct, legitimate pattern and is deliberately NOT
+    what ``check_hero_not_bold`` targets — only an unconditional, whole-column
+    bold is the violation shape."""
+    bold_cols: set[str] = set()
+    for block in _call_arg_blocks(source, "tab_style"):
+        if not re.search(r"weight\s*=\s*['\"]bold['\"]", block):
+            continue
+        loc_m = re.search(r"loc\.body\s*\(([^)]*)\)", block)
+        if not loc_m:
+            continue
+        loc_args = loc_m.group(1)
+        if re.search(r"\brows\s*=", loc_args):
+            continue  # row-scoped — not a full-column bold.
+        cols_m = re.search(r"columns\s*=\s*(\[[^\]]*\]|['\"][^'\"]+['\"])", loc_args)
+        if not cols_m:
+            continue
+        bold_cols.update(re.findall(r"['\"]([^'\"]+)['\"]", cols_m.group(1)))
+    return bold_cols
+
+
+def check_hero_not_bold(source: str, calls: list[ColorCall]) -> list[Finding]:
+    """A column with no ``data_color``/``heatmap`` fill must never get a
+    column-wide bold treatment — an uncolored named measure renders fully
+    plain (no bold, no fill), the same treatment every current ground truth's
+    own uncolored measure gets (gtcars_hp_price's horsepower, airquality's
+    wind speed, towny's rank/total growth, sp500's open/close). This is a
+    previously-untaught rule: bolding an uncolored hero measure used to look
+    like a reasonable substitute for a 3rd color fill; it no longer is."""
+    colored = _colored_column_names(calls)
+    offending = sorted(_bold_full_column_body_styles(source) - colored)
+    if not offending:
+        return []
+    return [
+        Finding(
+            "hero-not-bold",
+            FAIL,
+            f"column(s) {offending} are bolded across the whole column but have no color fill",
+            "an uncolored measure must render fully plain — no bold, no fill; drop the bold "
+            "tab_style or give the column an actual data_color/heatmap fill instead",
+        )
+    ]
+
+
+_STANDARD_PADDING_KEYS: tuple[str, ...] = (
+    "heading_padding",
+    "column_labels_padding",
+    "column_labels_padding_horizontal",
+    "data_row_padding",
+    "data_row_padding_horizontal",
+    "source_notes_padding",
+)
+
+
+def check_layout_advisory(source: str) -> list[Finding]:
+    """INFO-only consistency nicety (never a hard gate): the standard
+    ``cols_width(cases={...})`` call and the full standard padding block. Every
+    ground truth in this project sets both, but neither is a scored
+    correctness rule — a table that skips them isn't wrong, just less tightly
+    laid out, so this stays advisory."""
+    findings: list[Finding] = []
+    if not _call_arg_blocks(source, "cols_width"):
+        findings.append(
+            Finding(
+                "layout-advisory",
+                INFO,
+                "no cols_width(cases={...}) call found",
+                "size columns to their own content with cols_width(cases={...}) for a tighter, "
+                "less auto-stretched layout",
+            )
+        )
+    missing_padding = [k for k in _STANDARD_PADDING_KEYS if not re.search(rf"{k}\s*=", source)]
+    if missing_padding:
+        findings.append(
+            Finding(
+                "layout-advisory",
+                INFO,
+                f"missing the standard padding block: {missing_padding}",
+                "set the standard tab_options padding keys (heading_padding, column_labels_padding, "
+                "column_labels_padding_horizontal, data_row_padding, data_row_padding_horizontal, "
+                "source_notes_padding) for consistent, tightened cell padding",
+            )
+        )
+    return findings
+
+
+def _source_stub_present(source: str) -> bool:
+    """True if the source declares a stub (``rowname_col=`` in ``GT(...)``)."""
+    for block in _call_arg_blocks(source, "GT", dotted=False):
+        if re.search(r"rowname_col\s*=\s*['\"][^'\"]+['\"]", block):
+            return True
+    return False
+
+
+def _source_stub_fill(source: str) -> Optional[str]:
+    """The stub fill hex from source: ``stub_background_color=`` or a
+    ``tab_style(style.fill(...), locations=loc.stub())`` call."""
+    m = re.search(r"stub_background_color\s*=\s*['\"]([^'\"]+)['\"]", source)
+    if m:
+        return m.group(1)
+    for block in _call_arg_blocks(source, "tab_style"):
+        if "stub" not in block:
+            continue
+        cm = re.search(r"fill\s*\(\s*color\s*=\s*['\"]([^'\"]+)['\"]", block)
+        if cm:
+            return cm.group(1)
+    return None
+
+
+def check_stub_tint(source: str, exec_res: "ExecResult") -> list[Finding]:
+    """Whenever a stub exists, its fill must be the fixed branding tint
+    (``BRANDING["stub_tint"]`` = #EAF0F6) — universal across every table
+    (2026-08-12 redesign), not a per-hue washed tint chosen per table.
+
+    Every stub cell in the document must carry this tint, not just the first
+    one: a table that tints only some rows (e.g. ``loc.stub(rows=[0])``)
+    still fails, since the fixed branding tint is a table-wide surface, not a
+    per-row highlight."""
+    if exec_res.dom is not None:
+        if not _dom_stub_present(exec_res.dom):
+            return []
+        fills = _dom_stub_fills(exec_res.dom)
+        # Normalize case before comparing: two mechanisms writing the same
+        # color in different letter-case (e.g. #EAF0F6 vs #eaf0f6) are the
+        # same fill, not a "not uniform" finding. Matches the case
+        # normalization the color-match check below already applies.
+        normalized_fills = [f.strip().upper() if f else f for f in fills]
+        unique_fills = set(normalized_fills)
+        if len(unique_fills) > 1:
+            found = ", ".join(sorted(v or "none" for v in unique_fills))
+            return [
+                Finding(
+                    "stub-tint",
+                    FAIL,
+                    f"stub tint is not applied uniformly across all stub cells (found: {found})",
+                    f"tint EVERY stub cell to the fixed branding hex {BRANDING['stub_tint']} "
+                    "(a global stub_background_color / stub_tint() applies uniformly; a "
+                    "per-row tab_style(locations=loc.stub(rows=[...])) does not)",
+                )
+            ]
+        fill = unique_fills.pop() if unique_fills else None
+    else:
+        if not _source_stub_present(source):
+            return []
+        fill = _source_stub_fill(source)
+        if fill is None and _call_arg_blocks(source, "stub_tint", dotted=False):
+            fill = BRANDING["stub_tint"]  # stub_tint() always emits the fixed tint now.
+
+    if fill is None:
+        return [
+            Finding(
+                "stub-tint",
+                FAIL,
+                "a stub exists but has no fill/background color set",
+                f"tint the stub to the fixed branding hex {BRANDING['stub_tint']} "
+                "(tab_style(style.fill(color=...), locations=loc.stub()))",
+            )
+        ]
+    if fill.strip().upper() != BRANDING["stub_tint"]:
+        return [
+            Finding(
+                "stub-tint",
+                FAIL,
+                f"stub fill {fill} is not the fixed branding hex {BRANDING['stub_tint']}",
+                f"use {BRANDING['stub_tint']} for every table's stub tint — it no longer varies by hue",
+            )
+        ]
+    return []
+
+
+def _source_stripe_color(source: str) -> Optional[str]:
+    m = re.search(r"row_striping_background_color\s*=\s*['\"]([^'\"]+)['\"]", source)
+    return m.group(1) if m else None
+
+
+def check_stripe_color(source: str, exec_res: "ExecResult") -> list[Finding]:
+    """Whenever row striping is enabled, its background must be the fixed
+    neutral grey (``BRANDING["stripe"]`` = #F6F6F6) — great_tables' own
+    ``opt_row_striping()`` default (#F4F4F4) is a different, unpinned hex, so
+    an enabled-but-uncolored stripe still fails this rule."""
+    if not _has_striping_enabled(source, exec_res):
+        return []
+    color = _dom_stripe_color(exec_res.dom)
+    if color is None:
+        color = _source_stripe_color(source)
+    if color is None:
+        return [
+            Finding(
+                "stripe-color",
+                FAIL,
+                "row striping is enabled but no row_striping_background_color is set "
+                f"(renders great_tables' own default, not {BRANDING['stripe']})",
+                f"pin row_striping_background_color='{BRANDING['stripe']}' (stripe() does this)",
+            )
+        ]
+    if color.strip().upper() != BRANDING["stripe"]:
+        return [
+            Finding(
+                "stripe-color",
+                FAIL,
+                f"row-stripe background {color} is not the fixed neutral grey {BRANDING['stripe']}",
+                f"use {BRANDING['stripe']} for row striping — it's a fixed neutral, not a per-table color",
+            )
+        ]
+    return []
 
 
 def check_orphan_stub(source: str) -> list[Finding]:
@@ -1266,14 +1650,18 @@ def run_checks(path: Path) -> tuple[list[Finding], dict[str, Any]]:
         meta["body_rows"] = _dom_body_rows(exec_res.dom)
 
     # --- Band + Big-Color detection (helper-agnostic). ---
-    # Band hex: explicit tab_options token, else the band() helper's intent, else
-    # the rendered .gt_col_heading background. Any of these judges the OUTPUT so
-    # a helper-only table is no longer seen as "no band".
-    band_hex = (
-        _find_band_color(source)
-        or _band_hex_from_helper(source)
-        or _dom_col_heading_bg(exec_res.dom)
-    )
+    # Band hex: the actual RENDERED .gt_col_heading background is authoritative
+    # whenever a DOM exists — real output beats any inference about what the
+    # source probably does (a source-text token like a bare `band(...)` call
+    # only proves a function of that name was invoked, not that it's actually
+    # gt_consistency.band() or that it produced this color). Source-text
+    # detection (explicit tab_options token, then the band() helper's assumed
+    # intent) is used ONLY when there is no DOM at all (e.g. exec failed, or a
+    # purely static source-review mode).
+    if exec_res.dom is not None:
+        band_hex = _dom_col_heading_bg(exec_res.dom)
+    else:
+        band_hex = _find_band_color(source) or _band_hex_from_helper(source)
     # Big Color: any data_color/heatmap call, a solid DA hex used off-band, or
     # any inline-filled body cell in the DOM (covers the helper path).
     big_color = (
@@ -1322,15 +1710,19 @@ def run_checks(path: Path) -> tuple[list[Finding], dict[str, Any]]:
         )
 
     # --- Rule checks (each isolated). ---
-    findings += _run_safe("too-many-measures", lambda: check_too_many_measures(source, calls, exec_res))
     findings += _run_safe("palettes-domains", lambda: check_palettes_and_domains(source, calls))
     findings += _run_safe("frame-missing", lambda: check_frame(source, exec_res))
-    findings += _run_safe("heading-band", lambda: check_heading_band(source, band_hex, big_color, exec_res))
+    findings += _run_safe("heading-band", lambda: check_heading_band(source, band_hex, exec_res))
     findings += _run_safe("render-params", lambda: check_render_params(source, exec_res.gtsave_kwargs))
-    findings += _run_safe("striping-gate", lambda: check_striping_gate(source, exec_res, big_color))
+    findings += _run_safe("striping-gate", lambda: check_striping_gate(source, exec_res))
+    findings += _run_safe("stub-tint", lambda: check_stub_tint(source, exec_res))
+    findings += _run_safe("stripe-color", lambda: check_stripe_color(source, exec_res))
+    findings += _run_safe("force-sign", lambda: check_force_sign(source, exec_res))
+    findings += _run_safe("hero-not-bold", lambda: check_hero_not_bold(source, calls))
     findings += _run_safe("orphan-stub", lambda: check_orphan_stub(source))
     findings += _run_safe("opt-stylize-banned", lambda: check_opt_stylize(source))
     findings += _run_safe("formatting", lambda: check_formatting(source, calls))
+    findings += _run_safe("layout-advisory", lambda: check_layout_advisory(source))
 
     return findings, meta
 

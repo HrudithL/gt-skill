@@ -20,11 +20,17 @@ This file is two things at once:
    saves it to ``house_table.png`` next to this script.
 
 THE NON-NEGOTIABLE BASE (see ``references/RULES.md`` for the full rule):
-every table gets ALL of — (1) a title AND subtitle, (2) a source note (a
-generic one if the real provenance is unknown — never omitted), (3) the
-boxed frame (``frame(gt)``), (4) AT MOST 2 colored measures total across
-the whole table (never one heatmap per numeric column — a 3rd
-``heatmap()``/``data_color()`` call is always a bug), (5) the body-row
+every table gets ALL of — (1) a title AND subtitle, (2) TWO source notes
+(an analytical caption stating the finding or the chosen definition for an
+ambiguous measure, THEN a separate provenance note — a generic provenance
+note if the real one is unknown, never omitted), (3) the boxed frame
+(``frame(gt)``), (4) Big Color kept restrained — the ``heatmap()``/
+``data_color()`` calls target only the measure(s) the request is actually
+about, never one heatmap per numeric column; there is no numeric cap on
+colored measures, and any measure that isn't part of what the request is
+about renders fully plain (no fill, no bold, no text-color treatment of
+any kind), regardless of how many other measures already carry a color
+fill (see ``references/RULES.md``'s "Color restraint"), (5) the body-row
 ``hairlines(gt)`` rule (a completely separate `great_tables` option family
 from the outer ``frame()`` border — `great_tables` already renders a raw
 gray hairline by default, so skipping this call leaves an otherwise
@@ -33,8 +39,8 @@ and (6)
 ``finalize(gt, path="table.png")`` as the final call. These six are
 unconditional, unlike the stub/group/spanner/status-chip/summary-row
 choices below, which stay genuinely data-dependent — and unlike striping
-(conditional on row count/fill, see ``stripe()`` below), which stays a
-gate you must evaluate every time, not skip. Importing a helper
+(conditional on full heatmap coverage, see ``stripe()`` below), which
+stays a gate you must evaluate every time, not skip. Importing a helper
 (``stripe``, ``stub_tint``, ``humanize_labels``, ...) and then not calling
 it is fine when its own gate doesn't fire; skipping one of the six items
 above because your table "didn't seem to need it" is not — small polish
@@ -59,13 +65,18 @@ tiers of ``PALETTE`` below are copied from
 ``great-tables-ci/scripts/gt_consistency.py`` (mirroring
 ``references/palettes.md``) — reusing the already-validated hue system is
 deliberate. The ``accent`` / ``accent_tint`` tiers are new to THIS skill: a
-brighter, more saturated pairing used only for the column-label band, the
-stub, and group headers, modeled on `great_tables`' own built-in
-``opt_stylize()`` presets (styles 3 and 6 in particular) — a solid, clearly
-"branded" header band with a matching, clearly-visible (not barely-there)
-stub/group tint, so the table reads as one unified color theme rather than
-"mostly grey, plus a colored heatmap." See ``band()``/``stub_tint()``/
-``group_emphasis()`` below for how the two tiers divide the work.
+brighter, more saturated pairing modeled on `great_tables`' own built-in
+``opt_stylize()`` presets (styles 3 and 6 in particular) — a solid,
+clearly "branded" header band and clean, clearly-differentiated status
+colors, rather than a barely-there wash. ``accent`` backs the
+column-label band's solid fill under the house-default
+``band(gt, shade="dark")`` AND ``status_chip()``'s good/bad/neutral
+fills; ``accent_tint`` backs the band's lighter fill under
+``band(gt, shade="light")``. Neither tier is used by ``stub_tint()``
+(always the quieter ``washed`` tier, so the stub stays subtler than the
+band) or by ``group_emphasis()`` (bold weight + a neutral structural rule
+only, no fill at all). See ``band()``/``stub_tint()``/``status_chip()``/
+``group_emphasis()`` below for exactly how each tier is used.
 """
 
 from __future__ import annotations
@@ -82,10 +93,13 @@ from great_tables import GT, loc, md, style
 PALETTE = {
     # Dark Academia SOLID Big-Color palette (white text on every solid). Each
     # hue exists for a specific subject-matter cue, not decoration — see the
-    # "Use when..." comment on each entry. Navy is the deterministic default
-    # when no other cue applies (references/palettes.md §1's hue-selection
-    # rule: match an existing heatmap hue first, else the data's subject,
-    # else any color already in the table, else Navy).
+    # "Use when..." comment on each entry. Navy is also the fixed default for
+    # BRANDING surfaces (band()/stub_tint()) specifically, because Blues/navy
+    # is the standard house hue for branding — not because it's re-derived by
+    # matching whichever hue a heatmapped measure elsewhere in the table
+    # happens to use (see references/RULES.md's "Unified color theme"; the
+    # "solid"/"washed" hue system itself is copied from
+    # great-tables-ci/references/palettes.md, not a file in this skill).
     "solid": {
         "navy": "#22384F",      # default with no other cue
         "forest": "#2F4A38",    # nature, growth, environment, money/finance
@@ -95,8 +109,10 @@ PALETTE = {
         "tan": "#8A7452",       # secondary warm accent / mid (cream tint)
     },
     # The washed light tint paired with each solid above (same keys). Used
-    # for quiet structural surfaces (band, stub, stripe) so the quiet polish
-    # echoes whichever solid hue is doing the loud work elsewhere.
+    # for the stub's quiet tint (`stub_tint()`) — navy/Blues is the fixed
+    # branding default here because Blues is the standard house hue for
+    # branding, not a tint re-derived by matching whichever solid hue a
+    # heatmapped measure elsewhere in the table happens to use.
     "washed": {
         "navy": "#EAF0F6",
         "forest": "#EAF1EC",
@@ -105,15 +121,15 @@ PALETTE = {
         "ochre": "#F5EFDC",
         "tan": "#EFE7D6",       # cream
     },
-    # Brighter, more saturated pairing used ONLY for the column-label band,
-    # the stub, and group headers (band()/stub_tint()/group_emphasis()) — the
-    # "unified color theme" surfaces, modeled on great_tables' own
-    # opt_stylize() styles 3/6 (a solid, clearly-branded header band + a
-    # matching, visibly-tinted stub/group surface — not a barely-there wash).
-    # Deliberately a SEPARATE tier from "solid"/"washed" above: those stay
-    # muted because status_chip()'s good/bad/neutral meaning and the NA-cell
-    # fill need to read as restrained/semantic, not as decoration, while the
-    # band/stub are pure branding and can afford to be louder.
+    # Brighter, more saturated pairing used for the column-label band's solid
+    # fill under the house-default `band(gt, shade="dark")` AND for
+    # `status_chip()`'s good/bad/neutral fills — modeled on great_tables' own
+    # opt_stylize() styles 3/6 (a solid, clearly-branded header band, paired
+    # with clean, clearly-differentiated status colors, not a barely-there
+    # wash). NOT used by `stub_tint()` (always the quieter "washed" tier
+    # below, so the stub stays subtler than the band) or by
+    # `group_emphasis()` (bold weight + a neutral structural rule only, no
+    # fill at all).
     "accent": {
         "navy": "#08306B",
         "forest": "#2E7350",
@@ -123,10 +139,13 @@ PALETTE = {
         "tan": "#9C8258",
     },
     # The visibly-tinted (not barely-there) light pairing for "accent" above —
-    # used for the stub and group-header fill. Noticeably more saturated than
-    # "washed" below on purpose: "washed" is reserved for the whisper-quiet
-    # row stripe, so stripe and stub read as two distinct strengths of the
-    # same hue rather than blurring into one another.
+    # used for the column-label band when `band(gt, shade="light")` is
+    # chosen (the house DEFAULT is `shade="dark"`, which paints the band with
+    # the solid "accent" tier itself instead — see band()'s docstring). NOT
+    # used for the stub (`stub_tint()` always uses the quieter "washed" tier
+    # below) or for group headers (`group_emphasis()` applies bold + a rule
+    # only, no fill at all). The row stripe is a third, separate tier
+    # entirely — the flat, never-tinted "neutral" grey (see stripe()).
     "accent_tint": {
         "navy": "#C9E0F0",
         "forest": "#CFEAD9",
@@ -304,12 +323,15 @@ def band(gt, *, shade="dark", hue):
     for ``shade="light"`` only if you have an explicit reason to want the
     quieter tint instead.)
 
-    NOTE the band uses ``accent_tint`` while ``stub_tint()`` uses the
-    quieter ``washed`` tier — the OPPOSITE pairing of what a first guess
-    might assume. The band is the more prominent surface (it spans every
-    column and sits right under the title), so it carries the
-    more-visible tint; the stub is a narrower, secondary surface and stays
-    quieter so it doesn't out-compete the band above it.
+    NOTE the default ``shade="dark"`` band uses the solid ``accent`` tier
+    (the most visible option) while ``stub_tint()`` always uses the quieter
+    ``washed`` tier. The band is the more prominent surface (it spans every
+    column and sits right under the title), so it carries the most-visible
+    fill; the stub is a narrower, secondary surface and stays quieter so it
+    doesn't out-compete the band above it. (``shade="light"`` paints the
+    band with the lighter ``accent_tint`` tier instead of the default's
+    solid ``accent`` — still more visible than the stub's ``washed`` tint
+    either way.)
     """
     rule = PALETTE["neutral"]["column_label_rule"]
     options = {
@@ -368,12 +390,15 @@ def stub_tint(gt, *, hue):
     ``hue="grey"`` uses the neutral label-band grey (the default with no
     Big Color). Any other hue key (``navy``/``forest``/``oxblood``/
     ``espresso``/``ochre``/``tan``) uses that hue's ``washed`` tint — the
-    quieter tier (NOT ``accent_tint``, which ``band()`` uses): the stub is
-    a narrower, secondary surface next to the more prominent column-label
-    band, so it stays subtler than the band rather than competing with it.
-    Pick the hue that matches the table's dominant heatmap family (see the
-    DA hue-selection rule: a Blues heatmap harmonizes to navy, Greens to
-    forest, etc.) so the stub doesn't clash with the loud color elsewhere.
+    quieter tier (NOT ``accent``, which ``band()`` uses by default under
+    ``shade="dark"`` — or ``accent_tint``, which ``band()`` uses under
+    ``shade="light"``): the stub is a narrower, secondary surface next to
+    the more prominent column-label band, so it stays subtler than the
+    band rather than competing with it.
+    Pass the SAME hue as ``band()`` — branding surfaces default to the
+    fixed navy/Blues family regardless of which hue a heatmap elsewhere on
+    the table happens to use; this is a branding decision, not something
+    re-derived from the body's own data-driven color.
     """
     if hue == "grey":
         color = PALETTE["neutral"]["label_band"]
@@ -509,8 +534,9 @@ def status_chip(gt, column, meaning):
 
     ``meaning`` maps each cell VALUE (e.g. ``"On Track"``) to one of
     ``"good"`` / ``"bad"`` / ``"neutral"``. Fills from the ``accent`` tier
-    (the same brighter, more saturated pairing ``band()``/``stub_tint()``
-    use) rather than the muted ``solid`` DA tier: ``good`` -> accent forest
+    (the same brighter, more saturated tier ``band(shade="dark")`` uses --
+    NOT ``stub_tint()``, which always uses the quieter ``washed`` tier)
+    rather than the muted ``solid`` DA tier: ``good`` -> accent forest
     (a clean green), ``bad`` -> accent oxblood (a clean red, not the muted
     ``solid`` oxblood's muddy brown-red), ``neutral`` -> accent ochre (a
     warm, legible amber — not accent/solid ``tan``, which reads as a flat,
@@ -652,12 +678,18 @@ def build_house_table():
     - ``units_sold`` -> plain magnitude, thousands separator, UNCOLORED.
     - ``revenue``    -> the sequential heatmap HERO measure (Blues/neutral).
     - ``yoy_change`` -> the diverging heatmap measure (RdYlGn/default) — the
-                        2nd and LAST colored measure. Two is the ceiling;
-                        a 3rd colored column would break the rule.
+                        2nd full-heatmap measure in this demo (Big Color
+                        stays restrained, not capped at a fixed count).
     - ``status``     -> categorical good/bad/neutral via status_chip, NOT a
                         heatmap — it is 3 discrete states, not a magnitude.
     - ``rank``       -> plain integer, no color, no decimals — a rank's
                         information is its order, not its size.
+
+    Column order: `revenue`, the primary heatmapped measure, sits in the
+    first value column or two — right after its lone context column
+    (`units_sold`), not literally the very first column — never buried
+    among trailing categorical/rank columns; this demo already satisfies
+    that, no reordering needed.
     """
     products = pd.DataFrame(
         [
@@ -702,7 +734,7 @@ def build_house_table():
         )
         .fmt_number(columns="units_sold", decimals=0, use_seps=True)
         .fmt_currency(columns="revenue", decimals=0)
-        .fmt_percent(columns="yoy_change", decimals=1)
+        .fmt_percent(columns="yoy_change", decimals=1, force_sign=True)
         .fmt_integer(columns="rank")
         .sub_missing(columns=["yoy_change", "status", "rank"], missing_text="—")
     )
@@ -712,11 +744,35 @@ def build_house_table():
         overrides={"units_sold": "Units Sold", "yoy_change": "YoY Change"},
     )
 
-    # Big Color: exactly 2 colored measures (the ceiling). `revenue` is the
+    # Column widths + padding: size each column to its content plus a
+    # small buffer; don't let auto-layout stretch narrow columns (`rank`)
+    # to match the widest label elsewhere. Padding values are the six
+    # pinned house constants (see references/RULES.md's "Global constants").
+    gt = gt.cols_width(
+        cases={
+            "product": "150px",
+            "units_sold": "110px",
+            "revenue": "110px",
+            "yoy_change": "110px",
+            "status": "100px",
+            "rank": "70px",
+        }
+    )
+    gt = gt.tab_options(
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
+    )
+
+    # Big Color, kept restrained: 2 full heatmaps in this demo (no fixed
+    # cap — see references/RULES.md's "Color restraint"). `revenue` is the
     # sequential hero (a neutral magnitude -> Blues); `yoy_change` is the
-    # diverging 2nd-and-last measure (signed, positive=good -> RdYlGn
-    # default orientation, no reverse). `status` is a categorical good/bad/
-    # neutral column, NOT a 3rd heatmap — status_chip, not data_color. The
+    # diverging 2nd measure (signed, positive=good -> RdYlGn default
+    # orientation, no reverse). `status` is a categorical good/bad/
+    # neutral column, NOT a heatmap — status_chip, not data_color. The
     # domain for each is computed from `products` alone (heatmap()'s default
     # when domain=None) — safe because the grand-summary Total added below
     # is NOT part of `gt._tbl_data`; unlike a manually appended total ROW, it
@@ -725,23 +781,25 @@ def build_house_table():
     gt = heatmap(gt, "yoy_change", kind="diverging", hue="default")
     gt = status_chip(gt, "status", {"On Track": "good", "At Risk": "bad", "Watch": "neutral"})
 
-    # Heading band: the house DEFAULT is the "accent_tint" band (a clearly
-    # visible light tint, not a solid fill) — here, navy (the Blues
-    # heatmap's family, per the DA hue-selection rule: match an existing
-    # heatmap hue first). Quiet enough that the heatmap stays the star, but
-    # the band is still the MORE visible of the band/stub pairing below.
+    # Heading band: the house DEFAULT (shade="dark") is a solid, branded
+    # navy fill (`accent["navy"]`, #08306B) with bold white text. Branding
+    # surfaces are fixed to this navy/Blues family always — navy here is
+    # NOT re-derived by matching the heatmap's own hue elsewhere in the
+    # table (a heatmap could be Blues, Reds, or RdYlGn and the band stays
+    # navy regardless); see references/RULES.md's "Unified color theme".
     gt = band(gt, hue="navy")
 
-    # Small-Color polish: 12 body rows clears the >=10-row striping gate,
-    # and only 2 of 6 columns carry continuous color (revenue, yoy_change)
-    # — the body is far from "essentially fully covered," so striping and
-    # fills don't fight. Stub tint harmonizes to the same navy family as
-    # the band, at the quieter "washed" tier (the band is the louder of
-    # the two). The stripe is always flat grey, never tinted — an
-    # alternating fill reads as busy in a way a single flat surface
-    # doesn't. Group headers get bold + a rule ONLY (no fill) — the one
-    # row that earns its own distinct highlight is the summary/total row
-    # below, not a section break.
+    # Small-Color polish: striping applies by DEFAULT regardless of row
+    # count — the real gate is whether the body's visible cells are
+    # already 100% heatmap-covered. Only 2 of 6 columns here carry
+    # continuous color (revenue, yoy_change), so plenty of plain cells
+    # remain for a stripe to show through on. Stub tint harmonizes to the
+    # same navy family as the band, at the quieter "washed" tier (the band
+    # is the louder of the two). The stripe is always flat grey, never
+    # tinted — an alternating fill reads as busy in a way a single flat
+    # surface doesn't. Group headers get bold + a rule ONLY (no fill) —
+    # the one row that earns its own distinct highlight is the
+    # summary/total row below, not a section break.
     gt = stripe(gt)
     gt = stub_tint(gt, hue="navy")
     gt = group_emphasis(gt)
@@ -790,6 +848,12 @@ def build_house_table():
         gt.tab_footnote(
             footnote="Restated to include a distributor rebate posted in Q4.",
             locations=loc.body(columns="revenue", rows=[kappa_row_index]),
+        )
+        # Two source notes, analytical caption FIRST: "YoY Change" is a
+        # derived, potentially ambiguous measure (revenue growth vs. unit
+        # growth) — state the chosen definition here, not in the subtitle.
+        .tab_source_note(
+            source_note="YoY Change is the year-over-year percent change in revenue, not unit volume."
         )
         .tab_source_note(source_note="Source: internal sales ledger, FY close. Figures in USD.")
     )

@@ -7,7 +7,10 @@ Two families of tests live here:
      mirror ``references/palettes.md`` exactly, in both directions:
        * script  subset of  doc  — every hex in ``PALETTE`` appears in the doc.
        * doc-core subset of script — the 19 CORE hexes (6 solids + 6 washed
-         tints + 7 neutrals) parsed from the doc all appear in ``PALETTE``.
+         tints + 6 neutrals + 1 fixed branding header) parsed from the doc
+         all appear in ``PALETTE``. (The branding tier's stub-tint and
+         stripe hexes reuse washed.navy and neutral.row_stripe respectively
+         -- only the header hex, #08306B, is a genuinely new value.)
 
   2. **Execution helpers (R8)** — the thin ``heatmap`` / ``band`` / ``stripe`` /
      ``stub_tint`` helpers:
@@ -122,7 +125,8 @@ def test_core_doc_hexes_are_in_script():
     doc = _doc_hexes()
     script = set(_flatten_hexes(_load_palette()))
     assert len(doc) == 19, (
-        "expected exactly 19 core hexes (6 solids + 6 washed + 7 neutrals) in "
+        "expected exactly 19 core hexes (6 solids + 6 washed + 6 neutrals + 1 "
+        "fixed branding header) in "
         "references/palettes.md, found %d: %s" % (len(doc), ", ".join(sorted(doc)))
     )
     missing = doc - script
@@ -293,7 +297,16 @@ def test_heatmap_literal_palette_name_passes_through():
 
 
 def test_helpers_render_expected_backgrounds():
-    """band/stripe/stub_tint must emit their pinned hexes into the HTML."""
+    """band/stripe/stub_tint must emit their FIXED branding hexes into the
+    HTML, regardless of the (now no-op-for-branding) ``shade``/``hue``
+    arguments passed in.
+
+    2026-08-12 ground-truth redesign: header band, stub tint, and row
+    stripe are fixed branding surfaces that never follow a per-measure
+    heatmap hue -- ``shade="light"``/``hue="grey"`` below are deliberately
+    off-default values, kept only to prove they no longer change the
+    output (see ``band()``/``stub_tint()``'s own docstrings).
+    """
     if not _HAS_GT:
         return
     module = _import_module()
@@ -312,19 +325,20 @@ def test_helpers_render_expected_backgrounds():
 
     html = gt.as_raw_html().lower()
 
-    band_hex = module.PALETTE["washed"]["navy"].lower()       # #EAF0F6
+    band_hex = module.PALETTE["branding"]["header"].lower()       # #08306B
     stripe_hex = module.PALETTE["neutral"]["row_stripe"].lower()  # #F6F6F6
-    stub_hex = module.PALETTE["neutral"]["label_band"].lower()    # #F0F0F0
+    stub_hex = module.PALETTE["branding"]["stub_tint"].lower()    # #EAF0F6
     rule_hex = module.PALETTE["neutral"]["column_label_rule"].lower()  # #CCCCCC
 
-    assert band_hex in html, "washed-navy band hex missing from HTML"
+    assert band_hex in html, "fixed branding header hex missing from HTML"
     assert stripe_hex in html, "row-stripe hex missing from HTML"
-    assert stub_hex in html, "stub-tint hex missing from HTML"
+    assert stub_hex in html, "fixed branding stub-tint hex missing from HTML"
     assert rule_hex in html, "column-label bottom-rule hex missing from HTML"
 
 
 def test_dark_band_uses_solid_and_white_text():
-    """A dark band paints the DA solid and turns column-label text white."""
+    """band() paints the FIXED branding header (never a per-hue solid) and
+    turns column-label text white."""
     if not _HAS_GT:
         return
     module = _import_module()
@@ -333,7 +347,9 @@ def test_dark_band_uses_solid_and_white_text():
     gt = module.band(_GT(df), shade="dark", hue="navy")
     html = gt.as_raw_html().lower()
 
-    assert module.PALETTE["solid"]["navy"].lower() in html, "dark-band solid missing"
+    assert module.PALETTE["branding"]["header"].lower() in html, (
+        "fixed branding header hex missing"
+    )
     assert "white" in html, "white column-label text missing from HTML"
 
 

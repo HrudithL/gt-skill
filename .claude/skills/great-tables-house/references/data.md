@@ -40,16 +40,18 @@ opposite color treatment:
 
 - **An absolute magnitude** (`close - open` in dollars, `2021 - 1996` in
   raw units) is a **sequential** measure at best (Blues/neutral, or plain
-  bold text if it's not the hero) — dollars and raw-unit deltas do not
-  have a natural "this is bad, this is good" symmetric center, and a
-  diverging red/green scale on them reads as a claim you haven't earned.
+  text — no fill, no bold — if it's not the hero) — dollars and raw-unit
+  deltas do not have a natural "this is bad, this is good" symmetric
+  center, and a diverging red/green scale on them reads as a claim you
+  haven't earned.
 - **A relative/percent change** (`(close - open) / open`, `pct_change()`,
   year-over-year `%`) is the genuinely **signed** measure — this is what
   `heatmap(kind="diverging")` in `RULES.md`'s percent section is for.
 
 Compute the one the request actually means (usually the % form when the
 prompt says "growth"/"gain"/"performance" without naming a currency), and
-say which you picked in the subtitle or a source note. Never color a raw
+say which you picked in the analytical caption note (the first
+`tab_source_note()` call, not the subtitle). Never color a raw
 dollar/unit delta with a diverging palette just because it can be negative
 — check whether it's a *rate* first, not just whether it has a sign.
 
@@ -63,8 +65,8 @@ Resolve in this order, and state the pick:
    always wins outright.
 2. Otherwise, the measure in the request's **topic clause** — the noun
    phrase right after "a table of/showing ..." — is the hero; a measure
-   named later as a secondary comparison is displayed but stays
-   bold-uncolored, not a second heatmap.
+   named later as a secondary comparison is displayed but stays plain
+   text — no fill and no bold — not a second heatmap.
 3. Still genuinely tied? Pick the one with the wider real spread across
    the selected rows (more of the story is visible in its color) and say
    so — never split color across both, and never default to whichever
