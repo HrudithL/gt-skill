@@ -1,14 +1,16 @@
 ---
 name: great-tables
-description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Drives every table through one deterministic 7-step flowchart — understand data, organize columns, Big Color (which measures earn fill), heading band, Small-Color checklist, titles/annotations, render+verify — so the same input characteristics always produce the same publication-ready design. Before writing any Python, read `references/REFERENCE.md`: it routes every color, band, polish, and API decision to the exact reference file that pins its value. The mandatory renderer is `gt.gtsave("table.png")`. Invoke before reading the data or writing any Python — the flowchart shapes the whole script.
+description: Use when the user's request involves building any table with `great_tables`, `gt.GT`, `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Drives every table through one deterministic 7-step flowchart — understand data, organize columns, Big Color (which measures earn fill), heading band, Small-Color checklist, titles/annotations, render+verify — a deterministic flowchart for nearly every design decision. Before writing any Python, read `references/REFERENCE.md`: it routes every color, band, polish, and API decision to the exact reference file that pins its value. The mandatory renderer is `gt.gtsave("table.png")`. Invoke before reading the data or writing any Python — the flowchart shapes the whole script.
 ---
 
 # Great Tables Skill
 
 Build publication-ready display tables in Python with `great_tables`. This skill is
-a **flowchart, not a menu**: for every part of a table there is one deterministic
-rule (or one explicit, data-driven branch), so the **same input always produces the
-same output**. **Every table reads as one product.**
+a **flowchart, not a menu**: for most parts of a table there is one deterministic
+rule (or one explicit, data-driven branch); the exception is which measures earn a
+color fill when several are named, which is a judgment call about redundancy, not a
+fixed formula — so most of a table's design should reproduce identically across
+runs, with that one exception. **Every table reads as one product.**
 
 ## Read this before you write ANY Python
 

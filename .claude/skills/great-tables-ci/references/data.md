@@ -91,14 +91,14 @@ grain, not just present.
     A column can pass the uniqueness test below and still be worth combining for
     this reason alone.
 
-  The gtcars dataset is the readability case, not the uniqueness case: `model` alone
-  is already unique across all 47 rows (verified directly against the data — zero
-  duplicate `model` values), so uniqueness alone would not require a composite. The
-  ground truth combines `mfr + " " + model` into one stub label anyway, because
-  "911 Turbo S" read alone doesn't say which manufacturer makes it, while "Porsche
-  911 Turbo S" is self-describing without a separate manufacturer column:
+  A hypothetical product-catalog dataset illustrates the readability case: suppose
+  `sku_name` (e.g. "Trail Runner 3") is already unique across every row on its own
+  (verified directly against the data), so uniqueness alone would not require a
+  composite. A stub can still combine `brand + " " + sku_name` into one label
+  anyway, because "Trail Runner 3" read alone doesn't say which brand makes it,
+  while "Summit Trail Runner 3" is self-describing without a separate brand column:
   ```python
-  df["car"] = df["mfr"] + " " + df["model"]
+  df["display_name"] = df["brand"] + " " + df["sku_name"]
   ```
 - **Constructed identifier.** When the grain is itself a combination of columns with
   no natural label (e.g. one row per region-quarter), build a display label from them
@@ -113,8 +113,8 @@ extend it (add another column to the composite, or construct a finer label) unti
 every row's label is unique. This test only checks uniqueness, not readability — a
 column can pass it (be unique on its own) and still benefit from a composite for the
 readability reason above. Check the test against the actual data, the same way the
-gtcars case above is verified against every row before it's trusted, rather than
-assuming a column "looks like" an identifier.
+product-catalog case above is verified against every row before it's trusted, rather
+than assuming a column "looks like" an identifier.
 
 ## Do NOT fabricate
 
