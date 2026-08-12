@@ -25,7 +25,8 @@ data/measure-definitions file, no procedure.**
 3. **Before organizing columns**: if the request's measure or selection
    criterion has more than one reasonable reading (e.g. "top N
    fastest-growing" — by what metric?), pick ONE definition and state it
-   in the subtitle/source note — see `references/RULES.md`'s "Ambiguous
+   in the analytical caption note (the first of the two `tab_source_note()`
+   calls, not the subtitle) — see `references/RULES.md`'s "Ambiguous
    measures" section. This decides which columns exist at all; do it
    before step 4.
 4. Find the block in `house_table.py` that matches your data's shape — a
@@ -45,12 +46,19 @@ your script — they are not "pattern-match if it seems relevant," they are
 unconditional, regardless of how simple the request looks:
 
 1. **Title AND subtitle** — both, always.
-2. **A source note** — always; a generic one ("Source: provided dataset.")
-   beats none.
+2. **Two source notes** — an analytical caption (the finding, or the
+   definition you picked for an ambiguous measure) first, then a
+   provenance note; a generic provenance note ("Source: provided
+   dataset.") beats none.
 3. **The boxed frame** — `frame(gt)`.
-4. **At most 2 colored measures, total** — never one heatmap per numeric
-   column. Three or more `heatmap(...)`/`data_color(...)` calls in one
-   script is a bug, not a choice.
+4. **Big Color stays restrained** — `heatmap()`/`data_color()` targets only
+   the measure(s) the request is actually about, never one heatmap per
+   numeric column. There is no numeric cap on colored measures — color
+   what the request is actually about, using the correct palette for
+   each. Any measure that isn't part of what the request is about
+   renders fully plain: no fill, no bold, no text-color treatment of any
+   kind — regardless of how many other measures already carry a color
+   fill.
 5. **Body-row hairlines** — `hairlines(gt)`. A separate option family from
    item 3's frame, not covered by it — `great_tables` already renders a
    raw gray hairline by default, so skipping this call doesn't leave the
