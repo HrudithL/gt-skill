@@ -195,16 +195,23 @@ gt = (
         na_color="#808080",
         truncate=False,
     )
-    # Hero, uncolored measure (rank + the whole-period growth that drove
-    # the ranking) gets bold text rather than a third fill.
-    .tab_style(style=style.text(weight="bold"), locations=loc.body(columns=["rank", "total_growth_pct"]))
-    # Column-label band — house DEFAULT shade="light": the MORE-visible
-    # accent_tint (navy — matches the density heatmap's Blues family, per
-    # the DA hue-selection rule: match an existing heatmap hue first), not
-    # a dark saturated band (that's reserved for a table with no heatmap at
-    # all, and this one has two).
+    # Rank / Total Growth % stay plain text -- no bold -- by author
+    # direction, matching the same plain treatment used for gtcars_hp_price's
+    # horsepower and airquality's wind speed.
+    # Columns sized to their own content (+ a small buffer), not left to
+    # auto-stretch -- author-directed.
+    .cols_width(cases={
+        "name": "190px", "rank": "50px", "total_growth_pct": "100px",
+        **{c: "75px" for c in density_cols},
+        **{c: "95px" for c in change_cols},
+    })
+    # Column-label band -- DEEP navy (#08306B), bold, white text: the same
+    # header/stub branding used across every table in this project, by
+    # author direction, decoupled from this table's own Blues/RdYlGn
+    # heatmap hues.
     .tab_options(
-        column_labels_background_color="#C9E0F0",
+        column_labels_background_color="#08306B",
+        column_labels_font_weight="bold",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
         column_labels_border_bottom_style="solid",
@@ -215,12 +222,23 @@ gt = (
         table_border_bottom_style="solid", table_border_bottom_color="#CCCCCC", table_border_bottom_width="1px",
         table_border_left_style="solid", table_border_left_color="#CCCCCC", table_border_left_width="1px",
         table_border_right_style="solid", table_border_right_color="#CCCCCC", table_border_right_width="1px",
+        # Tighter padding throughout -- less whitespace per cell, by author
+        # direction.
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="6px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="6px",
+        source_notes_padding="6px",
     )
-    # Stub tint — the quieter washed navy, one tier down from the band, so
-    # the stub stays subtler than the louder column-label band above it
-    # rather than competing with it (the band/stub hierarchy from the
-    # great-tables-house skill).
+    .tab_style(style=style.text(color="white"), locations=loc.column_labels())
+    # Stub tint -- washed navy, matching every other table's stub treatment.
     .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub())
+    # Row striping: added by author direction for cross-table consistency,
+    # even though 11 of 13 body columns are already heatmapped -- the stripe
+    # still shows through on Rank and Total Growth %, the two plain columns.
+    .opt_row_striping()
+    .tab_options(row_striping_background_color="#F6F6F6")
     # Column-group dividers at each spanner boundary only.
     .tab_style(style=style.borders(sides="right", color="#D0D0D0", weight="1px"), locations=loc.body(columns="total_growth_pct"))
     .tab_style(style=style.borders(sides="right", color="#D0D0D0", weight="1px"), locations=loc.column_labels(columns="total_growth_pct"))
@@ -230,10 +248,7 @@ gt = (
     .tab_source_note(
         source_note=html(
             "“Fastest-growing” = highest percent change in total population from 1996 to 2021, "
-            "not the average of the five inter-Census windows. Municipalities missing a "
-            "population figure for any Census year (e.g. Cockburn Island, near-zero population) "
-            "are excluded so every row has a defined change for all five windows. "
-            "Growth color scale: red = decline, green = growth, midpoint at 0%."
+            "not the average of the five inter-Census windows."
         )
     )
     .tab_source_note(
@@ -244,4 +259,4 @@ gt = (
     )
 )
 
-gt.gtsave(str(_HERE / "towny_growth_trends.png"), zoom=2.0, expand=15)
+gt.gtsave(str(_HERE / "towny_growth_trends.png"), zoom=2.0, expand=8)

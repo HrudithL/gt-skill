@@ -21,13 +21,27 @@ prompt's own wording):
 - Colored measure: msrp only. Financial rule -- money gets the sequential
   Blues heatmap treatment only when it's the hero measure the request is
   about, and here price is one of exactly two things asked for, making it
-  a natural single hero rather than a secondary detail. hp gets bold text
-  instead of a second fill (the same "hero, uncolored" pattern the ceiling
-  rule points to) -- coloring both would still be within the <=2 ceiling,
-  but two heatmaps competing for attention buys nothing over one clear
-  gradient + one bold column when there's no third dimension (e.g. a
-  country/body-style split) that would make two independent color stories
-  useful.
+  a natural single hero rather than a secondary detail. hp stays PLAIN text
+  (no bold, no fill) by author direction -- coloring both would still be
+  within the <=2 ceiling, but two heatmaps competing for attention buys
+  nothing over one clear gradient + one plain column when there's no third
+  dimension (e.g. a country/body-style split) that would make two
+  independent color stories useful, and a bold-but-uncolored hp would just
+  be a second thing competing for the eye's attention against the msrp
+  heatmap.
+- Row striping: with 47 rows well over the >=10-row floor and only ONE of
+  the two body columns actually colored (msrp; hp is plain), the body is
+  nowhere near "essentially fully covered" -- grey zebra striping is added
+  across both columns, by author direction (the msrp heatmap's own cell
+  fill still sits on top of/overrides the stripe where it applies).
+- Column-label band: DEEP navy (#08306B, the same color sampled from the
+  dark end of the msrp Blues heatmap, matching gtcars_top10_by_country.py's
+  header treatment for consistency across both gtcars tables), bold, white
+  text -- not the house-default light tint.
+- Compact layout: every column has an explicit `cols_width` sized to its
+  own content plus a small buffer, and cell padding is tightened throughout
+  -- by author direction, to avoid auto-layout stretching the narrow hp
+  column into visible dead space.
 - Sort: descending by msrp. No sort is requested, but since price is the
   chosen color hero, ranking by it makes the Blues gradient read top-to-
   bottom as a visual ramp (darkest at the top) rather than a scattered
@@ -129,15 +143,18 @@ gt = (
         na_color="#808080",
         truncate=False,
     )
-    # Hero, uncolored measure -- horsepower gets bold text rather than a
-    # second fill, per the same "hero, uncolored" pattern towny_growth_
-    # trends.py uses for its own rank/total_growth_pct columns.
-    .tab_style(style=style.text(weight="bold"), locations=loc.body(columns=["hp"]))
-    # Column-label band -- accent_tint navy (matches the msrp heatmap's
-    # Blues family, per the DA hue-selection rule: match an existing
-    # heatmap's hue first). Frame + hairlines are the global constants.
+    # hp stays plain text -- no bold, no fill -- by author direction (see
+    # module docstring).
+    # Columns sized to their own content (+ a small buffer), not left to
+    # auto-stretch -- author-directed, to kill excess whitespace in the
+    # narrow hp column.
+    .cols_width(cases={"car": "220px", "hp": "135px", "msrp": "130px"})
+    # Column-label band -- DEEP navy (#08306B, sampled from the dark end of
+    # the msrp Blues heatmap, matching gtcars_top10_by_country.py), bold,
+    # white text. Frame + hairlines are the global constants.
     .tab_options(
-        column_labels_background_color="#C9E0F0",
+        column_labels_background_color="#08306B",
+        column_labels_font_weight="bold",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
         column_labels_border_bottom_style="solid",
@@ -148,15 +165,26 @@ gt = (
         table_border_bottom_style="solid", table_border_bottom_color="#CCCCCC", table_border_bottom_width="1px",
         table_border_left_style="solid", table_border_left_color="#CCCCCC", table_border_left_width="1px",
         table_border_right_style="solid", table_border_right_color="#CCCCCC", table_border_right_width="1px",
+        # Tighter padding throughout -- less whitespace per cell, by author
+        # direction.
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
     )
+    .tab_style(style=style.text(color="white"), locations=loc.column_labels())
     # Stub tint -- the quieter washed navy, one tier down from the louder
     # band above it (same band/stub hierarchy towny_growth_trends.py uses).
     .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub())
     .cols_align(align="right", columns=["hp", "msrp"])
-    # No striping: with only two body columns (hp bold, msrp colored) the
-    # body is already fully accounted for by color/bold -- striping and
-    # fills would just fight each other visually, per the house striping
-    # gate ("skip when the body isn't already essentially fully covered").
+    # Row striping: 47 rows, only msrp colored (hp is plain) -- nowhere near
+    # "essentially fully covered," so grey zebra striping is added across
+    # both columns, by author direction. The msrp heatmap's own cell fill
+    # still sits on top of the stripe where it applies.
+    .opt_row_striping()
+    .tab_options(row_striping_background_color="#F6F6F6")
     .tab_source_note(
         source_note=(
             "Price and horsepower don't move together: the Bentley Continental GT costs more "
@@ -166,4 +194,4 @@ gt = (
     .tab_source_note(source_note="Source: gtcars dataset (Posit / great_tables sample data).")
 )
 
-gt.gtsave(str(_HERE / "gtcars_hp_price.png"), zoom=2.0, expand=15)
+gt.gtsave(str(_HERE / "gtcars_hp_price.png"), zoom=2.0, expand=8)

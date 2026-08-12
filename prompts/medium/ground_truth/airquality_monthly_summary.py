@@ -6,15 +6,25 @@ Story: "Comparing ... for each month" is an AGGREGATION ask, not a daily
        listing -- one row per month (5 rows: May-September), each showing
        that month's average temperature, wind speed, and ozone level.
 
-Two colored measures (the ceiling), one bold-uncolored: ozone is the
+Two colored measures (the ceiling), one plain-uncolored: ozone is the
 dataset's namesake and the one measure with a real "more is worse"
 air-quality reading, so it gets the "warning" Reds sequential heatmap;
 temperature is a plain neutral magnitude, so it gets the "neutral" Blues
 sequential heatmap; wind speed -- no defensible "good/bad" direction and no
-special narrative role here -- stays bold, uncolored text (the third
-measure the ceiling forces out of a fill). Ozone's Reds hue is also picked
-as the ONE hue shared by the column-label band and the stub tint, since it's
-the primary/hero measure.
+special narrative role here -- stays plain, uncolored text (the third
+measure the ceiling forces out of a fill; no bold, matching the same plain
+treatment gtcars_hp_price.py gives horsepower).
+
+Column order, by author direction: ozone LEADS (Ozone, Temp, Wind), not the
+prompt's own listed word order ("temperature, wind speed, and ozone") --
+ozone is the primary/hero measure and the dataset's namesake, so it gets
+top billing regardless of how the prompt happened to list the three.
+
+Header/stub branding, by author direction: DEEP navy (#08306B), matching
+every other table in this project -- decoupled from ozone's own Reds
+heatmap. The per-measure heatmap palette (Reds for ozone, Blues for temp)
+is a separate decision from the table's overall branding color, which
+stays the same blue family across every table for consistency.
 
 Ozone is missing on 37 of 153 days, most heavily in June (21 of 30 days
 missing -- only 9 valid readings). `.mean()` skips NaN by default, so every
@@ -103,7 +113,10 @@ monthly = (
       .reset_index()
 )
 monthly["month"] = monthly["Month"].map(MONTH_NAMES)
-monthly = monthly[["month", "avg_temp", "avg_wind", "avg_ozone"]].reset_index(drop=True)
+# Column order: ozone LEADS (the primary/hero measure, and the dataset's
+# namesake), then temp, then wind -- author-directed, not the prompt's own
+# listed word order ("temperature, wind speed, and ozone").
+monthly = monthly[["month", "avg_ozone", "avg_temp", "avg_wind"]].reset_index(drop=True)
 
 # ---- Color domains ---------------------------------------------------------
 # Each measure's domain is the full range of its own 5 monthly averages
@@ -130,7 +143,8 @@ gt = (
     .fmt_number(columns=["avg_temp", "avg_wind", "avg_ozone"], decimals=1)
     # Big Color 1/2: ozone, sequential Reds -- the dataset's namesake
     # measure and the one with a genuine "higher = worse air quality"
-    # reading, so warning-hued rather than neutral.
+    # reading, so warning-hued rather than neutral. This is the per-measure
+    # heatmap palette, independent of the header/stub branding color below.
     .data_color(
         columns=["avg_ozone"],
         palette="Reds",
@@ -147,15 +161,20 @@ gt = (
         na_color="#808080",
         truncate=False,
     )
-    # Hero, uncolored measure: wind speed has no defensible good/bad
-    # direction and the 2-color ceiling already went to ozone + temp, so it
-    # gets bold text rather than a third fill.
-    .tab_style(style=style.text(weight="bold"), locations=loc.body(columns=["avg_wind"]))
-    # Column-label band -- house default shade="light" (Big Color present):
-    # accent_tint of Reds' family (oxblood), matching the ozone heatmap
-    # since ozone is the primary/hero measure here.
+    # Wind stays plain text -- no bold, no fill -- by author direction,
+    # matching the same choice made for gtcars_hp_price's horsepower column.
+    # Columns sized to their own content (+ a small buffer), not left to
+    # auto-stretch -- author-directed.
+    .cols_width(cases={
+        "month": "110px", "avg_ozone": "130px", "avg_temp": "150px", "avg_wind": "140px",
+    })
+    # Column-label band -- DEEP navy (#08306B), bold, white text: the SAME
+    # blue-family header/stub branding as every other table in this project,
+    # by author direction, decoupled from which hue each measure's OWN
+    # heatmap happens to use (ozone keeps Reds, temp keeps Blues above).
     .tab_options(
-        column_labels_background_color="#F4D6D6",
+        column_labels_background_color="#08306B",
+        column_labels_font_weight="bold",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
         column_labels_border_bottom_style="solid",
@@ -166,21 +185,30 @@ gt = (
         table_border_bottom_style="solid", table_border_bottom_color="#CCCCCC", table_border_bottom_width="1px",
         table_border_left_style="solid", table_border_left_color="#CCCCCC", table_border_left_width="1px",
         table_border_right_style="solid", table_border_right_color="#CCCCCC", table_border_right_width="1px",
+        # Tighter padding throughout -- less whitespace per cell, by author
+        # direction.
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
     )
-    # Stub tint -- the quieter washed Reds tint, one tier down from the
-    # band, harmonized to the same hue family (oxblood).
-    .tab_style(style=style.fill(color="#F5EBEB"), locations=loc.stub())
+    .tab_style(style=style.text(color="white"), locations=loc.column_labels())
+    # Stub tint -- washed navy, matching every other table's stub treatment.
+    .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub())
     .cols_align(align="right", columns=["avg_temp", "avg_wind", "avg_ozone"])
-    # No striping: only 5 body rows, well under the >=10-row floor.
+    # Row striping: added by author direction even at 5 rows, for
+    # consistency with every other table (below the usual >=10-row floor,
+    # but explicitly requested here anyway).
+    .opt_row_striping()
+    .tab_options(row_striping_background_color="#F6F6F6")
     # No spanner: month IS the row grain and there's no second column-group
     # dimension beyond the three measures to disambiguate.
     .tab_source_note(
         source_note=html(
-            "Ozone readings are missing on 37 of 153 days, most heavily in June "
-            "(21 of 30 days) -- only 9 of June's days have a recorded value, so "
-            "its average ozone level rests on a much thinner sample than the "
-            "other four months. Monthly averages are computed only over days "
-            "with a recorded value; missing readings are skipped, not treated as zero."
+            "Ozone readings are missing on 37 of 153 days, most heavily in June, so monthly "
+            "averages are computed only from days with a recorded value."
         )
     )
     .tab_source_note(
@@ -192,4 +220,4 @@ gt = (
     )
 )
 
-gt.gtsave(str(_HERE / "airquality_monthly_summary.png"), zoom=2.0, expand=15)
+gt.gtsave(str(_HERE / "airquality_monthly_summary.png"), zoom=2.0, expand=8)
