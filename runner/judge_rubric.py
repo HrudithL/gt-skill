@@ -111,25 +111,42 @@ DIMENSIONS: dict[str, dict] = {
         "assesses": (
             "Is the candidate's left-to-right column order a sensible "
             "reading order for the analytical story? Compare against the "
-            "ground truth's own order as ONE example of a good order -- do "
-            "not require an exact match; multiple orders can be equally "
-            "sensible."
+            "ground truth's own order as ONE example of a good order -- "
+            "do NOT require an exact position match, and do NOT dock "
+            "points for every small permutation. Be lenient and holistic: "
+            "award full marks whenever related columns are grouped near "
+            "each other in a roughly sensible sequence, even if their "
+            "exact positions differ from the ground truth's. Only mark "
+            "down an order that would genuinely confuse a reader -- e.g. "
+            "a derived value stranded far from the raw values it comes "
+            "from, or the story's key measures scattered with no "
+            "grouping logic at all. A candidate that reordered two "
+            "adjacent, related columns, or moved one column by a couple "
+            "of positions without breaking any grouping, should still "
+            "score a 5 -- that is not a real ordering problem."
         ),
         "anchors": {
             1: (
                 "Order is arbitrary or confusing -- a reader must hunt "
                 "across the table to follow the story (e.g. a derived "
-                "value stranded far from the raw values it comes from)."
+                "value stranded far from the raw values it comes from, or "
+                "no discernible grouping logic at all)."
             ),
             3: (
-                "Order is workable but not optimized -- related columns "
-                "are split apart, or the most identifying/important "
-                "column isn't prioritized toward the stub."
+                "Order is workable but not optimized -- a column that "
+                "clearly belongs with a related group is placed well "
+                "away from it, or the most identifying/important column "
+                "isn't prioritized toward the stub. Minor, harmless "
+                "reshuffling within an otherwise sensible order does NOT "
+                "belong here -- reserve this score for orderings that "
+                "actually cost a reader something."
             ),
             5: (
                 "Left-to-right order reads naturally for the story -- "
-                "related columns adjacent, most important/identifying "
-                "info first -- as sensible as the ground truth's order."
+                "related columns grouped near each other, most "
+                "important/identifying info reasonably prioritized -- "
+                "as sensible as the ground truth's order, even if the "
+                "exact column-by-column positions differ from it."
             ),
         },
     },
