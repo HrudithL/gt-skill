@@ -3,37 +3,32 @@
 Step 5 is **overall formatting**, and it is **not a menu**. Every table runs this
 checklist top to bottom. Each item is **gated** by a rule (the condition that fires
 it) and, when it fires, uses the **one** `great_tables` mechanism given here. Every
-light surface is drawn from the **washed-DA + neutral-grey** palette below — never a
-saturated color.
+light surface is drawn from the **branding tier + neutral-grey** palette below — never
+an improvised saturated color.
 
 This file is self-contained: all hexes are inlined so you never need a second hop.
-(They mirror `references/palettes.md` §2 for neutrals and §1 for washed-DA tints.)
+(They mirror `references/palettes.md` §0 for the branding tier and §2 for neutrals.)
 
 ## The palette this checklist draws from
 
-Neutral greys (the default for every quiet surface):
+**Branding tier — fixed, every table, never varies by hue** (`palettes.md` §0):
+
+| Role | Hex |
+|---|---|
+| Header band | `#08306B` |
+| Stub tint | `#EAF0F6` |
+| Row stripe | `#F6F6F6` |
+
+Neutral greys (for the remaining quiet surfaces — dividers, hairlines, empty cells,
+group rules):
 
 | Role | Hex | Weight |
 |---|---|---|
-| Light label band | `#F0F0F0` | — |
-| Row stripe | `#F6F6F6` | — |
 | Cell hairline (between rows) | `#E8E8E8` | 1px |
 | Column-label bottom rule | `#CCCCCC` | 2px |
 | Group / summary structural rule | `#BDBDBD` | — |
 | Column-group vertical divider | `#D0D0D0` | 1px, light but noticeable |
 | NA / empty cell | `#808080` | `na_color=` fill; `sub_missing("—")` text |
-
-Washed-DA tints (used **instead of grey** when the table has Big Color, matched to
-the dominant Big-Color hue — see the grey-budget rule):
-
-| Big-Color hue | Washed tint |
-|---|---|
-| Navy (default) | `#EAF0F6` |
-| Forest | `#EAF1EC` |
-| Oxblood | `#F5EBEB` |
-| Espresso | `#F1EADD` |
-| Ochre | `#F5EFDC` |
-| Tan | `#EFE7D6` (cream) |
 
 ---
 
@@ -77,23 +72,23 @@ across runs.
 
 **IF the prompt names 2+ numeric measures with no explicit ranking** ("Horsepower and
 Price," "density changes... with percentage changes") **⇒ do NOT default to coloring
-both just because two fits under the ≤2 ceiling.** Fitting under the ceiling is not
-the same as both measures deserving it — resolve which ONE gets the fill, in this
-order:
+every one of them just because each one qualifies.** Qualifying is not the same as
+each one deserving the fill — resolve which ONE gets the fill, in this order:
 
 1. An explicitly named ranking/selection metric ("top 10 by revenue") always wins the
    colored slot.
 2. Otherwise, the measure in the request's **topic clause** — the noun phrase right
    after "a table of/showing…" — gets the fill; a measure named later as a secondary
-   comparison stays **bold-uncolored** (`style.text(weight="bold")`), not a second fill.
+   comparison stays **fully plain** (no fill, no bold) — not a second fill, and not a
+   consolation bold either.
 3. Genuinely tied? Color the one with the wider real spread across the selected rows,
-   and leave the other bold.
+   and leave the other plain.
 
 A secondary measure that's merely mentioned, not the request's main comparison, is
-exactly the bold-uncolored case Step 3's own rule describes ("hero text that is not a
-colored measure gets bold text") — that rule only does its job if you actually
-identify which named measure is secondary instead of coloring every measure that fits
-under the ceiling.
+exactly the plain-text case this file's own rule describes ("a named measure that
+doesn't earn the fill renders fully plain") — that rule only does its job if you
+actually identify which named measure is secondary instead of coloring every measure
+that seems eligible.
 
 ---
 
@@ -163,9 +158,11 @@ gt = (
 
 ## (c) Row striping
 
-**Gate:** **≥10 body rows** AND the body is **not essentially fully filled** by Big
-Color. Skip when <10 rows, or when `data_color` already covers essentially the whole
-body (stripes and fills fight). Stripes still show on an unfilled stub.
+**Gate:** apply by default, always. Skip **only** when the table's visible body —
+every non-stub, non-group column — is **already 100% covered by color** (e.g. one
+fully-heatmapped measure column next to a stub, with nothing else): a striped row and
+a fully-filled cell fight for the same visual space, so stripes add nothing there.
+Row count is **not** a factor — a 5-row table stripes exactly like a 500-row table.
 
 ```python
 gt = (
@@ -182,9 +179,10 @@ gt = (
 
 **Gate:** a stub (`rowname_col`) exists.
 
-A light tint on the stub so the row labels separate from the value columns. **Grey by
-default** (`#F0F0F0`); harmonize to the washed-DA tint of the Big-Color hue when there
-is Big Color. Subject to the grey-budget rule below.
+A light pale-blue tint on the stub so the row labels separate from the value columns.
+**`#EAF0F6`, unconditionally** — the branding tier's fixed stub value (`palettes.md`
+§0), the same on every table regardless of the table's own Big-Color hue. This is a
+fixed default, not a harmonization step.
 
 ```python
 from great_tables import GT, style, loc
@@ -192,7 +190,7 @@ from great_tables import GT, style, loc
 gt = (
     GT(df, rowname_col="entity")
     .tab_style(
-        style=style.fill(color="#F0F0F0"),            # grey default; e.g. "#EAF0F6" for a Blues table
+        style=style.fill(color="#EAF0F6"),            # fixed branding stub tint — unconditional
         locations=loc.stub(),
     )
 )
@@ -215,6 +213,13 @@ overridable by an explicit user instruction.
 Always: `use_seps=True` for thousands separators, and `sub_missing(columns=…,
 missing_text="—")` for empty cells. Put units in the column **label** only when the
 formatter doesn't already convey them.
+
+**Force sign on zero-crossing percent columns — independent of color.** Any column
+with percent semantics whose actual data spans both positive and negative values gets
+`fmt_percent(columns=…, decimals=1, force_sign=True)`, regardless of whether that
+column is colored. A signed percent-change column rendered as plain or bold text,
+never touched by `data_color`, still needs `force_sign=True` — a reader shouldn't have
+to infer the sign from the number alone.
 
 ---
 
@@ -245,46 +250,58 @@ gt = (
 )
 ```
 
-**A bold, uncolored hero still needs the bold.** When Step 3 leaves the hero measure
-uncolored (a categorical/text table, or a 2nd measure that lost the ≤2-colored-measure
-ceiling), apply `style.text(weight="bold")` to it — bold is the *prescribed
-alternative* to a fill, not an optional extra. A hero column with neither color nor
-bold reads as just another plain column.
+**A named-but-uncolored measure stays plain — no consolation bold.** When Step 3
+leaves a named measure without the fill (a categorical/text table's hero, or a
+secondary measure that didn't win the tie-break above), render it as an ordinary,
+unstyled value column — no `style.text(weight="bold")`, no fill. Plain text is the
+correct, final treatment, not a placeholder for a missing color.
 
 ---
 
-## The grey-budget rule
+## The grey-budget rule — retired
 
-Count the light-grey elements in play (label band, stripes, stub, empty/NA cells,
-hairlines). When grey becomes **monotonous** — several large grey areas stacking —
-re-color the **highest-priority** element to the **washed-DA tint of the Big-Color
-hue** (the tint table above). Shift only as many elements as needed to break the
-monotony (usually just one).
-
-**Priority order:** `stub → labels → row design (striping / empty cells)`
-
-> Example: grey band + grey stripes + grey stub with `Blues` fills → recolor the
-> **stub** (highest priority) to pale-blue `#EAF0F6`.
+This rule used to promote the stub tint or the heading band to a washed tint of the
+table's own Big-Color hue when several grey surfaces stacked up and looked
+monotonous. It no longer applies: the heading band, stub tint, and row stripe are now
+the fixed branding constants above (and in `palettes.md` §0) — they never vary by
+table, so there is nothing left to harmonize or re-balance.
 
 ---
+
+## Sub-note — color restraint (when to stop heatmapping)
+
+**Gate:** the table already carries **2 or more** full heatmap fills (from
+`data_color`/`heatmap` calls) **and** another measure is secondary-but-notable — worth
+calling out, but not the request's main comparison.
+
+Give that measure emphasis via **bold text and/or a text color**, not another
+competing full heatmap fill. This is a taste-level call, not a hard count: a table
+can legitimately carry more than 2 full fills when every one of them is genuinely
+load-bearing to the request, and it can also carry just 1 when that's all the data
+supports — the point is that once color starts competing with itself for the
+reader's attention, step down to the lighter technique instead of adding another
+fill. Don't build a "top N" / "bottom N" extreme-cell selection mechanic for this —
+the step-down happens at the level of a whole measure, not a subset of its cells.
+
+Cross-linked from `big_color/column_gradient_fill.md`'s priority ladder, which picks
+which measures earn the full fill first; this rule is what the ones that don't make
+the cut do instead of going bare.
 
 ## Sub-note — row-group emphasis
 
 **Gate:** the table uses `groupname_col=`. An unstyled group label sits in the flow of
 body rows and the reader loses the section boundary.
 
-Give each `groupname_col` header row a **light background fill AND bold weight** — the
-pair is non-negotiable. Fill alone reads as noise; bold alone reads as a stray body
-row; together they read as a section heading. Use the **same** light shade for every
-group (grey `#F0F0F0` by default, or the washed-DA tint when the table has Big Color —
-keep it consistent with the stub/band per the grey-budget rule). The structural rule
-above/below the label is `#BDBDBD`.
+Give each `groupname_col` header row **bold weight** plus a `#BDBDBD` top/bottom
+structural rule — **no background fill**. Bold plus the rule together read as a
+section heading; a fill would compete with the header band's branding role
+(`column_label_emphasis.md`) and add a color surface where two structural rules
+already do the job.
 
 ```python
 gt = (
     GT(df, groupname_col="Region")
     .tab_options(
-        row_group_background_color="#F0F0F0",    # grey default; washed-DA tint if Big Color
         row_group_font_weight="bold",            # required
         row_group_border_top_color="#BDBDBD",    # structural rule (item a)
         row_group_border_bottom_color="#BDBDBD",
@@ -293,9 +310,9 @@ gt = (
 )
 ```
 
-Never fill a group header with a saturated color — that would make structural chrome
-compete with the data. Editorial weight belongs on the **column labels** (Step-4 band),
-not on group headers.
+Never fill a group header with a background color, saturated or neutral — bold
+weight plus the `#BDBDBD` rule is the complete, non-negotiable treatment. Editorial
+weight belongs on the **column labels** (the branding band), not on group headers.
 
 ## Sub-note — do NOT use `opt_stylize` as a whole-table styler (PP-17)
 
@@ -346,3 +363,22 @@ this.)
 in order: (1) raise `gtsave(vwidth=…, vheight=…)` to give it room; (2) raise
 `gtsave(zoom=…)` to keep it crisp; (3) only then reduce font size, minimally. Never
 *lower* `zoom` below 2.0 to force a fit — that just blurs the render.
+
+**Compact layout — `cols_width` + pinned padding (a consistency addition, not
+currently mechanically checked).** Every table sizes each column with
+`cols_width(cases={...})` to its own content plus a small buffer — never left to
+auto-width. Exact widths are content-dependent (pick per column based on your actual
+header/value text), but these six padding values are the same, literally, on every
+table — pin them via `tab_options(...)`:
+
+```python
+gt = gt.cols_width(cases={"car": "220px", "hp": "135px", "msrp": "130px"})  # illustrative -- size to YOUR content
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
+```
