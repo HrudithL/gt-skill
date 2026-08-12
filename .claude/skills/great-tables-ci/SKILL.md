@@ -68,15 +68,23 @@ separate follow-up, not something to assume exists today):
 - **The footer's two-call convention** (`small_color.md` (f)): an analytical
   caption AND a separate source note, not one combined line, on any table with
   ≥5 rows.
-- **Every unselected measure stays fully plain — no consolation bold, no numeric
-  cap either way.** This needs the prompt (which measure is the request's actual
-  topic), so no mechanical check could verify it even if one existed. Recount
-  every `data_color`/`heatmap` call: each fill should still be earning its place
-  for this data — there is no fixed count, so don't cut a fill just to hit a
-  number, and don't keep one just because it's already there. Any measure that
-  doesn't carry a fill — because it never qualified, or because it qualified but
-  didn't make the ranked cut — renders as a plain, unstyled value column: no
-  `style.text(weight="bold")`, no text-color treatment, no fill.
+- **Every unselected measure stays fully plain at the measure level — no
+  consolation bold, no numeric cap either way.** This needs the prompt (which
+  measure is the request's actual topic, and which named measures are
+  near-redundant restatements of each other), so no mechanical check could verify
+  it even if one existed. Recount every `data_color`/`heatmap` call: each fill
+  should still be earning its place for this data — there is no fixed count, so
+  don't cut a fill just to hit a number, and don't keep one just because it's
+  already there. Any measure that doesn't carry a fill — because it never
+  qualified, or because it turned out to be a near-redundant restatement of
+  another colored measure (`small_color.md`'s redundancy check) — renders as a
+  plain, unstyled value column at the MEASURE level: no whole-column
+  `style.text(weight="bold")`, no whole-column text-color treatment, no fill.
+  (This does not forbid the separate, narrower `bold_colored_number.md`
+  technique of bolding a small number of individual outlier CELLS within an
+  otherwise-plain column when the request specifically calls for highlighting
+  extremes — that's a distinct technique for a few cells, not a consolation
+  treatment for a whole measure that lost a fill.)
 
 Small polish matters as much as Big Color — audit all of these by eye every time,
 don't rely on a checker that doesn't exist yet to catch them for you.

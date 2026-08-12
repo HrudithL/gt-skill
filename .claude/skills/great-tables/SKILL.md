@@ -82,14 +82,21 @@ as bare or half-finished. Before you consider the table done:
    (`rowname_col`) exists, it needs the fixed pale-blue tint, `#EAF0F6`,
    unconditionally (`small_color.md` (d)) — striping being on doesn't excuse skipping
    it; stripes still show on an unfilled stub (`small_color.md` (c)).
-7. **Every unselected measure stays fully plain — no consolation bold, no numeric
-   cap either way.** Recount every `data_color`/`heatmap` call now: each fill should
-   still be earning its place for this data — there is no fixed count, so don't cut a
-   fill just to hit a number, and don't keep one just because it's already there. Any
-   measure that doesn't carry a fill — because it never qualified, or because it
-   qualified but didn't make the ranked cut — renders as an ordinary, unstyled value
-   column: no `style.text(weight="bold")`, no text-color treatment, no fill. Plain
-   text is the correct, final treatment, not a placeholder for a missing color.
+7. **Every unselected measure stays fully plain at the measure level — no
+   consolation bold, no numeric cap either way.** Recount every `data_color`/`heatmap`
+   call now: each fill should still be earning its place for this data — there is no
+   fixed count, so don't cut a fill just to hit a number, and don't keep one just
+   because it's already there. Any measure that doesn't carry a fill — because it
+   never qualified, or because it turned out to be a near-redundant restatement of
+   another colored measure (`small_color.md`'s redundancy check) — renders as an
+   ordinary, unstyled value column at the MEASURE level: no whole-column
+   `style.text(weight="bold")`, no whole-column text-color treatment, no fill. Plain
+   text is the correct, final treatment for that measure, not a placeholder for a
+   missing color. (This does not forbid the separate, narrower
+   `bold_colored_number.md` technique of bolding a small number of individual outlier
+   CELLS within an otherwise-plain column when the request specifically calls for
+   highlighting extremes — that's a distinct technique for a few cells, not a
+   consolation treatment for a whole measure that lost a fill.)
 
 An item you can't check off because you never evaluated its gate (didn't check
 whether the table has ≥5 rows for the caption gate, didn't check whether a stub

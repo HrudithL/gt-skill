@@ -12,9 +12,13 @@ targeted highlight instead, see the last rule.)
 "Qualifies" is not the same as "earns a full heatmap fill." There is no numeric cap
 on colored measures — color what the request is actually about, with the correct
 palette for each (the ranking below decides which measures that is). A measure that
-qualifies but isn't part of what the request is about renders fully plain: no fill,
-no bold, no text-color treatment — its magnitude is carried by the number alone. This
-applies regardless of how many other measures already carry a color fill.
+qualifies but isn't part of what the request is about renders fully plain at the
+measure level: no whole-column fill, no whole-column bold, no whole-column
+text-color treatment — its magnitude is carried by the number alone. (This doesn't
+ban `bold_colored_number.md`'s separate technique of bolding a handful of individual
+outlier cells in an otherwise-plain column — that's a few-cells technique, not a
+whole-measure consolation.) This applies regardless of how many other measures
+already carry a color fill.
 
 ## Which measures earn the full fill first (deterministic priority)
 
@@ -33,9 +37,11 @@ reach the same order. How many top-ranked measures actually earn a full fill is 
 judgment call: weigh how many measures the request's core ask is actually about
 against whether a 3rd or 4th fill would make the table read as noise. There is no
 fixed count and no numeric cap. A measure that doesn't make the cut renders fully
-plain — no fill, no bold, no text-color treatment — its magnitude is carried by the
-number alone. A measure that spans several facet columns (a matrix/heatmap block)
-counts as **one** measure in this ranking.
+plain at the measure level — no whole-column fill, no whole-column bold, no
+whole-column text-color treatment — its magnitude is carried by the number alone
+(again, this doesn't affect `bold_colored_number.md`'s few-outlier-cells technique).
+A measure that spans several facet columns (a matrix/heatmap block) counts as **one**
+measure in this ranking.
 
 ## When to use
 
