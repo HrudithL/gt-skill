@@ -6,8 +6,11 @@ description: Use when building a table with `great_tables`, `gt.GT`, or `gtsave`
 # Great Tables Skill
 
 Build publication-ready display tables in Python with `great_tables`. This is a
-**flowchart, not a menu** — one deterministic rule per decision, so the **same
-input always produces the same output**, and **every table reads as one product**.
+**flowchart, not a menu** — one deterministic rule per decision, with one exception:
+which measures earn a color fill when several are named is a judgment call about
+redundancy, not a fixed formula. Most of a table's design should reproduce
+identically across runs, with that one exception, and **every table reads as one
+product**.
 
 ## Read this before you write ANY Python
 
