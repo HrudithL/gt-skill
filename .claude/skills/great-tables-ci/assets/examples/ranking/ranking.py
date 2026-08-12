@@ -24,13 +24,24 @@ leader_hp = int(top.loc[0, "hp"])
 runner_up_hp = int(top.loc[1, "hp"])
 
 gt = (
-    GT(top, rowname_col="car")
+    # rowname_col="rank" (not "car"): the fixed branding stub tint is a
+    # table-wide surface with no per-row exception (see gt_check.py's
+    # check_stub_tint) — the stub must stay uniformly tinted for every row,
+    # including the leader's. Putting "car" in the stub would put the one
+    # cell that most needs the leader highlight outside loc.body()'s reach.
+    # references/big_color/full_row_highlight.md's own recipe uses
+    # rowname_col="rank" for exactly this reason: the stub holds a plain
+    # rank number that needs no highlight, and every column that carries
+    # the story (including the car name) is a body column the highlight
+    # can reach in one `loc.body()` call.
+    GT(top, rowname_col="rank")
+    .tab_stubhead(label="#")
     .tab_header(
         title="Top 10 by Horsepower",
         subtitle="Production cars in the gtcars dataset, ranked by peak HP",
     )
     .cols_label(
-        rank="#", year="Year", ctry_origin="Country",
+        car="Car", year="Year", ctry_origin="Country",
         hp="HP", trq="Torque (lb-ft)", drivetrain="Drive", msrp="MSRP",
     )
     .fmt_currency(columns=["msrp"], currency="USD", decimals=0)
@@ -38,18 +49,14 @@ gt = (
     # use_seps=False on year — `2,017` is wrong for a year.
     .fmt_integer(columns=["year"], use_seps=False)
     # Full-row highlight on the #1 leader (a Top-N "winner" story) — a solid
-    # Dark Academia hex with white text, spanning every body column. Rank and
-    # the other measures otherwise render fully plain: no consolation bold.
-    # rowname_col="car" moves the car name into the stub, outside loc.body()'s
-    # scope, so the stub cell for row 0 must be highlighted explicitly too —
-    # otherwise the leader's name renders in the plain stub tint instead of
-    # the highlight.
+    # Dark Academia hex with white text, spanning every body column. Every
+    # other measure otherwise renders fully plain: no consolation bold.
     .tab_style(
         style=[style.fill(color="#9A7B33"), style.text(color="#ffffff", weight="bold")],
-        locations=[loc.body(rows=[0]), loc.stub(rows=[0])],
+        locations=loc.body(rows=[0]),
     )
-    .cols_align(align="left", columns=["ctry_origin", "drivetrain"])
-    .cols_align(align="right", columns=["rank", "year", "hp", "trq", "msrp"])
+    .cols_align(align="left", columns=["car", "ctry_origin", "drivetrain"])
+    .cols_align(align="right", columns=["year", "hp", "trq", "msrp"])
     # Heading band — fixed branding navy, bold labels, white text, every table.
     .tab_options(
         column_labels_background_color="#08306B",
@@ -58,10 +65,10 @@ gt = (
         column_labels_border_bottom_width="2px",
     )
     .tab_style(style=style.text(color="white"), locations=loc.column_labels())
-    # Stub tint — fixed branding hex, unconditional whenever a stub exists.
-    # Scoped to exclude row 0: that stub cell belongs to the leader highlight
-    # above and must keep the highlight color, not the standard stub tint.
-    .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub(rows=list(range(1, len(top)))))
+    # Stub tint — fixed branding hex, unconditional whenever a stub exists,
+    # uniform across every row (no per-row exception, unlike the highlight
+    # above, which lives entirely in the body now).
+    .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub())
     # Row striping — default on every table (only one row is highlighted).
     .opt_row_striping()
     .tab_options(
@@ -75,7 +82,7 @@ gt = (
         table_border_right_style="solid", table_border_right_color="#CCCCCC", table_border_right_width="1px",
     )
     .cols_width(cases={
-        "car": "210px", "rank": "50px", "year": "70px", "ctry_origin": "110px",
+        "car": "210px", "year": "70px", "ctry_origin": "110px",
         "hp": "80px", "trq": "110px", "drivetrain": "70px", "msrp": "110px",
     })
     .tab_options(
