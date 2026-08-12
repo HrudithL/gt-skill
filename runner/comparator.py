@@ -2662,10 +2662,11 @@ def _distinct_colored_measures(mechanics: list[dict], fp: dict) -> list[dict]:
     `columns` didn't intersect with `fp`'s actually-VISIBLE columns -- a
     colored measure entirely hidden via `cols_hide(...)` still counted as
     a real, distinct measure toward hue-collision detection
-    (`check_hue_collision`) and the "is there a sole measure to harmonize
-    the band to" test (`check_band_hue_harmonization`) -- both exist to
-    police what's ACTUALLY VISIBLE on the rendered table, not raw call
-    syntax. An entry whose
+    (`check_hue_collision`, the only current caller of this helper --
+    `check_band_hue_harmonization` is retired to an `_na` stub as of the
+    2026-08-12 comparator generalization and no longer calls it) -- this
+    exists to police what's ACTUALLY VISIBLE on the rendered table, not
+    raw call syntax. An entry whose
     resolved columns have NO overlap with the visible-column set
     contributes nothing and is dropped entirely; an entry with a PARTIAL
     overlap (some, but not all, target columns hidden) is deduplicated by
