@@ -534,8 +534,9 @@ def status_chip(gt, column, meaning):
 
     ``meaning`` maps each cell VALUE (e.g. ``"On Track"``) to one of
     ``"good"`` / ``"bad"`` / ``"neutral"``. Fills from the ``accent`` tier
-    (the same brighter, more saturated pairing ``band()``/``stub_tint()``
-    use) rather than the muted ``solid`` DA tier: ``good`` -> accent forest
+    (the same brighter, more saturated tier ``band(shade="dark")`` uses --
+    NOT ``stub_tint()``, which always uses the quieter ``washed`` tier)
+    rather than the muted ``solid`` DA tier: ``good`` -> accent forest
     (a clean green), ``bad`` -> accent oxblood (a clean red, not the muted
     ``solid`` oxblood's muddy brown-red), ``neutral`` -> accent ochre (a
     warm, legible amber — not accent/solid ``tan``, which reads as a flat,

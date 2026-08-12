@@ -335,7 +335,11 @@ cell. See the injected `yoy_change` gap on `Zeta Kit` and the blank
 An earlier version of this rule capped colored measures at a fixed count;
 that numeric ceiling was rejected as arbitrary and is gone. There is no
 numeric cap on colored measures — color what the request is actually
-about, using the correct palette for each. Any measure that isn't part of
+about, using the correct palette for each. Which measure(s) that is, when
+2+ measures are named with no explicit ranking, is decided by `data.md`'s
+tie-break section — this restraint rule doesn't re-decide that, it only
+says what happens to whichever measure(s) that tie-break doesn't pick: no
+fill, but also no bold or text-color consolation. Any measure that isn't part of
 what the request is about renders fully plain: no fill, no bold, no
 text-color treatment of any kind. This applies regardless of how many
 other measures already carry a color fill — a table with 2, 3, or more
