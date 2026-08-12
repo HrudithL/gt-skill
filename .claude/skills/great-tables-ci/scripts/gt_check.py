@@ -700,44 +700,50 @@ def _dom_stub_present(dom: Optional[str]) -> bool:
     return bool(dom) and bool(re.search(r"<th\b[^>]*\bgt_stub\b[^>]*>", dom, re.IGNORECASE))
 
 
-def _dom_stub_fill(dom: Optional[str]) -> Optional[str]:
-    """The rendered stub cell's background hex, or ``None`` for the default.
+def _dom_stub_non_default_bg(css_text: str) -> Optional[str]:
+    """Parse a ``background-color:`` declaration out of one CSS/inline-style
+    block, treating white/transparent as "no fill" (the default)."""
+    bg = re.search(r"background-color:\s*([^;]+);", css_text, re.IGNORECASE)
+    if not bg:
+        return None
+    hexv = bg.group(1).strip()
+    if hexv.upper() in ("#FFFFFF", "#FFF", "WHITE", "TRANSPARENT"):
+        return None
+    return hexv
+
+
+def _dom_stub_fills(dom: Optional[str]) -> list[Optional[str]]:
+    """The effective background fill of EVERY stub ``<th>`` cell in the
+    document, in document order.
 
     Two distinct mechanisms tint the stub, and each compiles differently:
     ``tab_style(style.fill(...), locations=loc.stub())`` applies an INLINE
     ``background-color`` on the stub ``<th>`` (overriding the ``.gt_stub``
-    CSS rule); ``stub_background_color=`` (a ``tab_options`` global option —
-    what ``gt_consistency.stub_tint()`` itself uses) compiles straight into
-    the ``.gt_stub`` CSS rule instead, with NO inline style at all. Inline
-    wins when present (same inline-overrides-class pattern the column-label
-    band uses); otherwise the CSS rule is read, ignoring its own white
-    default (an untinted stub sets no ``stub_background_color``, so the rule
-    keeps that default)."""
+    CSS rule) — and, critically, can target a SUBSET of rows (e.g.
+    ``loc.stub(rows=[0])``), so only some cells get the inline override;
+    ``stub_background_color=`` (a ``tab_options`` global option — what
+    ``gt_consistency.stub_tint()`` itself uses) compiles straight into the
+    ``.gt_stub`` CSS rule instead, with NO inline style at all, and therefore
+    applies uniformly to every stub cell. For each cell: inline wins when
+    present (same inline-overrides-class pattern the column-label band
+    uses); otherwise the CSS rule is read, ignoring its own white default.
+    Every cell must be checked individually — reading only the first cell
+    would let a partially-tinted stub (only some rows tinted) pass."""
     if not dom:
-        return None
-    if not re.search(r"<th\b[^>]*\bgt_stub\b[^>]*>", dom, re.IGNORECASE):
-        return None
-
-    def _non_default_bg(css_text: str) -> Optional[str]:
-        bg = re.search(r"background-color:\s*([^;]+);", css_text, re.IGNORECASE)
-        if not bg:
-            return None
-        hexv = bg.group(1).strip()
-        if hexv.upper() in ("#FFFFFF", "#FFF", "WHITE", "TRANSPARENT"):
-            return None
-        return hexv
-
-    tag = re.search(r"<th\b[^>]*\bgt_stub\b[^>]*>", dom, re.IGNORECASE).group(0)
-    style_m = re.search(r'style\s*=\s*"([^"]*)"', tag, re.IGNORECASE)
-    if style_m:
-        inline = _non_default_bg(style_m.group(1))
-        if inline is not None:
-            return inline
+        return []
+    tags = re.findall(r"<th\b[^>]*\bgt_stub\b[^>]*>", dom, re.IGNORECASE)
+    if not tags:
+        return []
 
     css_m = re.search(r"\.gt_stub\s*\{([^}]*)\}", dom)
-    if css_m:
-        return _non_default_bg(css_m.group(1))
-    return None
+    class_fill = _dom_stub_non_default_bg(css_m.group(1)) if css_m else None
+
+    fills: list[Optional[str]] = []
+    for tag in tags:
+        style_m = re.search(r'style\s*=\s*"([^"]*)"', tag, re.IGNORECASE)
+        inline = _dom_stub_non_default_bg(style_m.group(1)) if style_m else None
+        fills.append(inline if inline is not None else class_fill)
+    return fills
 
 
 def _dom_frame_ok(dom: Optional[str]) -> Optional[bool]:
@@ -1069,12 +1075,17 @@ def check_heading_band(
             )
         ]
 
-    # A dark branding band needs WHITE column-label text for contrast.
-    white_text = (
-        _dom_col_heading_text_white(exec_res.dom)
-        or _source_white_column_labels(source)
-        or bool(_call_arg_blocks(source, "band", dotted=False))
-    )
+    # A dark branding band needs WHITE column-label text for contrast. The
+    # rendered DOM is authoritative whenever it exists (real output beats a
+    # source-text guess about what a same-named `band(...)` call probably
+    # did); source-text inference (an explicit white tab_style, or a
+    # recognised band() helper call) is used ONLY when there is no DOM at all.
+    if exec_res.dom is not None:
+        white_text = _dom_col_heading_text_white(exec_res.dom)
+    else:
+        white_text = _source_white_column_labels(source) or bool(
+            _call_arg_blocks(source, "band", dotted=False)
+        )
     if not white_text:
         return [
             Finding(
@@ -1109,16 +1120,18 @@ def _find_column_labels_font_weight(source: str) -> Optional[str]:
 def _column_labels_bold(source: str, exec_res: "ExecResult") -> bool:
     """True if column labels render bold.
 
-    Checked three ways, any of which is sufficient: an explicit
-    ``column_labels_font_weight='bold'`` token in source, the rendered DOM's
-    ``.gt_col_heading`` CSS rule, or a recognised ``band(...)`` helper call
-    (``gt_consistency.band()`` always sets bold labels as of the 2026-08-12
-    redesign, so its mere presence in source is sufficient even when the DOM
-    is unavailable)."""
+    The rendered DOM's ``.gt_col_heading`` CSS rule is authoritative whenever a
+    DOM exists — it is the actual output, whereas a source-text token (an
+    explicit ``column_labels_font_weight='bold'``, or a bare ``band(...)``
+    call assumed to be ``gt_consistency.band()``) is only an inference about
+    what the source probably does and can be fooled by an unrelated
+    same-named helper. Source-text inference is used ONLY when there is no
+    DOM to check at all (e.g. exec failed, or a purely static source-review
+    mode)."""
+    if exec_res.dom is not None:
+        return _dom_col_heading_bold(exec_res.dom)
     weight = _find_column_labels_font_weight(source)
     if weight and weight.strip().lower() in ("bold", "bolder", "700", "800", "900"):
-        return True
-    if _dom_col_heading_bold(exec_res.dom):
         return True
     if _call_arg_blocks(source, "band", dotted=False):
         return True
@@ -1418,11 +1431,30 @@ def _source_stub_fill(source: str) -> Optional[str]:
 def check_stub_tint(source: str, exec_res: "ExecResult") -> list[Finding]:
     """Whenever a stub exists, its fill must be the fixed branding tint
     (``BRANDING["stub_tint"]`` = #EAF0F6) — universal across every table
-    (2026-08-12 redesign), not a per-hue washed tint chosen per table."""
+    (2026-08-12 redesign), not a per-hue washed tint chosen per table.
+
+    Every stub cell in the document must carry this tint, not just the first
+    one: a table that tints only some rows (e.g. ``loc.stub(rows=[0])``)
+    still fails, since the fixed branding tint is a table-wide surface, not a
+    per-row highlight."""
     if exec_res.dom is not None:
         if not _dom_stub_present(exec_res.dom):
             return []
-        fill = _dom_stub_fill(exec_res.dom)
+        fills = _dom_stub_fills(exec_res.dom)
+        unique_fills = set(fills)
+        if len(unique_fills) > 1:
+            found = ", ".join(sorted(v or "none" for v in unique_fills))
+            return [
+                Finding(
+                    "stub-tint",
+                    FAIL,
+                    f"stub tint is not applied uniformly across all stub cells (found: {found})",
+                    f"tint EVERY stub cell to the fixed branding hex {BRANDING['stub_tint']} "
+                    "(a global stub_background_color / stub_tint() applies uniformly; a "
+                    "per-row tab_style(locations=loc.stub(rows=[...])) does not)",
+                )
+            ]
+        fill = unique_fills.pop() if unique_fills else None
     else:
         if not _source_stub_present(source):
             return []
@@ -1598,14 +1630,18 @@ def run_checks(path: Path) -> tuple[list[Finding], dict[str, Any]]:
         meta["body_rows"] = _dom_body_rows(exec_res.dom)
 
     # --- Band + Big-Color detection (helper-agnostic). ---
-    # Band hex: explicit tab_options token, else the band() helper's intent, else
-    # the rendered .gt_col_heading background. Any of these judges the OUTPUT so
-    # a helper-only table is no longer seen as "no band".
-    band_hex = (
-        _find_band_color(source)
-        or _band_hex_from_helper(source)
-        or _dom_col_heading_bg(exec_res.dom)
-    )
+    # Band hex: the actual RENDERED .gt_col_heading background is authoritative
+    # whenever a DOM exists — real output beats any inference about what the
+    # source probably does (a source-text token like a bare `band(...)` call
+    # only proves a function of that name was invoked, not that it's actually
+    # gt_consistency.band() or that it produced this color). Source-text
+    # detection (explicit tab_options token, then the band() helper's assumed
+    # intent) is used ONLY when there is no DOM at all (e.g. exec failed, or a
+    # purely static source-review mode).
+    if exec_res.dom is not None:
+        band_hex = _dom_col_heading_bg(exec_res.dom)
+    else:
+        band_hex = _find_band_color(source) or _band_hex_from_helper(source)
     # Big Color: any data_color/heatmap call, a solid DA hex used off-band, or
     # any inline-filled body cell in the DOM (covers the helper path).
     big_color = (
