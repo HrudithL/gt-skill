@@ -9,13 +9,12 @@ measure** (the hero, if it is the only one that qualifies). Deterministic, not a
 call. (Below 5 rows a gradient reads as random pastel — it does not qualify; use a
 targeted highlight instead, see the last rule.)
 
-"Qualifies" is not the same as "earns a full heatmap fill." When **one or two**
-measures qualify, give **all** of them a full fill (each is mandatory — do not leave
-a qualifying measure with no emphasis at all). When **three or more** qualify, the
-priority rule below ranks them; the top-ranked ones earn the full fill, and a
-qualifying measure that doesn't make the cut steps down to **bold text and/or a text
-color** instead of a competing heatmap fill — the color-restraint principle
-(`small_color.md`) — not to no emphasis at all.
+"Qualifies" is not the same as "earns a full heatmap fill." There is no numeric cap
+on colored measures — color what the request is actually about, with the correct
+palette for each (the ranking below decides which measures that is). A measure that
+qualifies but isn't part of what the request is about renders fully plain: no fill,
+no bold, no text-color treatment — its magnitude is carried by the number alone. This
+applies regardless of how many other measures already carry a color fill.
 
 ## Which measures earn the full fill first (deterministic priority)
 
@@ -29,13 +28,14 @@ same prompt+data reach the same ranking):
    priority (e.g. none named, or several named at once), the one whose column appears
    earlier (smallest column index) wins.
 
-Give a full fill to as many top-ranked qualifying measures as genuinely earn it for
-this data — how many is a taste call weighed against how busy the table already looks,
-not a fixed count (see the color-restraint principle in `small_color.md`). Once two or
-more measures already carry a full heatmap fill, any further one steps down to bold
-text/text color rather than adding another competing heatmap. A measure that spans
-several facet columns (a matrix/heatmap block) counts as **one** measure in this
-ranking.
+The ranking above is fully deterministic — two runs on the same prompt+data always
+reach the same order. How many top-ranked measures actually earn a full fill is a
+judgment call: weigh how many measures the request's core ask is actually about
+against whether a 3rd or 4th fill would make the table read as noise. There is no
+fixed count and no numeric cap. A measure that doesn't make the cut renders fully
+plain — no fill, no bold, no text-color treatment — its magnitude is carried by the
+number alone. A measure that spans several facet columns (a matrix/heatmap block)
+counts as **one** measure in this ranking.
 
 ## When to use
 

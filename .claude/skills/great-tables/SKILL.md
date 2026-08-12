@@ -81,18 +81,19 @@ as bare or half-finished. Before you consider the table done:
    (`rowname_col`) exists, it needs the fixed pale-blue tint, `#EAF0F6`,
    unconditionally (`small_color.md` (d)) — striping being on doesn't excuse skipping
    it; stripes still show on an unfilled stub (`small_color.md` (c)).
-7. **A named-but-uncolored measure stays plain — no consolation bold.** Every measure
-   the request names that does NOT earn the fill renders as an ordinary, unstyled
-   value column: no `style.text(weight="bold")`, no fill. Plain text is the correct,
-   final treatment for it, not a placeholder for a missing color.
-8. **Color is purposeful, not maxed out.** Recount every `data_color`/`heatmap` call
-   now: is each fill still earning its place for this data, or would a
-   secondary-but-notable measure read better with bold text/text color than with a
-   competing full heatmap fill (the color-restraint principle, `small_color.md`)?
+7. **Every unselected measure stays fully plain — no consolation bold, no numeric
+   cap either way.** Recount every `data_color`/`heatmap` call now: each fill should
+   still be earning its place for this data — there is no fixed count, so don't cut a
+   fill just to hit a number, and don't keep one just because it's already there. Any
+   measure that doesn't carry a fill — because it never qualified, or because it
+   qualified but didn't make the ranked cut — renders as an ordinary, unstyled value
+   column: no `style.text(weight="bold")`, no text-color treatment, no fill. Plain
+   text is the correct, final treatment, not a placeholder for a missing color.
 
-An item you can't check off because you never evaluated its gate (didn't count rows,
-didn't check whether a stub exists) is not "not applicable" — go compute the gate
-condition, then check the item for real.
+An item you can't check off because you never evaluated its gate (didn't check
+whether the table has ≥5 rows for the caption gate, didn't check whether a stub
+exists) is not "not applicable" — go compute the gate condition, then check the item
+for real.
 
 ## Withhold values, forbid guessing — open the file the action needs
 
