@@ -80,29 +80,41 @@ grain, not just present.
 
 - **Single-column identifier.** A single existing column (name, ID, date) is enough
   when it alone is unique at the row's grain — use it directly as the stub.
-- **Composite identifier.** When no single column is unique alone, concatenate the
-  columns that jointly are. A car dataset keyed by manufacturer + model is the
-  concrete case: neither `mfr` nor `model` alone identifies a row (several
-  manufacturers share a model name across trims, and "GT" alone isn't a known car),
-  but `mfr + " " + model` is:
+- **Composite identifier — two distinct motivations, not one.** A composite (joining
+  two or more columns into one stub label) can be built for either reason, and it's
+  worth being clear about which one actually applies:
+  - **Uniqueness** — a single column has duplicate values across rows, so a
+    composite is *required* to disambiguate at all.
+  - **Readability** — a single column is already unique on its own, but pairing it
+    with another column produces a more self-describing label, so the reader isn't
+    forced to cross-reference a second column to understand what the stub names.
+    A column can pass the uniqueness test below and still be worth combining for
+    this reason alone.
+
+  The gtcars dataset is the readability case, not the uniqueness case: `model` alone
+  is already unique across all 47 rows (verified directly against the data — zero
+  duplicate `model` values), so uniqueness alone would not require a composite. The
+  ground truth combines `mfr + " " + model` into one stub label anyway, because
+  "911 Turbo S" read alone doesn't say which manufacturer makes it, while "Porsche
+  911 Turbo S" is self-describing without a separate manufacturer column:
   ```python
   df["car"] = df["mfr"] + " " + df["model"]
   ```
 - **Constructed identifier.** When the grain is itself a combination of columns with
-  no natural label (e.g. one row per year-month), build a display label from them
+  no natural label (e.g. one row per region-quarter), build a display label from them
   rather than showing the raw parts side by side:
   ```python
-  df["month_label"] = pd.to_datetime(
-      df["year"].astype(str) + "-" + df["month"].astype(str) + "-01"
-  ).dt.strftime("%b %Y")   # -> "Jan 2010"
+  df["period_label"] = df["yr"].astype(str) + " Q" + df["qtr"].astype(str)  # -> "2010 Q1"
   ```
 
-**The decidable test:** would two different rows render an **identical** stub label?
-If so, the identifier is incomplete — extend it (add another column to the
-composite, or construct a finer label) until every row's label is unique. Check this
-against the actual data, the same way the composite-identifier case above is
-verified against every row before it's trusted, rather than assuming a column
-"looks like" an identifier.
+**The decidable test (uniqueness only):** would two different rows render an
+**identical** stub label? If so, the identifier is incomplete for uniqueness —
+extend it (add another column to the composite, or construct a finer label) until
+every row's label is unique. This test only checks uniqueness, not readability — a
+column can pass it (be unique on its own) and still benefit from a composite for the
+readability reason above. Check the test against the actual data, the same way the
+gtcars case above is verified against every row before it's trusted, rather than
+assuming a column "looks like" an identifier.
 
 ## Do NOT fabricate
 
