@@ -3,17 +3,42 @@
 Load this whenever you pick a Big-Color fill, a heading-band hue, or any
 Small-Color surface (Step 3, 4, or 5). Every hex the skill uses lives here.
 
-There are **three palettes, deliberately linked**: the Small-Color light tints are
-just **washed-out versions of the Big-Color solids**, so a table's quiet polish
-always echoes its loud color. Use one coherent theme per table.
+There are **three tiers**: a fixed **branding tier** for the header band / stub tint /
+row stripe (§0), the Dark Academia solids for other non-gradient Big-Color treatments
+plus their washed tints (§1–§2), and the sequential/diverging palettes for a
+heatmapped measure's own fill (§3). §1–§3 stay deliberately linked (the Small-Color
+tints are washed-out versions of the Big-Color solids); §0 never varies by table.
+
+---
+
+## 0. Branding tier — fixed Blues/navy, every table
+
+The heading band, stub tint, and row stripe are a **branding tier**: the same three
+hexes on every table, always.
+
+| Branding surface | Hex |
+|---|---|
+| Header band | `#08306B` |
+| Stub tint | `#EAF0F6` |
+| Row stripe | `#F6F6F6` |
+
+These do **not** follow the same *data-driven, per-measure* hue selection used for a
+heatmapped measure's own fill (§3 below): a heatmapped measure still resolves its own
+hue by semantic — `Greens` for "more is better," `Reds` for "more is worse," `Blues`
+for a neutral magnitude — but the branding surfaces around it always resolve to this
+standard Blues/navy family regardless of what hue that measure ends up using. Blues is
+simply the **default/standard hue for branding surfaces specifically** — not a
+harmonization step that adapts per table, and not something a heatmap's own hue ever
+overrides.
 
 ---
 
 ## 1. Dark Academia — SOLID Big-Color palette (Warm set)
 
-Used for **every Big-Color treatment that is not a gradient / heatmap / diverging
-fill**: dark heading bands, full-column fills, full-row highlights, status fills,
-colored-text anchors. **White text on all solid members.**
+Used for **every non-branding Big-Color treatment that is not a gradient / heatmap /
+diverging fill**: full-column fills, full-row highlights, status fills, colored-text
+anchors. (The heading band is the fixed branding surface in §0 above — it no longer
+draws its hue from this table.) **White text on all solid members.**
 
 | Member | Solid hex | Washed light tint | Use when… |
 |---|---|---|---|
@@ -24,7 +49,7 @@ colored-text anchors. **White text on all solid members.**
 | Ochre (accent) | `#9A7B33` | `#F5EFDC` | Premium / awards / highlight |
 | Tan (accent/mid) | `#8A7452` | `#EFE7D6` | Secondary warm accent (cream tint) |
 
-### DA hue-selection rule (applies to any solid DA use, including the dark band)
+### DA hue-selection rule (applies to any solid DA use — full-column fill, full-row highlight, status fill, colored-text anchor)
 
 Resolve to **exactly one** hue — this is a deterministic lookup, **not** a
 harmonization. **Default Navy.** Otherwise walk this priority order and **pick the
@@ -35,51 +60,41 @@ FIRST that applies**, then stop (do not blend hues):
 3. any other color already used in the table.
 
 If none applies, the hue **is Navy**. One coherent theme per table — the same table
-cues resolve to the same hue on every run. *(For the dark heading-band case
-specifically — which only occurs when there is **no** Big Color — priority (1) never
-applies, so it resolves to subject/theme, i.e. usually Navy.)*
+cues resolve to the same hue on every run.
 
 ---
 
-## 2. Small Color — light structural surfaces (washed-DA + neutrals)
+## 2. Small Color — light structural surfaces (neutrals)
 
-All quiet surfaces (heading band, stripes, stub tint, dividers, empty cells) draw
-from **neutral greys OR a super-light washed-out tint of the table's Big-Color
-hue** (the right-hand column of §1) — never a saturated color.
+Quiet surfaces that are **not** part of the branding tier (dividers, hairlines, empty
+cells, group rules) draw from the neutral greys below — never a saturated color. The
+heading band, stub tint, and row stripe are the fixed branding-tier values from §0,
+not entries in this table.
 
 | Neutral role | Default hex | Weight |
 |---|---|---|
-| Light label band | `#F0F0F0` | — |
-| Row stripe | `#F6F6F6` | — |
 | Cell hairline (between rows) | `#E8E8E8` | 1px |
 | Column-label bottom rule | `#CCCCCC` | 2px |
 | Group / summary structural rule | `#BDBDBD` | — |
 | Column-group vertical divider | `#D0D0D0` | light but easily noticeable |
 | NA / empty cell | `#808080` | `na_color=` fill; `sub_missing("—")` text |
 
-**Default is grey.** When the table has Big Color, harmonize the light surfaces to
-the washed tint matching the dominant Big-Color hue (e.g. `Blues` fills → pale-blue
-`#EAF0F6` band/stub). This is also what the grey-budget rule reaches for.
+### The grey-budget rule — retired
 
-### The grey-budget rule
-
-Count the light-grey elements in play (label band, stripes, stub, empty/NA cells,
-hairlines). When grey becomes **monotonous** — several large grey areas stacking —
-re-color the **highest-priority** element to the **washed-DA tint of the Big-Color
-hue** (§1). Shift only as many elements as needed to break the monotony (usually
-just one).
-
-**Priority order:** `stub → labels → row design (striping / empty cells)`
-
-Example: grey band + grey stripes + grey stub with `Blues` fills → recolor the
-**stub** (highest priority) to pale blue `#EAF0F6`.
+This rule used to promote the stub tint or the heading band to a washed tint of the
+table's own Big-Color hue when several grey surfaces stacked up and looked
+monotonous. It no longer applies: the heading band, stub tint, and row stripe are now
+the fixed branding constants in §0 — they never vary by table, so there is nothing
+left to harmonize or re-balance.
 
 ---
 
-## 3. Sequential / Diverging — for the ≤2 colored MEASURES only
+## 3. Sequential / Diverging — for a heatmapped MEASURE's own fill
 
 Used when a measure is a magnitude / trend / signed story. These are matplotlib /
-brewer palette **names** passed to `data_color(palette=…)`, not fixed hexes.
+brewer palette **names** passed to `data_color(palette=…)`, not fixed hexes. This is
+the per-measure, data-driven hue selection that the branding tier (§0) is
+specifically exempt from.
 
 ### Sequential — fixed hue per semantic (F-deterministic-branch)
 
@@ -124,13 +139,14 @@ symmetric domain `[-M, M]` is identical in both orientations — see
   would violate "distinct hues". Resolve deterministically: the **primary** neutral
   measure keeps **`Blues`**; the **secondary** takes the next entry from the pinned
   ordered fallback ladder **`Blues → Greens → Oranges`** (i.e. the second neutral →
-  `Greens`; a — never-reached under the ≤2 ceiling — third → `Oranges`). `Reds` is
+  `Greens`; a third — reached only if a table gives three neutral measures a full fill
+  at once, which the color-restraint principle makes rare — → `Oranges`). `Reds` is
   excluded from this ladder (reserved for a directional "worse" measure). The ladder is
   applied for **distinctness only**; the fallback hue carries no good/bad meaning here.
   - **Which measure is "primary" (total, computable order):** (1) the measure the
     prompt names/emphasises first, in prompt order; else (2) leftmost-first by DataFrame
-    column order. This is the SAME priority order used to pick the ≤2 colored measures
-    (`big_color/column_gradient_fill.md`), so both runs assign the same two palettes to
-    the same two columns.
+    column order. This is the SAME priority order used to rank which measures earn a
+    full heatmap fill first (`big_color/column_gradient_fill.md`), so both runs assign
+    the same palettes to the same columns.
 - **Non-gradient Big Color uses the Dark Academia solids** (§1), hue per the
   DA hue-selection rule — never these sequential/diverging palettes.
