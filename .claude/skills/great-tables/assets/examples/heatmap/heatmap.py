@@ -3,8 +3,10 @@
 Data: data/towny.csv  (414 Ontario municipalities; population and
       growth across five Census windows from 1996 to 2021)
 Story: 25 years of growth in Ontario's 15 largest cities — population
-       level and each five-year percent change both color-encoded, as
-       two distinct dimensions of "growth."
+       density and each five-year percent change both color-encoded, as
+       two distinct dimensions of "growth." Raw 2021 population stays a
+       plain column: it drives the top-15 selection and is shown for
+       context, but it is NOT the colored measure (see note below).
 """
 import numpy as np
 import pandas as pd
@@ -23,7 +25,7 @@ change_cols = [
 # reader's ability to scan a small grid; 414 rows is unreadable.
 top = (
     df.nlargest(15, "population_2021")
-      .loc[:, ["name", "population_2021"] + change_cols]
+      .loc[:, ["name", "population_2021", "density_2021"] + change_cols]
       .reset_index(drop=True)
 )
 
@@ -34,11 +36,20 @@ chg_lo = float(np.nanmin(top[change_cols].to_numpy()))
 chg_hi = float(np.nanmax(top[change_cols].to_numpy()))
 abs_max = max(abs(chg_lo), abs(chg_hi))
 
-# Population (a level) and the five window changes (a rate of change) are two
-# genuinely distinct dimensions of "growth" — both earn a fill, the same
-# pairing used for density+percent-change elsewhere in this skill.
-pop_lo = float(top["population_2021"].min())
-pop_hi = float(top["population_2021"].max())
+# Density (a level, normalized by land area) and the five window changes (a
+# rate of change) are two genuinely distinct dimensions of "growth" — both
+# earn a fill, the same density+percent-change pairing used in this skill's
+# towny_growth_trends ground truth. Raw population COUNT is intentionally
+# NOT the colored level here: for these 15 rows it spans 166K-2.8M with
+# Toronto and Ottawa alone occupying the top of that range, so a linear
+# domain over the raw count would land 12 of 15 rows in the bottom 20% of
+# the color ramp — the same "nearly every cell nearly the same faint shade"
+# failure `scientific` cites as its reason to skip Big Color altogether.
+# Density is normalized by land area, so it isn't dominated by the same one
+# or two outliers (only 3 of 15 land in the bottom 20% of its domain) and
+# produces a heatmap that actually differentiates rows.
+dens_lo = float(top["density_2021"].min())
+dens_hi = float(top["density_2021"].max())
 
 fastest_city = top.loc[top["pop_change_2016_2021_pct"].idxmax(), "name"]
 fastest_pct = top["pop_change_2016_2021_pct"].max()
@@ -47,10 +58,11 @@ gt = (
     GT(top, rowname_col="name")
     .tab_header(
         title="Population growth in Ontario's 15 largest cities",
-        subtitle="2021 population and the five-year percent change across each Census window, 1996–2021",
+        subtitle="2021 population and density, plus the five-year percent change across each Census window, 1996–2021",
     )
     .cols_label(
         population_2021="2021 pop.",
+        density_2021=html("2021 density<br>(persons/km²)"),
         pop_change_1996_2001_pct="1996–2001",
         pop_change_2001_2006_pct="2001–2006",
         pop_change_2006_2011_pct="2006–2011",
@@ -59,14 +71,16 @@ gt = (
     )
     .tab_spanner(label="Inter-Census growth", columns=change_cols)
     .fmt_integer(columns=["population_2021"])
+    .fmt_number(columns=["density_2021"], decimals=1)
     # force_sign on the percent labels — the +/− gives a redundant directional
     # signal so the table remains usable for color-blind readers.
     .fmt_percent(columns=change_cols, decimals=1, force_sign=True)
-    # Population: neutral magnitude → sequential Blues (fixed lookup).
+    # Density: neutral magnitude → sequential Blues (fixed lookup). Colored
+    # in place of raw population count — see the domain-skew note above.
     .data_color(
-        columns=["population_2021"],
+        columns=["density_2021"],
         palette="Blues",
-        domain=[pop_lo, pop_hi],
+        domain=[dens_lo, dens_hi],
         na_color="#808080",
         truncate=False,
         autocolor_text=True,
@@ -82,9 +96,9 @@ gt = (
         autocolor_text=True,
     )
     .cols_align(align="left", columns=["name"])
-    .cols_align(align="right", columns=["population_2021"] + change_cols)
+    .cols_align(align="right", columns=["population_2021", "density_2021"] + change_cols)
     # Column-group divider at the seam between the plain population column
-    # and the growth spanner block.
+    # and the colored block (density + the growth spanner).
     .tab_style(style=style.borders(sides="right", color="#D0D0D0", weight="1px"), locations=loc.body(columns="population_2021"))
     .tab_style(style=style.borders(sides="right", color="#D0D0D0", weight="1px"), locations=loc.column_labels(columns="population_2021"))
     # Heading band — fixed branding navy, bold labels, white text, every table.
@@ -97,7 +111,13 @@ gt = (
     .tab_style(style=style.text(color="white"), locations=loc.column_labels())
     # Stub tint — fixed branding hex, unconditional whenever a stub exists.
     .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub())
+    # Row striping — default on every table. Density and the five growth
+    # columns are fully color-filled, but population_2021 is a genuine plain
+    # column now (it lost its fill in favor of density, see the domain-skew
+    # note above), so a stripe has a real plain cell to show through on.
+    .opt_row_striping()
     .tab_options(
+        row_striping_background_color="#F6F6F6",
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
@@ -106,11 +126,8 @@ gt = (
         table_border_left_style="solid", table_border_left_color="#CCCCCC", table_border_left_width="1px",
         table_border_right_style="solid", table_border_right_color="#CCCCCC", table_border_right_width="1px",
     )
-    # No row striping: population and all five growth columns are fully
-    # color-filled, so 100% of the non-stub body is already covered — a
-    # stripe has no plain cell left to show through on.
     .cols_width(cases={
-        "name": "170px", "population_2021": "100px",
+        "name": "170px", "population_2021": "100px", "density_2021": "110px",
         **{c: "100px" for c in change_cols},
     })
     .tab_options(
