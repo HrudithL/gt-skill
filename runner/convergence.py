@@ -706,12 +706,17 @@ def _find_band_helper(source: str) -> tuple[str, str] | None:
 
     None when there is no `band(...)` call. Lets a helper-based run score the
     heading band the SAME as the literal `column_labels_background_color=`.
+    An omitted `shade` kwarg defaults to `"dark"` here, mirroring
+    `house_table.py`'s own `band(gt, *, shade="dark", hue)` signature -- a
+    candidate that calls the helper with no explicit `shade` gets the
+    SAME effective shade the helper itself would actually render, not an
+    "unknown" that silently escapes every shade-dependent check below.
     """
     blocks = _bare_call_blocks(source, "band")
     if not blocks:
         return None
     b = blocks[0]
-    shade = _unquote(_kwarg_value(b, "shade")) or "unknown"
+    shade = _unquote(_kwarg_value(b, "shade")) or "dark"
     hue = _unquote(_kwarg_value(b, "hue")) or "unknown"
     return shade, hue
 
@@ -722,6 +727,99 @@ def _find_stub_tint_hue(source: str) -> str | None:
     if not blocks:
         return None
     return _unquote(_kwarg_value(blocks[0], "hue")) or "unknown"
+
+
+# Hue -> hex for the two literal surfaces the universal branding rule pins
+# down exactly (see prompts/*/ground_truth/*.py, all 6 agree): the dark
+# `accent` navy header/spanner fill, and the `washed` navy stub tint. Kept
+# here (not imported from the skill's own `house_table.py`) since a
+# candidate's `table.py` never imports the skill script either -- these are
+# literal hex fallbacks for the FEW named hues a helper call can resolve to,
+# not a full copy of the skill's palette.
+_HELPER_HUE_TO_ACCENT_HEX = {"navy": "#08306B"}
+_HELPER_HUE_TO_WASHED_HEX = {"navy": "#EAF0F6"}
+# `stripe()`'s own hex is a flat, hue-INDEPENDENT constant per its docstring
+# ("always the flat neutral grey, NEVER tinted to the table's hue") -- one
+# value, not a hue lookup.
+_STRIPE_HELPER_HEX = "#F6F6F6"
+
+
+def _find_stub_fill_hex(source: str) -> str | None:
+    """Literal stub-fill hex, from either a `tab_style(style=style.fill(
+    color=...), locations=loc.stub())` call or a `stub_tint(gt, hue=...)`
+    helper call (mapped through `_HELPER_HUE_TO_WASHED_HEX`). The literal
+    path wins when both are present (mirrors `_find_band_color`'s own
+    literal-first precedence for the heading band). Last matching literal
+    call wins when there are several (a later `tab_style` call overriding
+    an earlier one is what actually renders).
+    """
+    match_color: str | None = None
+    for block in _call_arg_blocks(source, "tab_style"):
+        if "loc.stub(" not in block:
+            continue
+        m = re.search(r"style\.fill\s*\(([^)]*)\)", block)
+        if not m:
+            continue
+        cm = re.search(r"color\s*=\s*['\"]([^'\"]+)['\"]", m.group(1))
+        if cm:
+            match_color = cm.group(1)
+    if match_color is not None:
+        return match_color
+    hue = _find_stub_tint_hue(source)
+    if hue is not None:
+        return _HELPER_HUE_TO_WASHED_HEX.get(hue)
+    return None
+
+
+def _find_column_labels_font_weight(source: str) -> str | None:
+    """Literal `column_labels_font_weight=` kwarg value from any
+    `tab_options(...)` call, else `"bold"` when a `band(gt, ...)` helper
+    call is present (the helper sets this unconditionally, in EITHER shade
+    branch -- see its own docstring), else None."""
+    m = re.search(r"column_labels_font_weight\s*=\s*['\"]([^'\"]+)['\"]", source)
+    if m:
+        return m.group(1)
+    if _bare_call_blocks(source, "band"):
+        return "bold"
+    return None
+
+
+def _find_column_labels_text_color(source: str) -> str | None:
+    """Column-label text color, from either a literal `tab_style(style=
+    style.text(color=...), locations=loc.column_labels())` call or a
+    `band(gt, shade="dark", ...)` helper call (which applies white column-
+    label -- and spanner-label -- text internally; see `band()`'s own
+    docstring). The literal path wins when both are present.
+    """
+    match_color: str | None = None
+    for block in _call_arg_blocks(source, "tab_style"):
+        if "loc.column_labels(" not in block:
+            continue
+        m = re.search(r"style\.text\s*\(([^)]*)\)", block)
+        if not m:
+            continue
+        cm = re.search(r"color\s*=\s*['\"]([^'\"]+)['\"]", m.group(1))
+        if cm:
+            match_color = cm.group(1)
+    if match_color is not None:
+        return match_color
+    helper = _find_band_helper(source)
+    if helper is not None and helper[0] == "dark":
+        return "white"
+    return None
+
+
+def _find_stripe_hex(source: str) -> str | None:
+    """Literal `row_striping_background_color=` hex, else the `stripe(gt)`
+    helper's own fixed constant when that helper is called instead, else
+    None (covers `opt_row_striping()` used bare, with no explicit color --
+    that's great_tables' own library default, not a house-pinned value)."""
+    m = re.search(r"row_striping_background_color\s*=\s*['\"]([^'\"]+)['\"]", source)
+    if m:
+        return m.group(1)
+    if _bare_call_blocks(source, "stripe"):
+        return _STRIPE_HELPER_HEX
+    return None
 
 
 def _constructor_col_present(gt_blocks: list[str], kw: str) -> bool:
@@ -1783,6 +1881,56 @@ def _fmt_column_map(source: str) -> dict[str, str]:
     return out
 
 
+def _extract_quoted_text(value_text: str) -> str:
+    """Concatenated text of every quoted string literal in `value_text`,
+    joined with no separator (matching Python's own implicit adjacent-
+    string-literal concatenation, which is how every multi-line caption/
+    subtitle in this project's ground truths is written). Strips a single
+    wrapping `md(...)`/`html(...)` call first if present -- the string
+    literals inside are unaffected by that wrapper at render time, so the
+    RENDERED text is just the concatenated literals either way.
+    """
+    text = value_text.strip()
+    m = re.match(r"(?:md|html)\s*\((.*)\)\s*$", text, re.S)
+    if m:
+        text = m.group(1)
+    parts = re.findall(r"'((?:\\.|[^'\\])*)'|\"((?:\\.|[^\"\\])*)\"", text, re.S)
+    return "".join(a or b for a, b in parts)
+
+
+def _tab_header_text(source: str, kwarg: str) -> str:
+    """Concatenated `title=`/`subtitle=` text across every `tab_header(...)`
+    call (last call wins per kwarg, mirroring every other "last call
+    determines the final render" convention in this module)."""
+    text = ""
+    for block in _call_arg_blocks(source, "tab_header"):
+        val = _kwarg_value(block, kwarg)
+        if val is not None:
+            text = _extract_quoted_text(val)
+    return text
+
+
+def _source_note_texts(source: str) -> list[str]:
+    """Concatenated text of every `.tab_source_note(...)` call, in source
+    order -- the ground truth's own "caption" is always the first, its
+    "Source: ..." provenance line the second, but a candidate's own
+    ordering isn't assumed; callers that care about ALL caption text
+    (e.g. a keyword-presence check) join every note rather than picking
+    one by position.
+    """
+    out: list[str] = []
+    for block in _call_arg_blocks(source, "tab_source_note"):
+        val = _kwarg_value(block, "source_note")
+        if val is None:
+            positionals = [
+                p for p in _split_top_level_quoted(block) if not re.match(r"[A-Za-z_]\w*\s*=", p)
+            ]
+            val = positionals[0] if positionals else None
+        if val is not None:
+            out.append(_extract_quoted_text(val))
+    return out
+
+
 def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
     """Parse a `table.py` source string into the design choices the rules pin down.
 
@@ -1800,6 +1948,13 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         heading_band_shade, heading_band_hue = _band_shade(band_hex), _classify_hue(band_hex)
     elif band_helper:
         heading_band_shade, heading_band_hue = band_helper
+        # A helper-only call (no literal hex in source) still renders a real
+        # color -- resolve it through the same hue->hex table
+        # `_find_stub_fill_hex` uses, so `heading_band_hex` isn't silently
+        # None for a candidate who correctly used `band(gt, hue="navy")`
+        # instead of a literal `column_labels_background_color=`.
+        if heading_band_shade == "dark":
+            band_hex = _HELPER_HUE_TO_ACCENT_HEX.get(heading_band_hue)
     else:
         heading_band_shade = heading_band_hue = "none"
 
@@ -1862,6 +2017,17 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         "grouping_present": grouping_present,
         "stub_present": stub_present,
         "stub_tint_hue": _find_stub_tint_hue(source),
+        # Universal branding fields (all 6 ground truths now agree on one
+        # fixed value for each -- see check_header_branding/check_stub_tint/
+        # check_stripe_color in comparator.py):
+        "stub_fill_hex": _find_stub_fill_hex(source),
+        "column_labels_font_weight": _find_column_labels_font_weight(source),
+        "column_labels_text_color": _find_column_labels_text_color(source),
+        "stripe_hex": _find_stripe_hex(source),
+        # Literal title/subtitle/caption text (for check_caption_keywords):
+        "title_text": _tab_header_text(source, "title"),
+        "subtitle_text": _tab_header_text(source, "subtitle"),
+        "source_note_texts": _source_note_texts(source),
         "columns_signature": _columns_signature(source),
         "fmt_signature": _fmt_signature(source),
         "domain_signature": _domain_signature(source),
