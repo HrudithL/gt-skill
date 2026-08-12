@@ -641,8 +641,13 @@ def _dom_col_heading_text_white(dom: Optional[str]) -> bool:
             if cm:
                 inline_colors.append(cm.group(1))
     if inline_colors:
-        # Inline overrides the class rule: white iff any label cell is white.
-        return any(_is_white(c) for c in inline_colors)
+        # Inline overrides the class rule for the label cells that carry
+        # one. A single label explicitly forced to a non-white color is a
+        # FAIL regardless of how many other labels are correctly white
+        # (whether via their own inline override or via the default
+        # dark-band CSS) — so every EXPLICITLY-STYLED label must be white,
+        # not merely at-least-one of them.
+        return all(_is_white(c) for c in inline_colors)
     css = re.search(r"\.gt_col_heading\s*\{([^}]*)\}", dom)
     if css:
         cm = color_re.search(css.group(1))
@@ -728,10 +733,20 @@ def _dom_stub_fills(dom: Optional[str]) -> list[Optional[str]]:
     present (same inline-overrides-class pattern the column-label band
     uses); otherwise the CSS rule is read, ignoring its own white default.
     Every cell must be checked individually — reading only the first cell
-    would let a partially-tinted stub (only some rows tinted) pass."""
+    would let a partially-tinted stub (only some rows tinted) pass.
+
+    Grand-summary-row and per-group-summary-row label cells also carry the
+    ``gt_stub`` class (alongside ``gt_grand_summary_row`` / ``gt_summary_row``
+    — great_tables emits variants like ``gt_first_grand_summary_row_bottom``
+    too, always containing ``summary_row``), but ``loc.stub()`` can never
+    target them — it only reaches regular body-row stub cells. Excluding
+    them here keeps a correctly, uniformly tinted body stub from being
+    flagged as non-uniform just because a totals row's deliberately-untinted
+    label cell doesn't match."""
     if not dom:
         return []
     tags = re.findall(r"<th\b[^>]*\bgt_stub\b[^>]*>", dom, re.IGNORECASE)
+    tags = [t for t in tags if "summary_row" not in t.lower()]
     if not tags:
         return []
 
@@ -1441,7 +1456,12 @@ def check_stub_tint(source: str, exec_res: "ExecResult") -> list[Finding]:
         if not _dom_stub_present(exec_res.dom):
             return []
         fills = _dom_stub_fills(exec_res.dom)
-        unique_fills = set(fills)
+        # Normalize case before comparing: two mechanisms writing the same
+        # color in different letter-case (e.g. #EAF0F6 vs #eaf0f6) are the
+        # same fill, not a "not uniform" finding. Matches the case
+        # normalization the color-match check below already applies.
+        normalized_fills = [f.strip().upper() if f else f for f in fills]
+        unique_fills = set(normalized_fills)
         if len(unique_fills) > 1:
             found = ", ".join(sorted(v or "none" for v in unique_fills))
             return [
