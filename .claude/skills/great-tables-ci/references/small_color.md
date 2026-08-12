@@ -359,11 +359,14 @@ in order: (1) raise `gtsave(vwidth=…, vheight=…)` to give it room; (2) raise
 currently mechanically checked).** Every table sizes each column with
 `cols_width(cases={...})` to its own content plus a small buffer — never left to
 auto-width. Exact widths are content-dependent (pick per column based on your actual
-header/value text), but these six padding values are the same, literally, on every
-table — pin them via `tab_options(...)`:
+header/value text). These six padding values are consistent across nearly every
+table in this project's corpus (a couple of ground truths use `6px` instead of `8px`
+for the two horizontal-padding values) — treat `8px`/`8px` as the default and
+`6px`/`6px` as an acceptable, occasionally-used alternative, not a hard universal
+constant. Pin whichever pair you choose via `tab_options(...)`:
 
 ```python
-gt = gt.cols_width(cases={"car": "220px", "hp": "135px", "msrp": "130px"})  # illustrative -- size to YOUR content
+gt = gt.cols_width(cases={"category_col": "180px", "metric_a": "120px", "metric_b": "110px"})  # illustrative -- size to YOUR content
 gt = gt.tab_options(
     heading_padding="6px",
     column_labels_padding="6px",
