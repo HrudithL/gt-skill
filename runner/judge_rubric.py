@@ -271,10 +271,14 @@ separate deterministic mechanism elsewhere in the harness -- self-report \
 `applicable=false` with a rationale saying so. If the ground truth does \
 not group at all, this is not a discretionary editorial choice being \
 tested here either -- self-report `applicable=false`.
-- `color_restraint_quality` is applicable ONLY when the CANDIDATE table \
-itself renders 2 or more distinct measures with a full heatmap-style cell \
-fill. When the candidate has 0 or 1 such measures, the restraint question \
-doesn't arise -- self-report `applicable=false` with a rationale saying so.
+- `color_restraint_quality`'s applicability is decided by the harness, \
+not by you: it is only ever sent to you when the candidate's SOURCE \
+already shows 3 or more distinct measures carrying a full per-value \
+color fill (computed deterministically before your call, never by \
+asking you to count fills in the rendered image). When you ARE asked to \
+score it, always treat it as applicable and never self-report \
+`applicable=false` for it -- just judge the quality of restraint per its \
+anchors above.
 - For every OTHER dimension, self-report `applicable=false` only when the \
 dimension genuinely cannot be assessed from what's rendered (e.g. a table \
 has only one non-stub column on EITHER side, so `column_order_quality` has \

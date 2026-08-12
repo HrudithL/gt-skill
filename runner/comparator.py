@@ -22,11 +22,11 @@ this comparison — nothing ever silently passes or fails.
 visible in the printed report, not just in code comments.
 
 Report shape: a 0–108 total = Data-compliance (0–53) + Formatting-compliance
-(0–55) for a table with fewer than 2 full-heatmap-filled measures; 0–109
-(0–53 + 0–56) once `check_color_restraint_quality` becomes applicable (a
-candidate with 2+ such measures) -- see that check's docstring. Plus one
-line per check naming its tier, what passed/failed, its point value, and
-why (§7).
+(0–55) for a table with fewer than 3 distinct full-per-value-fill measures;
+0–109 (0–53 + 0–56) once `check_color_restraint_quality` becomes applicable
+(a candidate with 3+ such measures, per its own deterministic gate) -- see
+that check's docstring. Plus one line per check naming its tier, what
+passed/failed, its point value, and why (§7).
 
 2026-08-12: the 6 ground truths were rewritten to pin down several
 formerly per-table/discretionary decisions as flat, universal house rules
@@ -5281,21 +5281,45 @@ def check_column_order_quality(cand: dict, truth: dict, meta: dict) -> CheckResu
     return _judge_dimension_check(meta, "column_order_quality", "Column order quality", 2)
 
 
+_COLOR_RESTRAINT_MIN_FILLS = 3
+
+
 def check_color_restraint_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    # New: a table that already carries 2+ full heatmap fills shouldn't
-    # reach for yet another full fill on a secondary-but-notable measure --
-    # bold text or text color should carry that emphasis instead, so the
-    # measure(s) that anchor the table's main story stay visually distinct.
-    # Weight is deliberately the minimum expressible value (1): this is a
-    # light, general judgment call, not a mechanical gate, and `weight=1`
-    # under `_judge_dimension_check`'s `_round_points(score/5, 1)` rounds a
-    # judge score of 1-2 to 0 points and 3-5 to 1 point (Python's
-    # round-half-to-even on 0.2/0.4/0.6/0.8/1.0) -- it ties, not exceeds,
-    # `check_label_concept_correctness`, the other minimum-weighted
-    # judge-backed check. The judge itself gates applicability (candidate
-    # has fewer than 2 full heatmap fills -- see judge_rubric.py), so no
-    # extra gating is needed here beyond the shared _judge_dimension_check
-    # degrade path.
+    """A table that already carries several full per-value color fills
+    shouldn't reach for yet another full fill on a measure that's clearly
+    secondary/incidental to the table's evident main subject -- bold text
+    or text color should carry that emphasis instead, so the measure(s)
+    that anchor the table's main story stay visually distinct. Weight is
+    deliberately the minimum expressible value (1): this is a light,
+    qualitative judgment call, not a mechanical gate, and `weight=1` under
+    `_judge_dimension_check`'s `_round_points(score/5, 1)` rounds a judge
+    score of 1-2 to 0 points and 3-5 to 1 point (Python's
+    round-half-to-even on 0.2/0.4/0.6/0.8/1.0) -- it ties, not exceeds,
+    `check_label_concept_correctness`, the other minimum-weighted
+    judge-backed check.
+
+    Applicability is gated HERE, deterministically, rather than left to the
+    judge's own self-report from the rendered PNG: `_distinct_colored_
+    measures` (the same source-derived helper `check_colored_measure_
+    selection`/`check_hue_collision` already use to count real, currently-
+    visible measures) is more reliable than asking a vision model to count
+    fills in a downscaled image, and a candidate below `_COLOR_RESTRAINT_
+    MIN_FILLS` (3, not 2) has nothing to exercise restraint ON YET -- the
+    anchors describe a candidate that already has multiple fills and gives
+    "ANOTHER" one to a secondary measure, which requires at least 3 to be a
+    real (non-vacuous) scenario. Below that threshold this returns `_na(...)`
+    directly, WITHOUT invoking the judge at all for this dimension.
+    """
+    cand_mechanics = cand["tier1"].get("color_mechanics", [])
+    n_measures = len(_distinct_colored_measures(cand_mechanics, cand))
+    if n_measures < _COLOR_RESTRAINT_MIN_FILLS:
+        return _na(
+            "Color-restraint quality",
+            f"candidate has only {n_measures} distinct per-value color "
+            f"fill(s) (source-derived), fewer than the {_COLOR_RESTRAINT_MIN_FILLS} "
+            "needed for a restraint question to even arise",
+            tier="judge",
+        )
     return _judge_dimension_check(meta, "color_restraint_quality", "Color-restraint quality", 1)
 
 
