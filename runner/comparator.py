@@ -2837,9 +2837,14 @@ def _round_points_covered(covered: int, total: int, possible: int) -> int:
     but-missing item into full credit.
 
     Codex round-13 finding: covering 10 of 11 canonical colored measures
-    (`check_colored_measure_selection`) computes `round((10/11)*4) == 4`
-    -- a perfect score despite one required measure being visibly
-    uncolored. The identical shape was confirmed ALREADY LIVE (not just
+    (`check_colored_measure_selection`) used to compute `round((10/11)*4)
+    == 4` -- a perfect score despite one required measure being visibly
+    uncolored. This check's own point pool for that call is now 6, not 4
+    (its old ceiling-plus-coverage split was removed in favor of scoring
+    coverage over the full weight); recomputed at that pool, `round((10/
+    11)*6) == 5` -- no longer a perfect score at this specific ratio, but
+    the identical overshoot shape (ordinary rounding reaching `possible`
+    while `covered < total`) is still confirmed ALREADY LIVE (not just
     theoretical) in this corpus for `check_sequential_vs_diverging`/
     `check_domain_computation` (both now weighted per-column via
     `_effective_mechanics_units`, easily reaching a denominator of 10+
@@ -3145,6 +3150,20 @@ def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> Chec
     cand_mechanics = cand["tier1"].get("color_mechanics", [])
     canonical_colored = meta["CANONICAL_MEASURES"].get("colored", [])
     if not canonical_colored:
+        # Full marks here are intentional, not an oversight: this check
+        # only ever measures COVERAGE of the ground truth's own required
+        # canonical colored measures, so when none are required there is
+        # nothing left for it to check -- even a candidate that rainbow-
+        # colors many unrelated columns for no reason still scores 6/6 on
+        # THIS check alone. Penalizing that kind of purposeless/excessive
+        # coloring is deliberately NOT this check's job; it's the sibling
+        # `color_restraint_quality` judge dimension (PR #96, branch
+        # `skill-align/judge-color-restraint-dimension`), which triggers
+        # whenever a candidate has 2+ full heatmap fills regardless of
+        # what the ground truth requires. None of the current 6 ground
+        # truths have an empty canonical-colored-measures list, so this
+        # branch is latent today, but the coverage/restraint split is a
+        # matched pair once both PRs land on `skill-align/root`.
         identity_pts = 6
         identity_detail = "ground truth declares no canonical colored measures"
     elif not cand["tier2"].get("ok"):
