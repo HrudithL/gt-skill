@@ -64,27 +64,40 @@ there, not the subtitle) so the number is reproducible. Do
 **not** silently pick one — an unstated choice makes the same prompt yield different
 numbers across runs.
 
-### Hero-measure tie-break when 2+ measures are named (Step 3, before `data_color`)
+### Hero-measure redundancy check when 2+ measures are named (Step 3, before `data_color`)
 
 **IF the prompt names 2+ numeric measures with no explicit ranking** ("Horsepower and
-Price," "density changes... with percentage changes") **⇒ do NOT default to coloring
-every one of them just because each one qualifies.** Qualifying is not the same as
-each one deserving the fill — resolve which ONE gets the fill, in this order:
+Price," "density changes... with percentage changes," "temperature, wind speed, and
+ozone") **⇒ color EACH one that represents a genuinely distinct dimension of what the
+request is about.** There is **no cap forcing you down to one** colored measure —
+qualifying (see the trigger in `big_color/column_gradient_fill.md`) plus being a
+distinct dimension of the story is enough to earn a fill:
 
-1. An explicitly named ranking/selection metric ("top 10 by revenue") always wins the
-   colored slot.
-2. Otherwise, the measure in the request's **topic clause** — the noun phrase right
-   after "a table of/showing…" — gets the fill; a measure named later as a secondary
-   comparison stays **fully plain** (no fill, no bold) — not a second fill, and not a
-   consolation bold either.
-3. Genuinely tied? Color the one with the wider real spread across the selected rows,
-   and leave the other plain.
+- `towny_growth_trends.py` — density (a level) and inter-Census percent change (a
+  rate of change) are different concepts, so **both** measures are colored.
+- `airquality_monthly_summary.py` — ozone and temperature are different physical
+  measurements, so **both** are colored (wind speed stays plain, but because it
+  carries no narrative role in this request, not because of a numeric cap).
+- `sp500_monthly_performance.py` — percent change, average volume, best-day gain, and
+  worst-day loss are four distinct dimensions of "monthly performance," so all four
+  carry some form of color treatment.
 
-A secondary measure that's merely mentioned, not the request's main comparison, is
-exactly the plain-text case this file's own rule describes ("a named measure that
-doesn't earn the fill renders fully plain") — that rule only does its job if you
-actually identify which named measure is secondary instead of coloring every measure
-that seems eligible.
+**Only skip a fill when two candidate measures are near-redundant restatements of the
+same underlying idea** — two different proxies for essentially the same question,
+where coloring both would just be two heatmaps competing for the same visual
+attention without adding information. In that narrow case, color the one the
+request's phrasing emphasizes as the actual ask, and leave the other plain:
+
+- `gtcars_hp_price.py` — horsepower and price are both rough proxies for "how
+  impressive is this car": redundant, not distinct, dimensions. Price is the natural
+  financial hero for this kind of request, so **only `msrp` is colored**; `hp` stays
+  fully plain (no fill, no bold).
+
+A secondary measure that's merely mentioned, and isn't a distinct dimension of the
+request or the thing its phrasing emphasizes, is exactly the plain-text case this
+file's own rule describes ("a named measure that doesn't earn the fill renders fully
+plain") — that rule only does its job if you actually identify redundancy instead of
+reflexively capping the colored count at one.
 
 ---
 
