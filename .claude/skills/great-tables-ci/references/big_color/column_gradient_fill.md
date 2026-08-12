@@ -9,16 +9,18 @@ measure** (the hero, if it is the only one that qualifies). Deterministic, not a
 call. (Below 5 rows a gradient reads as random pastel — it does not qualify; use a
 targeted highlight instead, see the last rule.)
 
-"Qualifies" is not the same as "is colored": the router caps a table at **≤ 2 colored
-measures**. When **1 or 2** measures qualify, colour **all** of them (each is
-mandatory — do not leave a qualifying measure uncoloured). When **3 or more** qualify,
-you MUST colour exactly 2 — the ceiling wins — and the priority rule below picks
-**which** 2.
+"Qualifies" is not the same as "earns a full heatmap fill." When **one or two**
+measures qualify, give **all** of them a full fill (each is mandatory — do not leave
+a qualifying measure with no emphasis at all). When **three or more** qualify, the
+priority rule below ranks them; the top-ranked ones earn the full fill, and a
+qualifying measure that doesn't make the cut steps down to **bold text and/or a text
+color** instead of a competing heatmap fill — the color-restraint principle
+(`small_color.md`) — not to no emphasis at all.
 
-## Selecting the ≤2 when 3+ qualify (deterministic priority)
+## Which measures earn the full fill first (deterministic priority)
 
-Rank every qualifying measure by this order and take the **top 2** (total and computable,
-so two runs on the same prompt+data pick the SAME 2 columns):
+Rank every qualifying measure by this order (total and computable, so two runs on the
+same prompt+data reach the same ranking):
 
 1. **Prompt-named / emphasised measures first**, in the order they appear in the
    prompt. A measure the user explicitly names, asks to "show/highlight/compare", or
@@ -27,9 +29,13 @@ so two runs on the same prompt+data pick the SAME 2 columns):
    priority (e.g. none named, or several named at once), the one whose column appears
    earlier (smallest column index) wins.
 
-Take the first 2 from this ranking; colour those, leave the rest uncoloured. A measure
-that spans several facet columns (a matrix/heatmap block) counts as **one** measure
-occupying **one** of the 2 slots.
+Give a full fill to as many top-ranked qualifying measures as genuinely earn it for
+this data — how many is a taste call weighed against how busy the table already looks,
+not a fixed count (see the color-restraint principle in `small_color.md`). Once two or
+more measures already carry a full heatmap fill, any further one steps down to bold
+text/text color rather than adding another competing heatmap. A measure that spans
+several facet columns (a matrix/heatmap block) counts as **one** measure in this
+ranking.
 
 ## When to use
 
