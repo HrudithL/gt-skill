@@ -2877,8 +2877,9 @@ class CheckResult:
     # "mechanical" (regex/AST/execution -- provably correct) or "judge" (the
     # LLM call scored this dimension). Defaults to "mechanical" so every
     # pre-existing positional `CheckResult(...)` call site in this file
-    # (there are dozens) needs no change -- only the 1 moved check and 5
-    # new judge-backed checks pass `tier="judge"` explicitly.
+    # (there are dozens) needs no change -- only the judge-backed checks
+    # (the 1 moved check plus every dimension added since, see
+    # `judge_rubric.DIMENSIONS`) pass `tier="judge"` explicitly.
     tier: str = "mechanical"
 
 
@@ -2895,10 +2896,11 @@ def _na(name: str, detail: str, tier: str = "mechanical") -> CheckResult:
 
 
 def _judge_dimension_check(meta: dict, dimension_key: str, name: str, points: int) -> CheckResult:
-    """Shared body for every judge-backed check (the 1 moved check + 5 new
-    ones): look up ``dimension_key`` in the single combined judge result
-    ``compare()`` stashes in ``meta["_judge_result"]`` (a
-    ``dict[str, judge_module.JudgeDimension]``, see that function), convert
+    """Shared body for every judge-backed check (the 1 moved check plus
+    every dimension added since -- see ``judge_rubric.DIMENSIONS`` for the
+    live, authoritative count): look up ``dimension_key`` in the single
+    combined judge result ``compare()`` stashes in ``meta["_judge_result"]``
+    (a ``dict[str, judge_module.JudgeDimension]``, see that function), convert
     ``.score`` (1-5) to ``points`` via the same ``_round_points`` helper
     every mechanical check already uses, and degrade to the existing
     ``_na()`` pattern when the dimension isn't applicable -- whether because
@@ -5447,8 +5449,8 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
     `candidate_path.with_suffix(".png")` -- the candidate SCRIPT's own
     filename stem -- so a candidate invoked as `/tmp/submission.py` that
     correctly writes `/tmp/table.png` (exactly as required) had the judge
-    looking for `/tmp/submission.png` instead: either degrading all 4
-    judge-backed checks to unavailable for a perfectly correct candidate,
+    looking for `/tmp/submission.png` instead: either degrading every
+    judge-backed check to unavailable for a perfectly correct candidate,
     or worse, silently judging a stale, unrelated PNG that happened to
     already exist at that wrong path. `candidate_path.parent /
     "table.png"` matches the actual mandated-artifact contract (see
@@ -5493,9 +5495,10 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
     elif _judge_png_is_stale(candidate_png, candidate_path):
         # Codex round-4 finding: see `_judge_png_is_stale`'s docstring --
         # degrade exactly like `judge()`'s own documented "unavailable"
-        # contract (all 4 keys, applicable=False, rationale prefixed with
-        # the literal "judge unavailable: " string) rather than scoring a
-        # PNG that predates the source it's supposed to represent.
+        # contract (every key in DIMENSION_KEYS, applicable=False, rationale
+        # prefixed with the literal "judge unavailable: " string) rather
+        # than scoring a PNG that predates the source it's supposed to
+        # represent.
         judge_unavailable_reason = f"judge unavailable: candidate PNG is older than its source .py ({candidate_png} predates {candidate_path})"
     elif _judge_png_is_stale(truth_png, ground_truth_path):
         judge_unavailable_reason = f"judge unavailable: ground-truth PNG is older than its source .py ({truth_png} predates {ground_truth_path})"

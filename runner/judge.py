@@ -364,11 +364,11 @@ def _extract_tool_input(response: Any) -> Any:
 def _validate_and_build(payload: Any) -> dict[str, JudgeDimension] | None:
     """Hand-rolled shape/type validation (no ``jsonschema`` dependency, per
     this repo's constraint) of the model's claimed judgment. All-or-nothing:
-    if ANY of the 7 entries fails validation, the whole response is
-    considered unparseable (returns ``None``) rather than partially
-    salvaging some dimensions and silently patching others -- simpler, and
-    it never risks quietly fabricating a value the model didn't actually
-    provide in valid form.
+    if ANY entry (one per key in ``DIMENSION_KEYS``) fails validation, the
+    whole response is considered unparseable (returns ``None``) rather than
+    partially salvaging some dimensions and silently patching others --
+    simpler, and it never risks quietly fabricating a value the model
+    didn't actually provide in valid form.
     """
     if not isinstance(payload, dict):
         return None
