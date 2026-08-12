@@ -50,13 +50,17 @@ table needs — remove the unused import, but never let "I didn't get to
 it" cost you an item on this list.
 
 **Conditional does not mean skippable — it means "evaluate the gate every
-time."** `stripe()` (>=10 body rows AND body not essentially fully
-color-filled) and `stub_tint()` (a stub exists) are genuinely
+time."** `stripe()` (apply UNLESS the body's visible non-stub/non-group
+columns are already 100% covered by `data_color`/`heatmap` fills — a
+heatmap that already paints every real cell is the one case where a
+stripe has nothing left to show through on; row count is NOT part of this
+gate anymore) and `stub_tint()` (a stub exists) are genuinely
 data-dependent, not unconditional like the six items above — but that
 means you check their gate condition on every table, not that you can
-forget they exist. A 12-row table with only 2 of 6 columns colored that
-ships with no striping and no stub tint isn't "keeping it simple," it's
-skipping two items whose gate condition was clearly met.
+forget they exist. A 5-row table with a mostly-plain body that ships with
+no striping and no stub tint isn't "keeping it simple," it's skipping two
+items whose gate condition was clearly met — striping is the DEFAULT now,
+not something reserved for long tables.
 
 ## Ambiguous measures / selection criteria — pick ONE definition, STATE it
 
@@ -264,13 +268,15 @@ strength. Only ONE row deserves its own distinct, highlighted treatment: a
 summary/total row (see below). Column labels, the stub, and group headers
 are all quieter than that, and quieter than each other:
 
-1. **Column-label band** — `band(gt, hue=...)` — the house DEFAULT is the
-   `accent_tint` (a clearly-visible light tint, not a solid fill) — the
-   MORE visible of the band/stub pairing, since the band spans every
-   column and sits right under the title. The heatmap is still the star
-   of the table, not the header; reach for `shade="dark"` (a solid
-   `accent` fill + white text) only for a pure categorical/text table with
-   no heatmap at all, where the band IS the color story.
+1. **Column-label band** — `band(gt, hue=...)` — the house DEFAULT is now
+   `shade="dark"` (a solid `accent` fill, `#08306B` for navy, + bold white
+   text), ALWAYS, regardless of whether the table has a heatmap. This is a
+   branding surface, not a data surface — it stays the same deep navy
+   whether the table's own heatmap is Blues, Reds, RdYlGn, or nothing at
+   all. (Earlier guidance reserved `shade="dark"` for a no-heatmap table
+   and defaulted colored tables to the lighter `accent_tint` band instead;
+   that's no longer the house convention — every current reference table
+   uses the dark band, with or without a heatmap present.)
 2. **Stub** — `stub_tint(gt, hue=...)` — the quieter `washed` tint. A
    narrower, secondary surface next to the more prominent band, so it
    stays subtler rather than competing with it.
@@ -316,9 +322,10 @@ cell. See the injected `yoy_change` gap on `Zeta Kit` and the blank
 
 Hard rule, same as the other two skills: at most 2 columns get continuous
 color treatment (`data_color`/`heatmap`). A pure categorical/text table
-gets no fill at all — its anchor is the heading band, switched to
-`band(gt, shade="dark", hue=...)` for this no-heatmap case only (see
-"Unified color theme" below). `house_table.py` uses exactly 2:
+gets no fill at all — its anchor is the heading band, which is
+`band(gt, shade="dark", hue=...)` regardless (see "Unified color theme"
+below — dark is the universal default now, not a no-heatmap-only
+fallback). `house_table.py` uses exactly 2:
 `revenue` (sequential) and `yoy_change` (diverging); `status` is a 3rd
 color story but is a categorical chip, not a heatmap, so it doesn't count
 against the ceiling.

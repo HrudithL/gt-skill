@@ -21,9 +21,24 @@ this comparison — nothing ever silently passes or fails.
 ``CheckResult.tier`` ("mechanical" or "judge") makes the distinction
 visible in the printed report, not just in code comments.
 
-Report shape: a 0–97 total = Data-compliance (0–53) + Formatting-compliance
-(0–44), plus one line per check naming its tier, what passed/failed, its
+Report shape: a 0–108 total = Data-compliance (0–53) + Formatting-compliance
+(0–55), plus one line per check naming its tier, what passed/failed, its
 point value, and why (§7).
+
+2026-08-12: the 6 ground truths were rewritten to pin down several
+formerly per-table/discretionary decisions as flat, universal house rules
+(deep-navy header/stub branding regardless of a table's own heatmap hue,
+row striping by default, hero-uncolored measures never bold, force_sign
+on signed percent measures, and a revived CAPTION_KEYWORDS check now that
+captions are one short sentence each) -- see `check_header_branding`,
+`check_stub_tint`, `check_stripe_color`, `check_hero_not_bold`,
+`check_force_sign`, `check_caption_keywords` (new, +16 Formatting-
+compliance points total) and the rewritten `check_striping_gate` (same
+5 points, new formula). `check_band_hue_harmonization` is retired (now a
+permanent 0/0 N/A stub, kept for its docstring's explanation rather than
+silently vanishing) -- its old "light band when colored, dark band
+matched to that measure's hue when not" formula is exactly backwards
+against every current ground truth.
 
 Per ``.planning/12-consensus-tuning.md``: 6 Formatting-compliance checks
 were removed entirely across two passes, all for the same reason -- field
@@ -1814,6 +1829,14 @@ _UNRESOLVED_SCALE_VALUES = object()
 # expression) -- kept distinct so `_fmt_covers_semantic_type` doesn't default
 # an unresolvable expression to the wrong assumption either way.
 _UNRESOLVED_FMT_NUMBER_DECIMALS = object()
+
+# Same sentinel shape as `_UNRESOLVED_SCALE_VALUES`/`_UNRESOLVED_FMT_NUMBER_
+# DECIMALS`, for `.fmt_percent(...)`'s `force_sign=` argument -- "touched by
+# a call, but the argument itself is unresolvable" (a variable, an
+# expression), distinct from `None` ("never touched at all," which resolves
+# with total confidence to great_tables' own `force_sign=False` default).
+# See `check_force_sign`.
+_UNRESOLVED_FORCE_SIGN = object()
 # `heatmap()`'s own hue->palette resolution table, mirroring `.claude/
 # skills/great-tables-ci/scripts/gt_consistency.py`'s `PALETTE["sequential"]`/
 # `PALETTE["diverging"]` dicts and its `_resolve_palette(kind, hue)` helper
@@ -2205,6 +2228,59 @@ def _fmt_percent_scale_values_map(source: str, visible_columns: set[str] | None)
     return out
 
 
+def _fmt_percent_force_sign_map(source: str, visible_columns: set[str] | None) -> dict[str, object]:
+    """`{column-or-_ALL_COLUMNS -> the resolved `force_sign=` state}` for
+    every `.fmt_percent(...)` call, mirroring `_fmt_percent_scale_values_
+    map`'s exact column-resolution/override-tracking shape but for
+    `force_sign` -- the kwarg that puts a leading "+" on a positive percent
+    value (great_tables' own default is `force_sign=False`, a bare
+    "3.8%"). Every current ground truth with a genuinely SIGNED percent
+    measure (pct_change, growth %, best/worst day -- anything that can be
+    either a gain or a loss) uses `force_sign=True`, so a reader can tell
+    +3.8% from -3.8% at a glance without checking for a minus sign alone.
+    See `check_force_sign`, which only requires this for a percent column
+    whose real data actually crosses zero -- an always-positive percent
+    has no genuine "sign" to force.
+    """
+    var_map = convergence._list_var_map(source)
+
+    def _resolve_cols(val: str) -> list[str]:
+        if visible_columns is not None and _is_unresolvable_columns_selector(val):
+            parsed = _parse_cs_selector(val)
+            if parsed is not None:
+                kind, pattern = parsed
+                return sorted(c for c in visible_columns if _cs_selector_matches(kind, pattern, c))
+        return convergence._resolve_columns_list(val, var_map)
+
+    out: dict[str, object] = {}
+    for name, block in _ast_fmt_calls(source):
+        if name != "fmt_percent":
+            continue
+        positionals = [
+            p for p in convergence._split_top_level_quoted(block)
+            if not re.match(r"[A-Za-z_]\w*\s*=", p) and not p.strip().startswith("**")
+        ]
+        val = convergence._kwarg_value(block, "columns")
+        if val is None:
+            val = positionals[0] if positionals else None
+        fs_val = convergence._kwarg_value(block, "force_sign")
+        if fs_val is None:
+            # Genuinely omitted from this call -- great_tables' own
+            # default (False) applies, explicitly overriding whatever an
+            # earlier call recorded for these columns.
+            fs_literal: object = "False"
+        else:
+            unquoted = convergence._unquote(fs_val)
+            resolved = unquoted.strip() if unquoted else None
+            fs_literal = resolved if resolved in ("True", "False") else _UNRESOLVED_FORCE_SIGN
+        if val is None or val.strip() == "None":
+            out[convergence._ALL_COLUMNS] = fs_literal
+            continue
+        for col in _resolve_cols(val):
+            out[col] = fs_literal
+    return out
+
+
 def _fmt_number_decimals_map(source: str, visible_columns: set[str] | None) -> dict[str, object]:
     """`{column-or-_ALL_COLUMNS -> the resolved `decimals=` state}` for
     every `.fmt_number(...)` call, mirroring `_fmt_percent_scale_values_
@@ -2394,6 +2470,10 @@ def build_fingerprint(py_path: Path) -> dict:
     # semantic_type`/`check_summary_row_formatting` can validate it
     # against the matched column's actual data shape.
     tier1["fmt_percent_scale_values_map"] = _fmt_percent_scale_values_map(source, visible_columns)
+    # See `_fmt_percent_force_sign_map`'s own docstring -- `fmt_percent`'s
+    # `force_sign` kwarg is tracked separately so `check_force_sign` can
+    # validate it against a signed percent-semantic column's real data.
+    tier1["fmt_percent_force_sign_map"] = _fmt_percent_force_sign_map(source, visible_columns)
     # Codex round-14 finding: see `_fmt_number_decimals_map`'s own
     # docstring -- `fmt_number`'s `decimals` kwarg is tracked separately
     # so `check_fmt_semantic_type`/`check_summary_row_formatting` can
@@ -4072,7 +4152,7 @@ DATA_CHECKS: list[CheckFn] = [
 
 
 # ----------------------------------------------------------------------- #
-# Formatting-compliance checks (§9, 44 pts)
+# Formatting-compliance checks (§9, 55 pts as of the 2026-08-12 rewrite)
 # ----------------------------------------------------------------------- #
 
 def _domain_element_symmetric(lo: str, hi: str, value_range: tuple[float, float] | None = None) -> bool:
@@ -4327,6 +4407,23 @@ def check_frame_hairlines_dividers(cand: dict, truth: dict, meta: dict) -> Check
 
 def check_striping_gate(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "Striping gate correctness"
+    # 2026-08-12 rewrite: every ground truth in this project stripes by
+    # DEFAULT now, regardless of row count -- `airquality_monthly_summary`
+    # (5 rows) and `towny_growth_trends` (11 of 13 body columns already
+    # heatmapped) both stripe anyway, by explicit author direction, which
+    # directly contradicted the old "n_rows >= 10 AND body not ~80%
+    # color-covered" formula. `islands_sizes` (a single, fully-colored body
+    # column) is the one case that doesn't stripe -- not because of row
+    # count, but because there's no plain cell left for a stripe to ever
+    # show through on. The new rule: expected=True always, UNLESS the
+    # visible body is COMPLETELY (100%, not ~80%) covered by color, in
+    # which case either choice is acceptable.
+    #
+    # The old "a bold hero column counts toward fully_filled" branch is
+    # gone: the newer universal rule is that a `CANONICAL_MEASURES.
+    # hero_uncolored` column is NEVER bold (see `check_hero_not_bold`), so
+    # crediting bold text here would now reward exactly the thing the other
+    # check penalizes.
     n = _n_rows(cand)
     if n is None:
         # Codex round-1 finding: `_n_rows()` returns `None` exactly when
@@ -4342,106 +4439,213 @@ def check_striping_gate(cand: dict, truth: dict, meta: dict) -> CheckResult:
     t1 = cand["tier1"]
     mechanics = t1.get("color_mechanics", [])
     # Structural columns (the stub, the group column) can never be colored
-    # or bolded as a "measure" -- counting them in the denominator dilutes
-    # a genuinely fully-covered body (e.g. 3 colored/bold columns + 1 stub
-    # would read as 3/4 = 0.75, under the 0.8 gate, even though every real
+    # as a "measure" -- counting them in the denominator dilutes a
+    # genuinely fully-covered body (e.g. 3 colored columns + 1 stub would
+    # read as 3/4 = 0.75, under a naive threshold, even though every real
     # data column IS accounted for).
     tier2 = cand["tier2"]
     visible = _visible_columns(cand) - {tier2.get("stub_column"), tier2.get("group_column")}
-    # "Essentially fully filled" counts a bold, uncolored HERO column as
-    # accounted-for too, not just an actually-colored one — Step 3's rule
-    # is that the hero gets bold text specifically AS THE ALTERNATIVE to a
-    # third color fill, so it occupies the same "this column carries
-    # meaning" role a colored measure would for this gate's purposes.
-    #
-    # Codex round-4 finding (real gaming vector): counting EVERY bold
-    # column here, unrestricted, let a candidate bold every visible
-    # column -- not just the declared hero measure -- to manufacture
-    # "fully filled" and dodge the striping requirement on a long table
-    # entirely. Only bold columns that VALUE-MATCH a declared `CANONICAL_
-    # MEASURES.hero_uncolored` entry count toward this exemption; with no
-    # declared hero measure to verify against, bold text alone no longer
-    # counts (there's nothing to confirm it's a genuine hero column and
-    # not just gaming).
-    hero_measures = meta["CANONICAL_MEASURES"].get("hero_uncolored", [])
-    bold_cols_raw = set(t1.get("bold_columns") or [])
     accounted_for: set[str] = set()
-    if hero_measures and bold_cols_raw and cand["tier2"].get("ok") and truth["tier2"].get("ok"):
-        for hm in hero_measures:
-            matched_col = _match_measure_by_value(cand, truth, hm)
-            if matched_col is not None and matched_col in bold_cols_raw:
-                accounted_for.add(matched_col)
     for e in mechanics:
         accounted_for |= set(_mechanics_columns(e, cand))
-    fully_filled = bool(accounted_for) and bool(visible) and (len(accounted_for & visible) / len(visible) >= 0.8)
-    expected = n >= 10 and not fully_filled
+    fully_colored = bool(visible) and (accounted_for & visible) == visible
     actual = bool(t1.get("striping_present"))
-    ok = expected == actual
-    return CheckResult(name, 5, 5 if ok else 0, ok, f"n_rows={n}, fully_filled={fully_filled} -> expected striping={expected}, actual={actual}")
+    if fully_colored:
+        return CheckResult(
+            name, 5, 5, True,
+            f"n_rows={n}, body is 100% color-covered -> striping optional (islands_sizes-style case), actual={actual}",
+        )
+    ok = actual is True
+    return CheckResult(name, 5, 5 if ok else 0, ok, f"n_rows={n}, body not fully color-covered -> expected striping=True, actual={actual}")
 
 
 _SEQ_PALETTE_TO_DA_FAMILY = {"blues": "navy", "greens": "forest", "reds": "oxblood", "oranges": "oxblood"}
 
 
 def check_band_hue_harmonization(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    # 2026-08-12 rewrite: this used to expect a LIGHT accent_tint band
+    # whenever any measure was colored, and a hue matching that measure's
+    # own palette family -- reserving a solid, branded "dark" band for a
+    # pure-categorical table with no heatmap at all. That's now backwards:
+    # every one of the 6 ground truths uses the SAME deep navy (#08306B),
+    # bold, white-text header, regardless of whether (or what) the body
+    # heatmaps -- gtcars_top10_by_country's Blues heatmap, airquality's
+    # Reds+Blues pair, and sp500's RdYlGn/Greens/Reds trio all get the
+    # identical navy header. The header is now a fixed branding surface,
+    # decoupled from each table's own measure hue -- see `check_header_
+    # branding` below, which replaces the old hue-harmonization logic
+    # entirely with a flat, universal hex/weight/text-color check.
     name = "Heading band hue harmonization"
+    return _na(name, "superseded by check_header_branding (2026-08-12 -- header is now a fixed universal navy, not hue-matched per table)")
+
+
+_HEADER_BRANDING_HEX = "#08306B"
+
+
+def check_header_branding(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    """Header/stub branding: deep navy, bold, white text -- a fixed,
+    table-independent rule now (see the module note on the retired
+    `check_band_hue_harmonization` just above), not something derived from
+    which measure the table happens to color. All 6 ground truths agree
+    on the exact same hex for both the header background and the stub
+    tint; this check reads that literal value directly rather than
+    deriving an "expected" one per table.
+    """
+    name = "Header branding (deep navy, bold, white text)"
     t1 = cand["tier1"]
-    # Codex round-12 finding: `bool(t1.get("color_mechanics"))` counts any
-    # `data_color()`/`heatmap()` call as "has color" purely syntactically
-    # -- a candidate that colors a column and then hides it entirely
-    # (`cols_hide(...)`) still counted as having visible Big Color, even
-    # though a hidden colored column renders as an effectively UNCOLORED
-    # table and should get the dark-band rule instead. Intersect each
-    # entry's resolved target columns with the ACTUALLY VISIBLE column
-    # set before deciding whether real, visible color exists.
-    visible_cols = _visible_columns(cand)
-    has_color = any(
-        set(_mechanics_columns(entry, cand)) & visible_cols
-        for entry in t1.get("color_mechanics", [])
+    hex_ok = _normalize_css_color(t1.get("heading_band_hex")) == _HEADER_BRANDING_HEX
+    weight_ok = (t1.get("column_labels_font_weight") or "").lower() == "bold"
+    text_color_ok = _normalize_css_color(t1.get("column_labels_text_color")) == _normalize_css_color("white")
+    pts = (2 if hex_ok else 0) + (1 if weight_ok else 0) + (2 if text_color_ok else 0)
+    detail = (
+        f"header background: expected {_HEADER_BRANDING_HEX}, got {t1.get('heading_band_hex')!r} "
+        f"({'OK' if hex_ok else 'MISMATCH'}); "
+        f"column_labels_font_weight: expected bold, got {t1.get('column_labels_font_weight')!r} "
+        f"({'OK' if weight_ok else 'MISMATCH'}); "
+        f"column-label text color: expected white, got {t1.get('column_labels_text_color')!r} "
+        f"({'OK' if text_color_ok else 'MISMATCH'})"
     )
-    expected_shade = "light" if has_color else "dark"
-    actual_shade = t1.get("heading_band_shade", "none")
-    shade_ok = actual_shade == expected_shade
-    shade_pts = 2 if shade_ok else 0
-    # Hue harmonization is only strictly checkable when there's exactly one
-    # DISTINCT colored measure overall (same (palette, domain, columns)
-    # dedup check_colored_measure_selection/check_hue_collision use) AND
-    # that one measure uses a recognized sequential palette -- a
-    # diverging-only table, "no color", or MULTIPLE measures (even if only
-    # one of them is a recognized-sequential name -- e.g. one sequential +
-    # one diverging) all mean there's no longer a single, unambiguous
-    # color story to harmonize the band to. Counting only recognized-
-    # sequential entries (an earlier approach) wrongly entered strict mode
-    # for a valid 2-measure table where the second measure just happened
-    # to be diverging (and thus excluded from that count).
-    distinct_measures = _distinct_colored_measures(t1.get("color_mechanics", []), cand)
-    sole_palette = (distinct_measures[0].get("palette") or "").lower() if len(distinct_measures) == 1 else None
-    expected_family = None
-    if has_color and sole_palette is not None:
-        if sole_palette in _SEQ_PALETTE_TO_DA_FAMILY:
-            expected_family = _SEQ_PALETTE_TO_DA_FAMILY[sole_palette]
-        elif sole_palette in _EXTENDED_FAMILY_HEXES:
-            # Codex round-2 finding: a `heatmap(..., hue="navy")` HELPER
-            # call stores the HUE FAMILY NAME directly as `palette` (see
-            # `_enrich_color_mechanics`'s heatmap branch: `palette =
-            # hue-kwarg-or-"default"`), not a ColorBrewer palette name --
-            # `_SEQ_PALETTE_TO_DA_FAMILY` only ever mapped ColorBrewer
-            # names (`blues`/`greens`/`reds`/`oranges`), so a helper-based
-            # candidate's provably-wrong band hue got "unverifiable"
-            # benefit of the doubt instead of being scored. When the
-            # stored value is ALREADY a recognized DA family name
-            # (`_EXTENDED_FAMILY_HEXES`'s keys), that IS the expected
-            # family directly.
-            expected_family = sole_palette
-    if expected_family is not None:
-        hue_ok = t1.get("heading_band_hue") == expected_family
-        hue_detail = f"expected hue family '{expected_family}' for palette '{sole_palette}', got '{t1.get('heading_band_hue')}'"
-    else:
-        hue_ok = True
-        hue_detail = "hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)"
-    hue_pts = 3 if hue_ok else 0
-    pts = shade_pts + hue_pts
-    return CheckResult(name, 5, pts, pts == 5, f"shade expected={expected_shade} actual={actual_shade}; {hue_detail}")
+    return CheckResult(name, 5, pts, pts == 5, detail)
+
+
+def check_stub_tint(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    """Stub tint: washed navy (#EAF0F6), whenever a stub exists -- fixed,
+    universal, same reasoning as `check_header_branding`."""
+    name = "Stub tint (washed navy)"
+    t1 = cand["tier1"]
+    if not t1.get("stub_present"):
+        return _na(name, "candidate has no stub")
+    ok = _normalize_css_color(t1.get("stub_fill_hex")) == "#EAF0F6"
+    return CheckResult(name, 2, 2 if ok else 0, ok, f"expected #EAF0F6, got {t1.get('stub_fill_hex')!r}")
+
+
+def check_stripe_color(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    """Row-stripe color: flat neutral grey (#F6F6F6), whenever striping is
+    present -- fixed, universal, same reasoning as `check_header_
+    branding`. N/A when the candidate doesn't stripe at all (that absence
+    is `check_striping_gate`'s job to penalize, not this check's)."""
+    name = "Stripe color (neutral grey)"
+    t1 = cand["tier1"]
+    if not t1.get("striping_present"):
+        return _na(name, "candidate has no row striping")
+    ok = _normalize_css_color(t1.get("stripe_hex")) == "#F6F6F6"
+    return CheckResult(name, 2, 2 if ok else 0, ok, f"expected #F6F6F6, got {t1.get('stripe_hex')!r}")
+
+
+def check_hero_not_bold(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    """A `CANONICAL_MEASURES.hero_uncolored` measure is never bold -- every
+    current ground truth with one (gtcars_hp_price's horsepower,
+    airquality's wind speed, towny's rank/total growth, sp500's
+    open/close) renders it as plain text, explicitly by author direction
+    (each ground truth's own docstring says so). Bolding a hero measure
+    used to be credited as an alternative to a 3rd color fill
+    (`check_striping_gate`'s old "fully filled" exemption); that credit is
+    gone now that plain-text heroes are the universal rule, so this check
+    makes the rule itself count, positively, instead.
+    """
+    name = "Hero-uncolored measures stay plain (not bold)"
+    hero_measures = meta["CANONICAL_MEASURES"].get("hero_uncolored", [])
+    if not hero_measures:
+        return _na(name, "ground truth declares no hero_uncolored measures")
+    if not cand["tier2"].get("ok") or not truth["tier2"].get("ok"):
+        return CheckResult(name, 2, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
+    bold_cols = set(cand["tier1"].get("bold_columns") or [])
+    total, ok_count, bolded = 0, 0, []
+    for hm in hero_measures:
+        matched_col = _match_measure_by_value(cand, truth, hm)
+        if matched_col is None:
+            continue
+        total += 1
+        if matched_col in bold_cols:
+            bolded.append(matched_col)
+        else:
+            ok_count += 1
+    if total == 0:
+        return _na(name, "no hero_uncolored measure value-matched a candidate column")
+    pts = _round_points_covered(ok_count, total, 2)
+    detail = f"{ok_count}/{total} hero-uncolored measures are plain text"
+    if bolded:
+        detail += f"; incorrectly bolded: {bolded}"
+    return CheckResult(name, 2, pts, ok_count == total, detail)
+
+
+def check_force_sign(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    """A percent-semantic column whose TRUTH data genuinely crosses zero
+    (a real gain-or-loss measure -- pct_change, growth %, best/worst day)
+    uses `force_sign=True`, in every current ground truth, so a reader can
+    tell +3.8% from -3.8% at a glance. An always-positive percent has no
+    real "sign" to force, so this only applies where the truth's own data
+    is signed -- not to every percent column unconditionally.
+    """
+    name = "Signed-percent force_sign correctness"
+    semantic_types = meta["SEMANTIC_TYPES"]
+    percent_cols = [c for c, t in semantic_types.items() if t == "percent"]
+    if not percent_cols:
+        return _na(name, "ground truth declares no percent-semantic columns")
+    if not cand["tier2"].get("ok") or not truth["tier2"].get("ok"):
+        return CheckResult(name, 2, 0, False, f"candidate failed to execute: {cand['tier2'].get('error')}")
+    force_sign_map = cand["tier1"].get("fmt_percent_force_sign_map", {})
+    total, ok_count, uncovered = 0, 0, []
+    for c in percent_cols:
+        if _measure_signedness(truth, [c]) != "diverging":
+            continue
+        matched_col = _match_measure_by_value(cand, truth, c)
+        if matched_col is None:
+            total += 1
+            uncovered.append(c)
+            continue
+        val = force_sign_map.get(matched_col, force_sign_map.get(convergence._ALL_COLUMNS))
+        if val is _UNRESOLVED_FORCE_SIGN:
+            continue
+        total += 1
+        if val == "True":
+            ok_count += 1
+        else:
+            uncovered.append(c)
+    if total == 0:
+        return _na(name, "no signed (crosses-zero) percent-semantic column to check")
+    pts = _round_points_covered(ok_count, total, 2)
+    detail = f"{ok_count}/{total} signed percent columns use force_sign=True"
+    if uncovered:
+        detail += f"; missing/wrong on: {uncovered}"
+    return CheckResult(name, 2, pts, ok_count == total, detail)
+
+
+def check_caption_keywords(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    """`CAPTION_KEYWORDS` mechanical substring check, revived 2026-08-12
+    now that ground-truth captions are a single short sentence each (a
+    long, multi-sentence caption made a keyword-presence check either
+    trivially satisfiable or unfairly brittle; a one-sentence caption
+    makes it a real, cheap signal). `caption_should_mention`: every
+    keyword must appear (case-insensitive substring) somewhere across the
+    candidate's own source-note text. `subtitle_should_not_duplicate`:
+    none of those keywords may appear in the candidate's subtitle -- the
+    insight belongs to the caption, not a restated subtitle.
+    """
+    name = "Caption keyword coverage"
+    kw = meta.get("CAPTION_KEYWORDS") or {}
+    should_mention = kw.get("caption_should_mention") or []
+    should_not_duplicate = kw.get("subtitle_should_not_duplicate") or []
+    if not should_mention and not should_not_duplicate:
+        return _na(name, "ground truth declares no CAPTION_KEYWORDS")
+    # Pure source-text extraction (title/subtitle/source_note are literal
+    # strings, independent of whether the script's DATA execution
+    # succeeds) -- not gated on tier2.ok, unlike the value-based checks.
+    caption_text = " ".join(cand["tier1"].get("source_note_texts") or []).lower()
+    subtitle_text = (cand["tier1"].get("subtitle_text") or "").lower()
+    total = len(should_mention) + len(should_not_duplicate)
+    ok_count = 0
+    missing = [k for k in should_mention if k.lower() not in caption_text]
+    ok_count += len(should_mention) - len(missing)
+    leaked = [k for k in should_not_duplicate if k.lower() in subtitle_text]
+    ok_count += len(should_not_duplicate) - len(leaked)
+    pts = _round_points_covered(ok_count, total, 3) if total else 3
+    detail = f"{ok_count}/{total} caption-keyword rules satisfied"
+    if missing:
+        detail += f"; caption missing: {missing}"
+    if leaked:
+        detail += f"; subtitle wrongly duplicates: {leaked}"
+    return CheckResult(name, 3, pts, ok_count == total, detail)
 
 
 def _mechanics_entry_for_column(mechanics: list[dict], fp: dict, column: str) -> dict | None:
@@ -5077,7 +5281,13 @@ FORMAT_CHECKS: list[CheckFn] = [
     check_domain_computation,
     check_frame_hairlines_dividers,
     check_striping_gate,
-    check_band_hue_harmonization,
+    check_band_hue_harmonization,  # retired 2026-08-12 -- always N/A now, see check_header_branding
+    check_header_branding,
+    check_stub_tint,
+    check_stripe_color,
+    check_hero_not_bold,
+    check_force_sign,
+    check_caption_keywords,
     check_color_mechanics,
     check_summary_row_formatting,
     check_fmt_semantic_type,

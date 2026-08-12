@@ -12,6 +12,14 @@ signed, so they get the RdYlGn diverging fill. "Fastest-growing" is
 ambiguous (whole-period growth vs. average of the five windows) — the
 canonical definition (whole-period growth) is picked once and stated in
 the source note so the ranking is reproducible.
+
+`autocolor_text=True` on both `data_color()` calls: written explicitly
+even though it's great_tables' own default (`autocolor_text: bool = True`
+in the installed 0.22.0's own signature -- omitting it renders
+identically). Spelled out for the same self-documenting reason
+`na_color`/`truncate` are always spelled out here too, even though THEIR
+defaults also already match -- not because any of the three was ever
+actually wrong when omitted.
 """
 from pathlib import Path
 
@@ -184,6 +192,7 @@ gt = (
         domain=[dens_lo, dens_hi],
         na_color="#808080",
         truncate=False,
+        autocolor_text=True,
     )
     # Big Color 2/2: inter-Census growth, diverging RdYlGn; positive = good
     # (more residents), so no reverse. Symmetric domain keeps 0% at the
@@ -194,6 +203,7 @@ gt = (
         domain=[-chg_m, chg_m],
         na_color="#808080",
         truncate=False,
+        autocolor_text=True,
     )
     # Rank / Total Growth % stay plain text -- no bold -- by author
     # direction, matching the same plain treatment used for gtcars_hp_price's

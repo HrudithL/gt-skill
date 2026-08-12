@@ -115,7 +115,7 @@ PALETTE = {
     # fill need to read as restrained/semantic, not as decoration, while the
     # band/stub are pure branding and can afford to be louder.
     "accent": {
-        "navy": "#1B5A85",
+        "navy": "#08306B",
         "forest": "#2E7350",
         "oxblood": "#A23A3A",
         "espresso": "#8A6238",
@@ -282,25 +282,27 @@ def finalize(gt, path="table.png", **overrides):
     return gt.gtsave(path, **opts)
 
 
-def band(gt, *, shade="light", hue):
+def band(gt, *, shade="dark", hue):
     """Apply the heading band (light tint or dark solid) + the mandatory rule.
 
-    WHAT: ``shade="light"`` (the house DEFAULT) paints the column-label
-    background with the ``accent_tint`` of ``hue`` (or the neutral grey
-    band when ``hue="grey"``) — a clearly-visible but not solid surface; no
-    white-text override needed. ``shade="dark"`` instead paints it with the
-    ``accent`` solid for ``hue`` and whitens the column-label (and
-    spanner-label, if any) text — a much louder, fully "branded" look.
-    Either way, the 2px ``#CCCCCC`` column-label bottom rule is ALWAYS
-    applied.
+    WHAT: ``shade="dark"`` (the house DEFAULT) paints the column-label
+    background with the ``accent`` solid for ``hue`` and whitens the
+    column-label (and spanner-label, if any) text — a fully "branded"
+    look. ``shade="light"`` instead paints it with the ``accent_tint`` of
+    ``hue`` (or the neutral grey band when ``hue="grey"``) — a
+    clearly-visible but not solid surface; no white-text override needed.
+    Either way, the 2px ``#CCCCCC`` column-label bottom rule AND bold
+    column-label text are ALWAYS applied, regardless of shade.
 
-    WHY light is the default: the column-label band and the stub surfaces
-    are quiet furniture, not data — the heatmap is the thing that should
-    read as "the star." A solid, deeply-saturated band competes with that
-    even though it sits above the body. Reach for ``shade="dark"`` only
-    when the table needs the header ITSELF to carry the color story (e.g.
-    a pure categorical/text table with no heatmap at all — see
-    ``references/RULES.md``'s ceiling rule).
+    WHY dark is the default: every current reference table uses the same
+    deep, branded navy header regardless of whether the body has a
+    heatmap — the header is a fixed branding surface, not something that
+    should fade into a lighter tint just because a heatmap is also present
+    elsewhere on the table. (An earlier version of this skill defaulted to
+    ``shade="light"`` specifically so the header wouldn't compete with a
+    heatmap; that reasoning no longer matches the house convention. Reach
+    for ``shade="light"`` only if you have an explicit reason to want the
+    quieter tint instead.)
 
     NOTE the band uses ``accent_tint`` while ``stub_tint()`` uses the
     quieter ``washed`` tier — the OPPOSITE pairing of what a first guess
@@ -314,6 +316,12 @@ def band(gt, *, shade="light", hue):
         "column_labels_border_bottom_color": rule,
         "column_labels_border_bottom_width": "2px",
         "column_labels_border_bottom_style": "solid",
+        # Bold column labels, always, regardless of shade -- every current
+        # ground truth sets this alongside the background color; it was
+        # missing here entirely, so a candidate relying on this helper
+        # ALONE (no separate explicit `column_labels_font_weight=`) never
+        # actually got the bold header every ground truth has.
+        "column_labels_font_weight": "bold",
     }
     if shade == "light":
         if hue == "grey":
@@ -342,11 +350,12 @@ def stripe(gt):
     as busy across many rows in a way a single flat band/stub surface
     doesn't, and grey is quiet enough to never compete with a heatmap.
 
-    THE GATE (this function does not check it — the caller must): use
-    striping only when the table has **>= 10 body rows AND the body isn't
-    essentially fully covered by colored cells** (data_color fills and
-    stripes fight each other visually). Below 10 rows, or with most cells
-    already colored, skip this call entirely.
+    THE GATE (this function does not check it — the caller must): apply
+    striping by DEFAULT, regardless of row count. Skip it only when the
+    body's visible non-stub/non-group columns are ALREADY 100% covered by
+    `data_color`/`heatmap` fills — a heatmap that paints every real cell
+    leaves no plain cell for a stripe to ever show through on. A row-count
+    floor is NOT part of this gate (a 5-row table still stripes).
     """
     return gt.opt_row_striping().tab_options(
         row_striping_background_color=PALETTE["neutral"]["row_stripe"],

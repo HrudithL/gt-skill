@@ -50,6 +50,16 @@ prompt's own wording):
 - No grouping/spanner: the prompt names exactly two measures and nothing
   about a category split (make, body style, country, drivetrain) -- adding
   one would be inventing structure the prompt never asked for.
+- `autocolor_text=True` on the msrp `data_color()` call: written
+  explicitly even though it's great_tables' own default (verified against
+  the installed 0.22.0: `autocolor_text: bool = True` in `data_color()`'s
+  own signature, so omitting it already renders identically -- an earlier
+  draft of this note claimed omitting it was a legibility bug; it isn't,
+  the text was always white either way). Spelled out anyway for the same
+  reason `na_color`/`truncate` are always spelled out here too, even
+  though THEIR defaults (`#808080`/`False`) also already match: explicit,
+  self-documenting intent beats a silently-relied-upon default, not
+  because the default is wrong.
 """
 from pathlib import Path
 
@@ -142,6 +152,7 @@ gt = (
         domain=[msrp_lo, msrp_hi],
         na_color="#808080",
         truncate=False,
+        autocolor_text=True,
     )
     # hp stays plain text -- no bold, no fill -- by author direction (see
     # module docstring).
