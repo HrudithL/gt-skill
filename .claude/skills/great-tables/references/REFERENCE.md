@@ -70,13 +70,17 @@ but doesn't make the cut, or that the request names but doesn't earn a fill, ren
 
 ## 2b. Column placement for the primary heatmapped measure (Step 2)
 
-Once you know which measure will carry the table's primary heatmap fill, keep it at
-an **outer edge** — immediately after the stub, or as the last column(s) — never
-buried in the middle. Columns providing context/inputs a reader needs first precede
-columns reporting a derived/resulting outcome, so an outcome-type measure naturally
-lands at the right edge, while a measure that IS the subject's defining fact lands
-at the left edge (right after the stub). Use **`api.md`**'s `cols_move` /
-`cols_move_to_start` / `cols_move_to_end` entries as the mechanism.
+Once you know which measure will carry the table's primary heatmap fill, prefer an
+**outer edge** for it — immediately after the stub, or as the last column(s). This is
+a strong preference, not an absolute: a table with multiple qualifying measures may
+reasonably place one of them a column or two inside the edge if that better serves
+the table's narrative order. Don't force a reordering that fights the data's natural
+grouping just to satisfy this rule. Columns providing context/inputs a reader needs
+first precede columns reporting a derived/resulting outcome, so an outcome-type
+measure naturally lands at the right edge, while a measure that IS the subject's
+defining fact lands at the left edge (right after the stub) — decide which edge by
+this narrative sequencing. Use **`api.md`**'s `cols_move` / `cols_move_to_start` /
+`cols_move_to_end` entries as the mechanism.
 
 ## 3. Choosing the heading band (Step 4)
 
