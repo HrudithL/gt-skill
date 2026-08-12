@@ -135,6 +135,9 @@ A nested dict mirroring `palettes.md`:
   `hairline`, `column_label_rule`, `structural_rule`, `vertical_divider`, `na_cell`).
 - `PALETTE["sequential"][key]` / `PALETTE["diverging"][key]` — matplotlib/brewer
   palette **NAMES** (passed to `data_color(palette=...)`, not fixed hexes).
+- `PALETTE["branding"][role]` — the FIXED, universal header/stub/stripe
+  surface (`header`, `stub_tint`, `stripe`) every table now uses (2026-08-12
+  redesign), read by `band()` and `stub_tint()` instead of a per-hue lookup.
 
 ### `heatmap(gt, columns, *, kind, hue, domain=None)` — Step 3
 
@@ -163,35 +166,38 @@ gt = heatmap(gt, ["q1", "q2", "q3", "q4"], kind="sequential", hue="neutral")
 gt = heatmap(gt, "net_change", kind="diverging", hue="default")   # → [-M, M]
 ```
 
-### `band(gt, *, shade, hue)` — Step 4
+### `band(gt, *, shade="dark", hue="navy")` — Step 4
 
-Applies the heading band **and** the mandatory column-label bottom rule (the
-2px `column_label_rule` — present under any band).
-
-- `shade` — `"light"` or `"dark"` (your Step-4 call).
-- `hue` — a solid/washed key (`navy` … `tan`) or `"grey"`.
-- **light** → `column_labels_background_color` = the washed tint (or the
-  neutral grey label band for `hue="grey"`). **dark** → the DA solid **plus
-  white column-label text** (and white spanner labels), applied via
-  `tab_style` because great-tables has no `tab_options` option for
-  column-label text color.
+**2026-08-12 redesign:** the header is now a FIXED branding surface — every
+table gets the identical deep-navy band (`PALETTE["branding"]["header"]` =
+`#08306B`), bold column labels, and white column-label/spanner text,
+regardless of Big Color or which measure(s) are heatmapped. `shade`/`hue` are
+still accepted (defaulting to `"dark"`/`"navy"`) as a no-op-for-branding
+escape hatch for any existing call site — they no longer change the OUTPUT
+hex; the band never follows a per-measure heatmap hue. Also applies the
+mandatory column-label bottom rule (the 2px `column_label_rule`).
 
 ```python
-gt = band(gt, shade="light", hue="forest")   # table has Big Color
-gt = band(gt, shade="dark", hue="navy")       # no Big Color → dark anchor band
+gt = band(gt)                          # fixed navy band, bold labels, white text
+gt = band(gt, shade="light", hue="forest")   # same output — shade/hue no longer matter
 ```
 
-### `stripe(gt)` and `stub_tint(gt, *, hue)` — Step 5
+Satisfies `heading-band`'s fixed-hex + bold-label + white-text checks.
+
+### `stripe(gt)` and `stub_tint(gt, *, hue="navy")` — Step 5
 
 - `stripe(gt)` — turns on zebra striping (`opt_row_striping()`) and pins the
-  exact stripe hex (`PALETTE["neutral"]["row_stripe"]`). Satisfies the
-  `striping-gate` rule.
-- `stub_tint(gt, *, hue)` — tints the stub background: `hue="grey"` → the
-  neutral label-band grey; any DA hue → its washed tint.
+  exact stripe hex (`PALETTE["branding"]["stripe"]` = `#F6F6F6`). Satisfies
+  the `striping-gate`/`stripe-color` rules.
+- `stub_tint(gt, *, hue="navy")` — **2026-08-12 redesign:** tints the stub to
+  the fixed branding tint (`PALETTE["branding"]["stub_tint"]` = `#EAF0F6`),
+  unconditionally. `hue` is accepted as a no-op-for-branding escape hatch (it
+  no longer selects a per-hue washed tint) — the stub is a branding surface,
+  same reasoning as `band()`. Satisfies the `stub-tint` rule.
 
 ```python
 gt = stripe(gt)
-gt = stub_tint(gt, hue="forest")
+gt = stub_tint(gt)                 # or stub_tint(gt, hue="forest") — same #EAF0F6 output
 ```
 
 ### `frame(gt, ...)` and `finalize(gt, ...)` — global constants
