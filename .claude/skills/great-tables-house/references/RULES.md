@@ -25,12 +25,12 @@ unchecked, the table isn't done yet.
 4. **Big Color stays restrained, not capped at a fixed number** —
    `data_color`/`heatmap()` calls across the WHOLE table target only the
    measure(s) that are actually the point of the request, never "one per
-   numeric column." Leave the rest plain (no fill, no bold). If 3+
-   measures would each independently qualify for a full heatmap fill,
-   don't fill all of them: the measure(s) beyond the first 1-2 step down
-   to bold text/text-color instead of a fill — but a measure that was
-   never a fill-candidate in the first place still stays fully plain (no
-   fill, no bold), same as always. See "Color restraint" below.
+   numeric column." There is no numeric cap on colored measures — color
+   what the request is actually about, using the correct palette for
+   each. Any measure that isn't part of what the request is about
+   renders fully plain: no fill, no bold, no text-color treatment of any
+   kind. This applies regardless of how many other measures already
+   carry a color fill. See "Color restraint" below.
 5. **Body-row hairlines pinned to the house tone, always** — `hairlines(gt)`.
    `great_tables` renders a hairline between body rows ON BY DEFAULT (a
    raw library gray, `#D3D3D3`) even without this call — the gap this
@@ -330,36 +330,41 @@ Always `sub_missing(columns=..., missing_text="—")` — never a raw blank
 cell. See the injected `yoy_change` gap on `Zeta Kit` and the blank
 `Total` row cells in `house_table.py`.
 
-## Color restraint — no fixed ceiling, but restraint still applies
+## Color restraint — no numeric cap, and no bold/text-color step-down
 
 An earlier version of this rule capped colored measures at a fixed count;
-that numeric ceiling was rejected as arbitrary and is gone. Restraint only
-ever changes the outcome for a measure that was already **competing** to
-be colored — i.e. one of 2+ measures a table's fill-priority tie-break
-logic (see `data.md`'s tie-break section) would otherwise resolve toward a
-fill. It never promotes an otherwise-plain, non-competing measure up to
-bold. Concretely: if 3+ measures would each independently qualify for a
-full heatmap fill, don't just keep adding fills — the measure(s) beyond
-the first 1-2 step down to bold text/text-color emphasis instead of a
-fill, because a heatmap on every numeric column reads as noise, not
-thoroughness. This does NOT change the baseline rule: a measure that was
-never a fill-candidate in the first place stays fully plain (no fill, no
-bold) — matching every non-stretch-goal ground truth in this corpus (e.g.
-`towny_growth_trends.py` keeps its ranking measure and `rank` column
-plain, by author direction, even alongside 2 full heatmap blocks
-elsewhere in that same table — those columns were never competing for a
-3rd/4th fill slot, so they stay plain rather than getting bolded).
-`sp500_monthly_performance.py`'s top-5/bottom-5 bold-text mechanic is a
-different, answer-key-specific stretch goal this skill does not teach as
-a general rule — don't generalize its *effect* (bolding a named measure)
-back into this restraint clause. A pure categorical/text table still gets
-no fill at all — its anchor is the heading band, which is
-`band(gt, shade="dark", hue=...)` regardless (see "Unified color theme"
-above — dark is the universal default now, not a no-heatmap-only
-fallback). `house_table.py` uses 2 full heatmaps: `revenue` (sequential)
-and `yoy_change` (diverging); `status` is a 3rd color story but a
-categorical chip, not a heatmap — with only 2 fill-candidates in this
-demo, the bold-instead-of-fill step-down never actually triggers here.
+that numeric ceiling was rejected as arbitrary and is gone. There is no
+numeric cap on colored measures — color what the request is actually
+about, using the correct palette for each. Any measure that isn't part of
+what the request is about renders fully plain: no fill, no bold, no
+text-color treatment of any kind. This applies regardless of how many
+other measures already carry a color fill — a table with 2, 3, or more
+colored measures still leaves every remaining measure completely plain.
+
+A still-earlier version of this rule tried to soften "plain" into "bold
+text/text-color instead of a fill" for a measure that had lost a
+fill-priority tie-break. That mechanic is wrong and is not part of this
+skill, in any narrow or broad form: three of the six ground truths in
+this corpus state explicitly, in the author's own words, that a
+non-fill-winning measure renders plain, not bold —
+`airquality_monthly_summary.py` ("Wind stays plain text -- no bold, no
+fill -- by author direction"), `towny_growth_trends.py` ("Rank / Total
+Growth % stay plain text -- no bold -- by author direction"), and
+`sp500_monthly_performance.py` ("open / close stay plain, uncolored text
+(not bold..."). `towny_growth_trends.py` keeps its ranking measure and
+`rank` column plain even alongside 2 full heatmap blocks elsewhere in
+that same table. Do not bold or tint any measure that isn't itself
+getting a fill, no matter how many measures already have one and no
+matter how plausible a fill candidate it was. `sp500_monthly_performance.py`'s
+top-5/bottom-5 bold-text mechanic is a different, answer-key-specific
+stretch goal this skill does not teach as a general rule — don't
+generalize its *effect* (bolding a named subset) into this restraint
+clause. A pure categorical/text table still gets no fill at all — its
+anchor is the heading band, which is `band(gt, shade="dark", hue=...)`
+regardless (see "Unified color theme" above — dark is the universal
+default now, not a no-heatmap-only fallback). `house_table.py` uses 2
+full heatmaps: `revenue` (sequential) and `yoy_change` (diverging);
+`status` is a 3rd color story but a categorical chip, not a heatmap.
 
 ## Global constants
 
