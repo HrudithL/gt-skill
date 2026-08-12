@@ -31,6 +31,14 @@ missing -- only 9 valid readings). `.mean()` skips NaN by default, so every
 month still gets a real average, but June's average rests on a much
 thinner sample than the other four months; that caveat is called out in
 the source note rather than silently averaged over.
+
+`autocolor_text=True` on both `data_color()` calls: written explicitly
+even though it's great_tables' own default (`autocolor_text: bool = True`
+in the installed 0.22.0's own signature -- omitting it renders
+identically). Spelled out for the same self-documenting reason
+`na_color`/`truncate` are always spelled out here too, even though THEIR
+defaults also already match -- not because any of the three was ever
+actually wrong when omitted.
 """
 from pathlib import Path
 
@@ -151,6 +159,7 @@ gt = (
         domain=[ozone_lo, ozone_hi],
         na_color="#808080",
         truncate=False,
+        autocolor_text=True,
     )
     # Big Color 2/2: temperature, sequential Blues -- a plain neutral
     # magnitude, no "good/bad" direction.
@@ -160,6 +169,7 @@ gt = (
         domain=[temp_lo, temp_hi],
         na_color="#808080",
         truncate=False,
+        autocolor_text=True,
     )
     # Wind stays plain text -- no bold, no fill -- by author direction,
     # matching the same choice made for gtcars_hp_price's horsepower column.

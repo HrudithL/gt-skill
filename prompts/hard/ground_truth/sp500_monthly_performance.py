@@ -39,6 +39,14 @@ of the 6 measure columns now colored in some form, striping still helps on
 the two fully-plain columns (open, close) and the 62 unstyled pct_change
 rows.
 
+`autocolor_text=True` on all 3 `data_color()` calls (avg_volume,
+best_day_gain, worst_day_loss): written explicitly even though it's
+great_tables' own default (`autocolor_text: bool = True` in the installed
+0.22.0's own signature -- omitting it renders identically). Spelled out
+for the same self-documenting reason `na_color`/`truncate` are always
+spelled out here too, even though THEIR defaults also already match --
+not because any of the three was ever actually wrong when omitted.
+
 CANONICAL "daily gain/loss" definition (the real derived-computation call
 this prompt needs, same spirit as towny's own "canonical fastest-growing"
 note): a day's gain/loss is `close.pct_change()` computed CONTINUOUSLY
@@ -237,6 +245,7 @@ gt = (
         domain=[vol_lo, vol_hi],
         na_color="#808080",
         truncate=False,
+        autocolor_text=True,
     )
     # Best day: its own sequential Greens heatmap -- darker = bigger gain.
     .data_color(
@@ -245,6 +254,7 @@ gt = (
         domain=[gain_lo, gain_hi],
         na_color="#808080",
         truncate=False,
+        autocolor_text=True,
     )
     # Worst day: its own sequential Reds heatmap, reverse=True so the
     # LARGEST-magnitude loss (most negative) lands on the darkest red.
@@ -255,6 +265,7 @@ gt = (
         na_color="#808080",
         truncate=False,
         reverse=True,
+        autocolor_text=True,
     )
     # Columns sized to their own content (+ a small buffer), not left to
     # auto-stretch -- author-directed.
