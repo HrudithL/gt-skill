@@ -79,6 +79,23 @@ PALETTE = {
         "default": "RdYlGn",                 # red = bad, green = good
         "colorblind_safe": ["RdBu", "PuOr"],
     },
+    # §0 (2026-08-12 ground-truth redesign) — the FIXED, universal header/
+    # stub/stripe branding surface every table now uses, independent of any
+    # per-measure heatmap hue. ``stub_tint`` already equals ``washed.navy``
+    # and ``stripe`` already equals ``neutral.row_stripe``; both are repeated
+    # here under their branding role so ``band()``/``stub_tint()`` read a
+    # single fixed source regardless of what hue a caller passes. NOTE:
+    # ``header`` (#08306B) is not yet documented in references/palettes.md —
+    # that doc's branding section is a sibling slice's in-flight change
+    # (see this PR's description for the cross-slice note); until it lands,
+    # ``tests/test_palette_parity.py``'s doc-subset assertion will flag this
+    # hex as new. This module is the source of truth for what the ANSWER
+    # KEYS actually use; the doc/test just haven't caught up yet.
+    "branding": {
+        "header": "#08306B",
+        "stub_tint": "#EAF0F6",   # == washed.navy
+        "stripe": "#F6F6F6",      # == neutral.row_stripe
+    },
 }
 
 
@@ -286,59 +303,63 @@ def heatmap(gt, columns, *, kind, hue, domain=None):
     )
 
 
-def band(gt, *, shade, hue):
-    """Apply the Step-4 heading band + the mandatory bottom rule.
+def band(gt, *, shade="dark", hue="navy"):
+    """Apply the FIXED header-branding band + the mandatory bottom rule
+    (Step 4).
 
-    * ``shade`` — ``"light"`` or ``"dark"`` (model's Step-4 call).
-    * ``hue`` — a solid/washed key (``navy`` / ``forest`` / ``oxblood`` /
-      ``espresso`` / ``ochre`` / ``tan``) or ``"grey"``.
+    2026-08-12 ground-truth redesign: the header is now a fixed, universal
+    branding surface — every current ground truth uses the IDENTICAL deep
+    navy in ``PALETTE["branding"]["header"]``, bold column labels, and white
+    column-label/spanner text, regardless of whether (or which) measure is
+    colored. The old per-table "light washed tint when Big Color is present,
+    dark solid anchor otherwise" branching is gone.
 
-    light → ``column_labels_background_color`` = the washed tint (or the neutral
-    grey label band when ``hue == "grey"``). dark → the DA solid, plus white
-    column-label text (``great_tables`` has no ``tab_options`` option for
-    column-label text color, so the white is applied via
-    ``tab_style(style.text(color="white"), loc.column_labels())``).
+    ``shade``/``hue`` are still accepted, defaulting to ``"dark"``/``"navy"``,
+    as a no-op-for-branding escape hatch for any existing caller that already
+    passes a Step-4 decision — they no longer change the OUTPUT: the
+    branding surface never follows a per-measure heatmap hue. (Kept rather
+    than dropped so an existing call site doesn't need an immediate
+    signature change.)
 
-    ALWAYS also applies the mandatory column-label bottom rule
-    (``PALETTE["neutral"]["column_label_rule"]`` = the 2px rule) — this is the
-    Step-4 constant present under any band, and pinning it kills PP-8.
+    ALWAYS applies:
+
+    * ``column_labels_background_color`` = ``PALETTE["branding"]["header"]``.
+    * ``column_labels_font_weight="bold"`` (the redesigned convention
+      requires bold column labels on every table).
+    * the mandatory column-label bottom rule
+      (``PALETTE["neutral"]["column_label_rule"]`` = the 2px rule).
+    * white column-label (and spanner-label, when spanners exist) text —
+      ``great_tables`` has no ``tab_options`` option for column-label text
+      color, so this is applied via
+      ``tab_style(style.text(color="white"), loc.column_labels())``. This
+      great_tables version's ``loc.spanner_labels()`` requires explicit ids
+      (a bare call raises), so spanner ids are pulled from the GT's own
+      spanners and that location is only added when spanners exist.
 
     Returns the GT.
     """
     rule = PALETTE["neutral"]["column_label_rule"]
     options = {
+        "column_labels_background_color": PALETTE["branding"]["header"],
+        "column_labels_font_weight": "bold",
         "column_labels_border_bottom_color": rule,
         "column_labels_border_bottom_width": "2px",
         "column_labels_border_bottom_style": "solid",
     }
-    if shade == "light":
-        if hue == "grey":
-            options["column_labels_background_color"] = PALETTE["neutral"]["label_band"]
-        else:
-            options["column_labels_background_color"] = PALETTE["washed"][hue]
-        return gt.tab_options(**options)
-    if shade == "dark":
-        options["column_labels_background_color"] = PALETTE["solid"][hue]
-        gt = gt.tab_options(**options)
-        # No tab_options option sets column-label text color; use tab_style. Also
-        # whiten SPANNER labels so they match the dark band — otherwise they keep
-        # their default dark text and read as low-contrast on the solid. This
-        # great_tables version's loc.spanner_labels() requires explicit ids (a
-        # bare call raises), so pull them from the GT's own spanners and only add
-        # that location when spanners exist.
-        from great_tables import loc, style
+    gt = gt.tab_options(**options)
 
-        locations = [loc.column_labels()]
-        spanners = getattr(gt, "_spanners", None)
-        if spanners:
-            spanner_ids = [s.spanner_id for s in spanners]
-            if spanner_ids:
-                locations.append(loc.spanner_labels(ids=spanner_ids))
-        return gt.tab_style(
-            style=style.text(color="white"),
-            locations=locations,
-        )
-    raise ValueError("band(): shade must be 'light' or 'dark', got %r" % (shade,))
+    from great_tables import loc, style
+
+    locations = [loc.column_labels()]
+    spanners = getattr(gt, "_spanners", None)
+    if spanners:
+        spanner_ids = [s.spanner_id for s in spanners]
+        if spanner_ids:
+            locations.append(loc.spanner_labels(ids=spanner_ids))
+    return gt.tab_style(
+        style=style.text(color="white"),
+        locations=locations,
+    )
 
 
 def stripe(gt):
@@ -353,15 +374,18 @@ def stripe(gt):
     )
 
 
-def stub_tint(gt, *, hue):
-    """Tint the stub background so row labels separate from values (Step 5(d)).
+def stub_tint(gt, *, hue="navy"):
+    """Tint the stub background to the FIXED branding tint (Step 5(d)).
 
-    * ``hue`` — ``"grey"`` → the neutral label-band grey; otherwise the washed
-      tint for that DA hue. The model decides which; this only applies it via
-      ``stub_background_color``. Returns the GT.
+    2026-08-12 ground-truth redesign: the stub, like the header band, is a
+    branding surface — every current ground truth tints its stub to the
+    IDENTICAL washed navy in ``PALETTE["branding"]["stub_tint"]``, regardless
+    of which hue(s) the table's own measures heatmap with. This no longer
+    varies by ``hue``: unlike the old per-hue washed-tint lookup, ``hue`` is
+    now a no-op-for-branding escape hatch, accepted (and defaulted to
+    ``"navy"``) so an existing caller doesn't need an immediate signature
+    change, but the applied color is always the one fixed branding hex.
+
+    Applies via ``stub_background_color``. Returns the GT.
     """
-    if hue == "grey":
-        color = PALETTE["neutral"]["label_band"]
-    else:
-        color = PALETTE["washed"][hue]
-    return gt.tab_options(stub_background_color=color)
+    return gt.tab_options(stub_background_color=PALETTE["branding"]["stub_tint"])
