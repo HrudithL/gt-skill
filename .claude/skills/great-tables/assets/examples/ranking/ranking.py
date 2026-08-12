@@ -40,9 +40,13 @@ gt = (
     # Full-row highlight on the #1 leader (a Top-N "winner" story) — a solid
     # Dark Academia hex with white text, spanning every body column. Rank and
     # the other measures otherwise render fully plain: no consolation bold.
+    # rowname_col="car" moves the car name into the stub, outside loc.body()'s
+    # scope, so the stub cell for row 0 must be highlighted explicitly too —
+    # otherwise the leader's name renders in the plain stub tint instead of
+    # the highlight.
     .tab_style(
         style=[style.fill(color="#9A7B33"), style.text(color="#ffffff", weight="bold")],
-        locations=loc.body(rows=[0]),
+        locations=[loc.body(rows=[0]), loc.stub(rows=[0])],
     )
     .cols_align(align="left", columns=["ctry_origin", "drivetrain"])
     .cols_align(align="right", columns=["rank", "year", "hp", "trq", "msrp"])
@@ -55,8 +59,9 @@ gt = (
     )
     .tab_style(style=style.text(color="white"), locations=loc.column_labels())
     # Stub tint — fixed branding hex, unconditional whenever a stub exists.
-    # Uniform across every row, including the highlighted leader.
-    .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub())
+    # Scoped to exclude row 0: that stub cell belongs to the leader highlight
+    # above and must keep the highlight color, not the standard stub tint.
+    .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub(rows=list(range(1, len(top)))))
     # Row striping — default on every table (only one row is highlighted).
     .opt_row_striping()
     .tab_options(
