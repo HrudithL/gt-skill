@@ -72,9 +72,13 @@ them actually earn a full fill is a judgment call weighing the request's core
 ask against table noise — there is no numeric cap. A pure categorical/text
 table with no magnitude/trend/signed/winner story gets **no** fill — its
 anchor is the branding heading band (Step 4), which every table gets
-regardless. A measure that qualifies but doesn't make the cut, or that the
-request names but doesn't earn a fill, renders **fully plain** — no fill, no
-bold, no text-color treatment — see `small_color.md`.
+regardless. A measure that qualifies but doesn't make the cut, or that turns
+out to be a near-redundant restatement of another colored measure, renders
+**fully plain at the measure level** — no whole-column fill, no whole-column
+bold, no whole-column text-color treatment — see `small_color.md`. (This is a
+whole-measure rule: it does not forbid the few-outlier-CELLS technique in
+`big_color/bold_colored_number.md` above, which bolds a handful of individual
+cells within an otherwise-plain column.)
 
 ## 2b. Column placement for the primary heatmapped measure (Step 2)
 
@@ -104,8 +108,9 @@ has the mechanics.
 **Before writing the footer**, open **`small_color.md` → "(f) Titles &
 annotations"**: the footer is **two separate `tab_source_note(...)` calls**
 (an analytical caption + a source/provenance note), not one combined line —
-and a named-but-uncolored measure stays fully plain text, no
-`style.text(weight="bold")`, no fill.
+and a named-but-uncolored measure stays fully plain text at the measure level, no
+whole-column `style.text(weight="bold")`, no whole-column fill (the few-outlier-cells
+exception is in §2 above / `big_color/bold_colored_number.md`).
 
 ## 5. Your data matches an archetype (Steps 2 & 5)
 

@@ -259,11 +259,18 @@ gt = (
 )
 ```
 
-**A named-but-uncolored measure stays plain — no consolation bold.** When Step 3
-leaves a named measure without the fill (a categorical/text table's hero, or a
-secondary measure that didn't win the tie-break above), render it as an ordinary,
-unstyled value column — no `style.text(weight="bold")`, no fill. Plain text is the
-correct, final treatment, not a placeholder for a missing color.
+**A named-but-uncolored measure stays plain at the measure level — no consolation
+bold.** When Step 3 leaves a named measure without the fill (a categorical/text
+table's hero, or a secondary measure that turned out to be a near-redundant
+restatement of another colored measure — see the redundancy check above), render it
+as an ordinary, unstyled value column — no whole-column `style.text(weight="bold")`,
+no whole-column text-color treatment, no fill. Plain text is the correct, final
+treatment for that measure, not a placeholder for a missing color. This is a
+whole-measure rule, not a ban on the separate, narrower `bold_colored_number.md`
+technique of bolding a small number of individual outlier CELLS within an
+otherwise-plain column when the request specifically calls for highlighting extremes
+— that's a distinct technique for a few cells, not a consolation treatment for a
+whole measure that lost a fill.
 
 ---
 
@@ -281,15 +288,19 @@ table, so there is nothing left to harmonize or re-balance.
 
 There is no numeric cap on colored measures — color what the request is actually
 about, with the correct palette for each. A measure that isn't part of what the
-request is actually about renders fully plain: no fill, no bold, no text-color
-treatment — its magnitude is carried by the number alone. This applies regardless of
-how many other measures already carry a color fill.
+request is actually about renders fully plain at the measure level: no whole-column
+fill, no whole-column bold, no whole-column text-color treatment — its magnitude is
+carried by the number alone. (This whole-measure rule doesn't touch the separate,
+narrower `bold_colored_number.md` technique of bolding a handful of individual
+outlier cells within an otherwise-plain column — that's a few-cells technique, not a
+whole-measure consolation.) This applies regardless of how many other measures
+already carry a color fill.
 
 Cross-linked from `big_color/column_gradient_fill.md`'s priority ladder, which picks
 which measures earn the full fill (that ranking is deterministic; how many of the
 ranked measures actually earn a fill is a judgment call weighing the request's core
 ask against table noise) — but whichever measures don't make the cut follow this same
-plain-text rule, never a bold/text-color consolation.
+plain-text rule, never a whole-measure bold/text-color consolation.
 
 ## Sub-note — row-group emphasis
 
