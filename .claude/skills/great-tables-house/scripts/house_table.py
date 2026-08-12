@@ -26,11 +26,11 @@ ambiguous measure, THEN a separate provenance note — a generic provenance
 note if the real one is unknown, never omitted), (3) the boxed frame
 (``frame(gt)``), (4) Big Color kept restrained — the ``heatmap()``/
 ``data_color()`` calls target only the measure(s) the request is actually
-about, never one heatmap per numeric column; if 3+ measures would each
-independently qualify for a fill, the one(s) beyond the first 1-2 step
-down to bold/text-color instead of a fill, while a measure that was never
-a fill-candidate stays fully plain (not a fixed numeric cap — see
-``references/RULES.md``'s "Color restraint"), (5) the body-row
+about, never one heatmap per numeric column; there is no numeric cap on
+colored measures, and any measure that isn't part of what the request is
+about renders fully plain (no fill, no bold, no text-color treatment of
+any kind), regardless of how many other measures already carry a color
+fill (see ``references/RULES.md``'s "Color restraint"), (5) the body-row
 ``hairlines(gt)`` rule (a completely separate `great_tables` option family
 from the outer ``frame()`` border — `great_tables` already renders a raw
 gray hairline by default, so skipping this call leaves an otherwise
@@ -65,13 +65,18 @@ tiers of ``PALETTE`` below are copied from
 ``great-tables-ci/scripts/gt_consistency.py`` (mirroring
 ``references/palettes.md``) — reusing the already-validated hue system is
 deliberate. The ``accent`` / ``accent_tint`` tiers are new to THIS skill: a
-brighter, more saturated pairing used only for the column-label band, the
-stub, and group headers, modeled on `great_tables`' own built-in
-``opt_stylize()`` presets (styles 3 and 6 in particular) — a solid, clearly
-"branded" header band with a matching, clearly-visible (not barely-there)
-stub/group tint, so the table reads as one unified color theme rather than
-"mostly grey, plus a colored heatmap." See ``band()``/``stub_tint()``/
-``group_emphasis()`` below for how the two tiers divide the work.
+brighter, more saturated pairing modeled on `great_tables`' own built-in
+``opt_stylize()`` presets (styles 3 and 6 in particular) — a solid,
+clearly "branded" header band and clean, clearly-differentiated status
+colors, rather than a barely-there wash. ``accent`` backs the
+column-label band's solid fill under the house-default
+``band(gt, shade="dark")`` AND ``status_chip()``'s good/bad/neutral
+fills; ``accent_tint`` backs the band's lighter fill under
+``band(gt, shade="light")``. Neither tier is used by ``stub_tint()``
+(always the quieter ``washed`` tier, so the stub stays subtler than the
+band) or by ``group_emphasis()`` (bold weight + a neutral structural rule
+only, no fill at all). See ``band()``/``stub_tint()``/``status_chip()``/
+``group_emphasis()`` below for exactly how each tier is used.
 """
 
 from __future__ import annotations
@@ -116,15 +121,15 @@ PALETTE = {
         "ochre": "#F5EFDC",
         "tan": "#EFE7D6",       # cream
     },
-    # Brighter, more saturated pairing used ONLY for the column-label band,
-    # the stub, and group headers (band()/stub_tint()/group_emphasis()) — the
-    # "unified color theme" surfaces, modeled on great_tables' own
-    # opt_stylize() styles 3/6 (a solid, clearly-branded header band + a
-    # matching, visibly-tinted stub/group surface — not a barely-there wash).
-    # Deliberately a SEPARATE tier from "solid"/"washed" above: those stay
-    # muted because status_chip()'s good/bad/neutral meaning and the NA-cell
-    # fill need to read as restrained/semantic, not as decoration, while the
-    # band/stub are pure branding and can afford to be louder.
+    # Brighter, more saturated pairing used for the column-label band's solid
+    # fill under the house-default `band(gt, shade="dark")` AND for
+    # `status_chip()`'s good/bad/neutral fills — modeled on great_tables' own
+    # opt_stylize() styles 3/6 (a solid, clearly-branded header band, paired
+    # with clean, clearly-differentiated status colors, not a barely-there
+    # wash). NOT used by `stub_tint()` (always the quieter "washed" tier
+    # below, so the stub stays subtler than the band) or by
+    # `group_emphasis()` (bold weight + a neutral structural rule only, no
+    # fill at all).
     "accent": {
         "navy": "#08306B",
         "forest": "#2E7350",
@@ -385,9 +390,11 @@ def stub_tint(gt, *, hue):
     ``hue="grey"`` uses the neutral label-band grey (the default with no
     Big Color). Any other hue key (``navy``/``forest``/``oxblood``/
     ``espresso``/``ochre``/``tan``) uses that hue's ``washed`` tint — the
-    quieter tier (NOT ``accent_tint``, which ``band()`` uses): the stub is
-    a narrower, secondary surface next to the more prominent column-label
-    band, so it stays subtler than the band rather than competing with it.
+    quieter tier (NOT ``accent``, which ``band()`` uses by default under
+    ``shade="dark"`` — or ``accent_tint``, which ``band()`` uses under
+    ``shade="light"``): the stub is a narrower, secondary surface next to
+    the more prominent column-label band, so it stays subtler than the
+    band rather than competing with it.
     Pass the SAME hue as ``band()`` — branding surfaces default to the
     fixed navy/Blues family regardless of which hue a heatmap elsewhere on
     the table happens to use; this is a branding decision, not something
