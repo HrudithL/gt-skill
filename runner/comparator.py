@@ -1650,8 +1650,9 @@ def _palette_of_block_positional(block: str, positionals: list[str]) -> str:
     sequential/diverging shape check treat a genuinely diverging palette as
     unknown (benefit-of-the-doubt, silently passing a real mismatch), and
     can collapse two DIFFERENT positionally-specified palettes sharing a
-    domain into what looks like the same `(palette, domain)` measure for
-    the ≤2-ceiling count. Mirrors the positional handling every other
+    domain into what looks like the same `(palette, domain)` measure when
+    counting distinct colored measures (`_distinct_colored_measures`, used
+    by `check_hue_collision`). Mirrors the positional handling every other
     argument in `_enrich_color_mechanics` already gets.
     """
     literal = convergence._palette_of_block(block)
@@ -1908,7 +1909,7 @@ def _enrich_color_mechanics(source: str) -> list[dict]:
     colored-measure check below would otherwise silently degrade (e.g. every
     entry's `(palette, domain)` collapsing to the same `(None, None)` pair,
     making a candidate with 5 differently-colored measures misreport as "1
-    measure" for the ≤2 ceiling check). `build_fingerprint()` below replaces
+    measure" when counting distinct colored measures). `build_fingerprint()` below replaces
     `tier1["color_mechanics"]` with this function's output entirely, using
     only convergence.py's still-present, already-exposed low-level parsing
     primitives -- no change to convergence.py itself.
@@ -2646,8 +2647,8 @@ def _distinct_colored_measures(mechanics: list[dict], fp: dict) -> list[dict]:
     Codex round-3 finding: every caller of this dedup previously keyed
     purely on `(palette, domain)`, which collapsed 3 GENUINELY DIFFERENT
     measures (different target columns, matching palette+domain purely by
-    coincidence) into 1 -- silently dodging the ≤2-measure ceiling and
-    under-reporting the hue-collision/band-harmonization checks. `columns`
+    coincidence) into 1 -- silently under-reporting the hue-collision/
+    band-harmonization checks. `columns`
     here is the RESOLVED column tuple (via `_mechanics_columns`, the same
     resolution every other check already uses), not the raw, possibly-
     `None` `entry["columns"]` sentinel -- two entries whose `columns=None`
@@ -2660,11 +2661,11 @@ def _distinct_colored_measures(mechanics: list[dict], fp: dict) -> list[dict]:
     Codex round-12 finding (comprehensive sweep): the dedup key's
     `columns` didn't intersect with `fp`'s actually-VISIBLE columns -- a
     colored measure entirely hidden via `cols_hide(...)` still counted as
-    a real, distinct measure toward the ceiling (`check_colored_measure_
-    selection`), hue-collision detection (`check_hue_collision`), and the
-    "is there a sole measure to harmonize the band to" test (`check_band_
-    hue_harmonization`) -- all three exist to police what's ACTUALLY
-    VISIBLE on the rendered table, not raw call syntax. An entry whose
+    a real, distinct measure toward hue-collision detection
+    (`check_hue_collision`) and the "is there a sole measure to harmonize
+    the band to" test (`check_band_hue_harmonization`) -- both exist to
+    police what's ACTUALLY VISIBLE on the rendered table, not raw call
+    syntax. An entry whose
     resolved columns have NO overlap with the visible-column set
     contributes nothing and is dropped entirely; an entry with a PARTIAL
     overlap (some, but not all, target columns hidden) is deduplicated by
@@ -2684,9 +2685,9 @@ def _distinct_colored_measures(mechanics: list[dict], fp: dict) -> list[dict]:
     column corrected by a LATER `data_color(palette="RdYlGn", domain=
     [-50,50])` on the SAME column) had both the overridden and the
     effective entry counted as two DIFFERENT distinct measures (different
-    palette/domain), inflating the apparent measure count toward the
-    ≤2-measure ceiling and comparing hue-collision/band-harmonization
-    against a palette that was never actually rendered.
+    palette/domain), inflating the apparent measure count and comparing
+    hue-collision/band-harmonization against a palette that was never
+    actually rendered.
     """
     visible = _visible_columns(fp)
     units = _effective_mechanics_units(mechanics, fp)
@@ -3140,22 +3141,11 @@ def _truth_requires_color(meta: dict) -> bool:
 
 
 def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    name = "Colored-measure selection (≤2 ceiling + right measure(s))"
+    name = "Colored-measure selection (right measure(s) colored)"
     cand_mechanics = cand["tier1"].get("color_mechanics", [])
-    # Count DISTINCT (palette, domain, columns) triples as "measures", not
-    # raw .data_color()/heatmap() CALLS -- the same conceptual measure
-    # applied via multiple calls that share a palette+domain AND target
-    # the same columns is one measure, not N, and must not be rejected as
-    # exceeding the ≤2 ceiling. Columns are part of the key (Codex round-3
-    # finding) so 3 GENUINELY DIFFERENT measures that merely happen to
-    # share a palette+domain, but target different columns, correctly
-    # count as 3, not 1.
-    n_measures = len(_distinct_colored_measures(cand_mechanics, cand))
-    ceiling_ok = n_measures <= 2
-    ceiling_pts = 2 if ceiling_ok else 0
     canonical_colored = meta["CANONICAL_MEASURES"].get("colored", [])
     if not canonical_colored:
-        identity_pts = 4
+        identity_pts = 6
         identity_detail = "ground truth declares no canonical colored measures"
     elif not cand["tier2"].get("ok"):
         identity_pts = 0
@@ -3181,11 +3171,9 @@ def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> Chec
         # Codex round-13 finding: plain `_round_points` let incomplete
         # coverage round UP to full credit (e.g. 10/11 covered rounds to
         # 4/4) -- see `_round_points_covered`'s own docstring.
-        identity_pts = _round_points_covered(covered, len(canonical_colored), 4)
+        identity_pts = _round_points_covered(covered, len(canonical_colored), 6)
         identity_detail = f"{covered}/{len(canonical_colored)} canonical colored measures covered by a candidate color call"
-    pts = ceiling_pts + identity_pts
-    detail = f"{'≤2 measures OK' if ceiling_ok else f'{n_measures} colored measures exceeds the ceiling of 2'}; {identity_detail}"
-    return CheckResult(name, 6, pts, ceiling_ok and identity_pts == 4, detail)
+    return CheckResult(name, 6, identity_pts, identity_pts == 6, identity_detail)
 
 
 def check_sequential_vs_diverging(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -3973,8 +3961,8 @@ def _palettes_collide(entry_a: dict, entry_b: dict) -> bool:
 def check_hue_collision(cand: dict, truth: dict, meta: dict) -> CheckResult:
     name = "No same-family hue collision across 2 measures"
     mechanics = cand["tier1"].get("color_mechanics", [])
-    # Same distinct-(palette, domain, columns) dedup as check_colored_
-    # measure_selection's ceiling count -- the same conceptual measure
+    # Same distinct-(palette, domain, columns) dedup used to count
+    # distinct colored measures elsewhere -- the same conceptual measure
     # applied via multiple calls that share a palette+domain AND target
     # the same columns is one measure, not two, and its (necessarily
     # identical) palette against itself must not read as "two measures
@@ -4659,7 +4647,7 @@ def _mechanics_entry_for_column(mechanics: list[dict], fp: dict, column: str) ->
     Codex round-7 finding: this previously returned the FIRST matching
     entry, so an early `data_color(reverse=True)` call followed by a
     later `data_color(reverse=False)` override on the SAME column (still
-    one measure, still within the <=2-measure ceiling) let a candidate
+    one measure) let a candidate
     satisfy `check_color_mechanics`'s reverse-orientation check against
     the first call's value while the table actually renders with the
     opposite orientation from the later, silently-overriding call.
