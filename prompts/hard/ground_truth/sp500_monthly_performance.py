@@ -7,25 +7,37 @@ Story: 2010 through 2015, one row per calendar month (6 years x 12 months =
       percent change, average daily volume, and the best/worst single
       trading day within that month.
 
-Two colored measures (the ceiling): `pct_change` (the month's own overall
-performance) is the diverging RdYlGn hero measure -- positive=good (green)
-is the natural orientation for a stock table, no `reverse` needed. The
-{best_day_gain, worst_day_loss} PAIR is colored TOGETHER as ONE measure via
-a single `data_color(...)` call (deliberately no leading dot in this
-docstring -- the comparator's source-text scan looks for the literal
-substring "dot data_color open-paren" anywhere in the file, including
-inside a comment, so writing that exact substring here would be misread
-as a third color call) spanning both columns (mirrors towny's
-"one call, one measure" pattern for its six density columns) -- this keeps
-the colored-measure COUNT at exactly 2, not 3, even though six named values
-are in play (open, close, pct_change, avg_volume, best day, worst day).
-`PuOr` (not `RdYlGn` again) is used for that second measure specifically so
-the two colored measures don't collide on the same palette family. open /
-close / avg_volume stay plain, uncolored text (not bold) -- with 72 rows and
-only 3 of the 6 measure columns "accounted for" (colored) the body is nowhere
-near "essentially fully filled," so striping is the correct call, and a
-third bold hero would only dilute the two real Big-Color measures without
-changing that math.
+Color treatment, by author direction (an explicit exception to the house
+skill's usual <=2-heatmap-call ceiling -- that ceiling is a rule the
+COMPARATOR enforces against CANDIDATE submissions, via CANONICAL_MEASURES
+below; it isn't self-applied to this answer key's own rendering):
+- `pct_change` (the month's own overall performance): a STRETCH-GOAL
+  treatment, NOT a cell heatmap. Only the 5 highest and 5 lowest months
+  (of all 72, by signed value) get bold colored TEXT -- green for the top
+  5, red for the bottom 5 -- and the other 62 stay plain, unstyled. This
+  is explicitly NOT the expectation for an average candidate (picking out
+  the top/bottom 5 by value and styling only those cells is a much harder,
+  more surgical pattern than a column-wide heatmap); it's the deliberate
+  IDEAL this ground truth targets, understanding most candidates will fall
+  back to either a full heatmap or no color at all on this column.
+- `avg_volume`: a plain sequential Blues heatmap, full [min, max] -- the
+  same "simply heatmapped" treatment as any other neutral magnitude
+  column in this project (e.g. islands_sizes's `size`).
+- `best_day_gain`: its OWN sequential Greens heatmap (darker green =
+  bigger single-day gain). Always positive in this 2010-2015 window.
+- `worst_day_loss`: its OWN sequential Reds heatmap, `reverse=True` so the
+  LARGEST-magnitude loss (the most negative value) lands on the darkest
+  red, not the lightest. Always negative in this window.
+Gain=green / loss=red keeps the thematic read intuitive while staying
+visually distinct from `pct_change`'s red/green TEXT treatment -- a filled
+heatmap cell and bold colored text are different enough visual languages
+that they don't read as the same signal repeated.
+
+open / close stay plain, uncolored text (not bold, matching the same plain
+treatment used for gtcars_hp_price's horsepower) -- with 72 rows and most
+of the 6 measure columns now colored in some form, striping still helps on
+the two fully-plain columns (open, close) and the 62 unstyled pct_change
+rows.
 
 CANONICAL "daily gain/loss" definition (the real derived-computation call
 this prompt needs, same spirit as towny's own "canonical fastest-growing"
@@ -96,8 +108,8 @@ CAPTION_KEYWORDS = {
 # Underlying derived column(s) that are the canonical colored measure(s),
 # used for value-based matching -- NOT the rendered column name/label.
 CANONICAL_MEASURES = {
-    "colored": ["pct_change", "best_day_gain", "worst_day_loss"],
-    "hero_uncolored": ["monthly_open", "monthly_close", "avg_volume"],
+    "colored": ["pct_change", "avg_volume", "best_day_gain", "worst_day_loss"],
+    "hero_uncolored": ["monthly_open", "monthly_close"],
 }
 
 # Semantic type per rendered column, for the fmt_* correctness check.
@@ -158,17 +170,26 @@ final = monthly[
 ].reset_index(drop=True)
 
 # ---- Color domains ---------------------------------------------------------
-# pct_change: signed monthly performance -> diverging, symmetric about 0.
-pct_m = float(max(abs(final["pct_change"].min()), abs(final["pct_change"].max())))
+# pct_change: NOT a full-column heatmap -- see module docstring. Only the
+# top-5 highest and bottom-5 lowest months (by signed value, across all 72
+# rows) get bold colored TEXT; the other 62 stay plain. Row positions are
+# `final`'s own 0..71 index (reset_index(drop=True) above), directly usable
+# with `loc.body(rows=...)`.
+pct_change_top5_rows = final.nlargest(5, "pct_change").index.tolist()
+pct_change_bottom5_rows = final.nsmallest(5, "pct_change").index.tolist()
 
-# best_day_gain / worst_day_loss: one SHARED symmetric domain across both
-# columns (they are one measure, colored via one call) so a month's best day
-# and worst day render at comparable saturation for comparable magnitude,
-# regardless of which column happens to hold the larger absolute value.
-day_m = float(max(
-    abs(final["best_day_gain"].min()), abs(final["best_day_gain"].max()),
-    abs(final["worst_day_loss"].min()), abs(final["worst_day_loss"].max()),
-))
+# avg_volume: plain sequential magnitude -> Blues, full [min, max].
+vol_lo = float(final["avg_volume"].min())
+vol_hi = float(final["avg_volume"].max())
+
+# best_day_gain / worst_day_loss: by author direction, each gets its OWN
+# sequential domain (not a shared symmetric one) -- see module docstring.
+# Both are one-directional in this 2010-2015 window (gain always positive,
+# loss always negative), so a plain [min, max] per column is the honest read.
+gain_lo = float(final["best_day_gain"].min())
+gain_hi = float(final["best_day_gain"].max())
+loss_lo = float(final["worst_day_loss"].min())
+loss_hi = float(final["worst_day_loss"].max())
 
 # ---- Table -----------------------------------------------------------------
 gt = (
@@ -197,32 +218,58 @@ gt = (
         columns=["monthly_open", "monthly_close", "pct_change", "avg_volume", "best_day_gain", "worst_day_loss"],
         missing_text="—",
     )
-    # Big Color 1/2: this month's own overall performance, diverging RdYlGn;
-    # positive = good (rising close), so no reverse. Symmetric domain keeps
-    # 0% at the palette midpoint regardless of which sign is larger here.
+    # Monthly % Change: STRETCH-GOAL treatment, by author direction (see
+    # module docstring) -- no cell heatmap at all. Only the single most
+    # extreme 5 up-months and 5 down-months (of all 72) get bold colored
+    # text; the other 62 stay plain, unstyled numbers.
+    .tab_style(
+        style=style.text(color="#1A7A34", weight="bold"),
+        locations=loc.body(columns="pct_change", rows=pct_change_top5_rows),
+    )
+    .tab_style(
+        style=style.text(color="#C0392B", weight="bold"),
+        locations=loc.body(columns="pct_change", rows=pct_change_bottom5_rows),
+    )
+    # Avg Daily Volume: plain sequential Blues heatmap, full [min, max].
     .data_color(
-        columns=["pct_change"],
-        palette="RdYlGn",
-        domain=[-pct_m, pct_m],
+        columns=["avg_volume"],
+        palette="Blues",
+        domain=[vol_lo, vol_hi],
         na_color="#808080",
         truncate=False,
     )
-    # Big Color 2/2: the best-day/worst-day PAIR, one call, one shared
-    # symmetric domain -> ONE colored measure, not two. PuOr (not RdYlGn
-    # again) so the two Big-Color measures don't collide on the same
-    # palette family.
+    # Best day: its own sequential Greens heatmap -- darker = bigger gain.
     .data_color(
-        columns=["best_day_gain", "worst_day_loss"],
-        palette="PuOr",
-        domain=[-day_m, day_m],
+        columns=["best_day_gain"],
+        palette="Greens",
+        domain=[gain_lo, gain_hi],
         na_color="#808080",
         truncate=False,
     )
-    # Heading band: house DEFAULT shade="light" (Big Color present) ->
-    # accent_tint. Hue = forest (money/finance, growth), the more visible of
-    # the band/stub pairing.
+    # Worst day: its own sequential Reds heatmap, reverse=True so the
+    # LARGEST-magnitude loss (most negative) lands on the darkest red.
+    .data_color(
+        columns=["worst_day_loss"],
+        palette="Reds",
+        domain=[loss_lo, loss_hi],
+        na_color="#808080",
+        truncate=False,
+        reverse=True,
+    )
+    # Columns sized to their own content (+ a small buffer), not left to
+    # auto-stretch -- author-directed.
+    .cols_width(cases={
+        "month_label": "90px", "monthly_open": "90px", "monthly_close": "90px",
+        "pct_change": "110px", "avg_volume": "130px",
+        "best_day_gain": "100px", "worst_day_loss": "100px",
+    })
+    # Heading band -- DEEP navy (#08306B), bold, white text: the same
+    # header/stub branding used across every table in this project, by
+    # author direction, decoupled from this table's own RdYlGn/Greens/Reds
+    # heatmap hues.
     .tab_options(
-        column_labels_background_color="#CFEAD9",
+        column_labels_background_color="#08306B",
+        column_labels_font_weight="bold",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
         column_labels_border_bottom_style="solid",
@@ -237,20 +284,30 @@ gt = (
         # structural rule above/below each year's header row, deliberately
         # NO background fill -- a section break, not a result worth its own
         # highlight (that's the summary/total row's job, which this table
-        # doesn't have). Missing entirely in an earlier draft of this file;
-        # every year label rendered as an undifferentiated body row.
+        # doesn't have).
         row_group_font_weight="bold",
         row_group_border_top_color="#BDBDBD",
         row_group_border_bottom_color="#BDBDBD",
         row_group_padding="6px",
+        # Tighter padding throughout -- less whitespace per cell, by author
+        # direction.
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
     )
+    .tab_style(style=style.text(color="white"), locations=loc.column_labels())
+    # Stub tint -- washed navy, matching every other table's stub treatment,
+    # applied TOGETHER with row striping (same combined treatment used on
+    # gtcars_top10_by_country, by author direction).
+    .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub())
     # 72 rows, and only 3 of 6 measure columns are colored (open/close/
     # avg_volume stay plain) -- nowhere near "essentially fully filled," so
-    # row striping is the correct call. No stub tint on top of striping: an
-    # already-striped body plus a tinted stub would double up on the same
-    # visual job (breaking up the grey monotony), so only one of the two is
-    # applied here.
+    # row striping is the correct call.
     .opt_row_striping()
+    .tab_options(row_striping_background_color="#F6F6F6")
     # Column-group divider at the one spanner boundary only.
     .tab_style(style=style.borders(sides="right", color="#D0D0D0", weight="1px"), locations=loc.body(columns="avg_volume"))
     .tab_style(style=style.borders(sides="right", color="#D0D0D0", weight="1px"), locations=loc.column_labels(columns="avg_volume"))
@@ -260,10 +317,8 @@ gt = (
     )
     .tab_source_note(
         source_note=html(
-            "Best/worst days use a <b>continuous</b> day-over-day percent change in the closing "
-            "price across the full historical series, <b>not reset</b> to zero at each month's "
-            "start -- so a month's first trading day still carries its true change from the prior "
-            "month's last close."
+            "Best/worst-day figures use a <b>continuous</b> <b>day-over-day</b> price change, "
+            "<b>not reset</b> at each month's start."
         )
     )
     .tab_source_note(
@@ -273,4 +328,4 @@ gt = (
     )
 )
 
-gt.gtsave(str(_HERE / "sp500_monthly_performance.png"), zoom=2.0, expand=15)
+gt.gtsave(str(_HERE / "sp500_monthly_performance.png"), zoom=2.0, expand=8)
