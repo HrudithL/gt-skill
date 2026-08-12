@@ -5,7 +5,7 @@ Story: Per-category, per-size sales totals with subtotals per category
        and a grand total at the bottom.
 """
 import pandas as pd
-from great_tables import GT, loc, style, vals
+from great_tables import GT, loc, style
 
 df = pd.read_csv("data/pizzaplace.csv")
 
@@ -54,30 +54,32 @@ gt = (
         autocolor_text=True,
     )
     # Per-category subtotal — the story this archetype exists to demonstrate.
-    # fmt= applies one formatter to every summary cell (great_tables does not
-    # support per-column summary formats), so both columns render as
-    # whole-number, comma-separated counts here; the header still says
-    # "Revenue" so the $ omission on this one row reads as a rounded total,
-    # not a unit change.
+    # summary_rows()/grand_summary_rows() raise NotImplementedError if you pass
+    # columns= to scope a fmt= call to specific columns in one call, so a
+    # single shared formatter can't treat "orders" and "revenue" differently.
+    # The workaround: have the aggregation function itself return an
+    # already-formatted string per column (matching the body's currency
+    # style for revenue, plain comma-grouped integers for orders) and omit
+    # fmt= entirely — great_tables renders a pre-formatted string as literal
+    # text without re-formatting it.
     .summary_rows(
         groups=list(agg["type"].unique()),
         fns={"Subtotal": lambda d: pd.Series({
-            "orders": int(d["orders"].sum()),
-            "revenue": float(d["revenue"].sum()),
+            "orders": f"{int(d['orders'].sum()):,}",
+            "revenue": f"${float(d['revenue'].sum()):,.2f}",
         })},
-        fmt=lambda x: vals.fmt_integer(x, use_seps=True),
         missing_text="",
     )
     # Grand summary row at the bottom — the headline number a manager carries
     # away. Callable form returning pd.Series is the pandas escape; pl.col
     # expressions only work on polars-backed tables. avg_price is omitted
-    # because a mean-of-means is not meaningful.
+    # because a mean-of-means is not meaningful. Same pre-formatted-string
+    # workaround as the subtotal rows above, so the grand total keeps its $.
     .grand_summary_rows(
         fns={"All categories": lambda d: pd.Series({
-            "orders": int(d["orders"].sum()),
-            "revenue": float(d["revenue"].sum()),
+            "orders": f"{int(d['orders'].sum()):,}",
+            "revenue": f"${float(d['revenue'].sum()):,.2f}",
         })},
-        fmt=lambda x: vals.fmt_integer(x, use_seps=True),
         missing_text="",
     )
     # Group header emphasis: bold weight + structural rules, never a fill —
