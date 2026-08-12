@@ -60,12 +60,13 @@ for the palette *name* and the diverging-symmetric-domain rule.
 
 Which measures earn fill: one qualifying measure ⇒ it's the hero and gets colored.
 When several qualify, `big_color/column_gradient_fill.md`'s priority ladder picks
-which earn a full heatmap fill first and which instead step down to bold text/text
-color (the color-restraint principle, `small_color.md`). A pure categorical/text
-table with no magnitude/trend/signed/winner story gets **no** fill — its anchor is
-the branding heading band (Step 4), which every table gets regardless. (A measure
-the request names that does not earn a fill renders **fully plain** — no fill, no
-bold — see `small_color.md`.)
+which measures are ranked highest (deterministic); how many of them actually earn a
+full fill is a judgment call weighing the request's core ask against table noise —
+there is no numeric cap. A pure categorical/text table with no
+magnitude/trend/signed/winner story gets **no** fill — its anchor is the branding
+heading band (Step 4), which every table gets regardless. A measure that qualifies
+but doesn't make the cut, or that the request names but doesn't earn a fill, renders
+**fully plain** — no fill, no bold, no text-color treatment — see `small_color.md`.
 
 ## 2b. Column placement for the primary heatmapped measure (Step 2)
 

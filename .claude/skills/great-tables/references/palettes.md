@@ -140,9 +140,9 @@ symmetric domain `[-M, M]` is identical in both orientations — see
   measure keeps **`Blues`**; the **secondary** takes the next entry from the pinned
   ordered fallback ladder **`Blues → Greens → Oranges`** (i.e. the second neutral →
   `Greens`; a third — reached only if a table gives three neutral measures a full fill
-  at once, which the color-restraint principle makes rare — → `Oranges`). `Reds` is
-  excluded from this ladder (reserved for a directional "worse" measure). The ladder is
-  applied for **distinctness only**; the fallback hue carries no good/bad meaning here.
+  at once, which is unusual but not disallowed — → `Oranges`). `Reds` is excluded from
+  this ladder (reserved for a directional "worse" measure). The ladder is applied for
+  **distinctness only**; the fallback hue carries no good/bad meaning here.
   - **Which measure is "primary" (total, computable order):** (1) the measure the
     prompt names/emphasises first, in prompt order; else (2) leftmost-first by DataFrame
     column order. This is the SAME priority order used to rank which measures earn a

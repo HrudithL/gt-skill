@@ -268,24 +268,19 @@ table, so there is nothing left to harmonize or re-balance.
 
 ---
 
-## Sub-note — color restraint (when to stop heatmapping)
+## Sub-note — no cap on colored measures
 
-**Gate:** the table already carries **2 or more** full heatmap fills (from
-`data_color`/`heatmap` calls) **and** another measure is secondary-but-notable — worth
-calling out, but not the request's main comparison.
-
-Give that measure emphasis via **bold text and/or a text color**, not another
-competing full heatmap fill. This is a taste-level call, not a hard count: a table
-can legitimately carry more than 2 full fills when every one of them is genuinely
-load-bearing to the request, and it can also carry just 1 when that's all the data
-supports — the point is that once color starts competing with itself for the
-reader's attention, step down to the lighter technique instead of adding another
-fill. Don't build a "top N" / "bottom N" extreme-cell selection mechanic for this —
-the step-down happens at the level of a whole measure, not a subset of its cells.
+There is no numeric cap on colored measures — color what the request is actually
+about, with the correct palette for each. A measure that isn't part of what the
+request is actually about renders fully plain: no fill, no bold, no text-color
+treatment — its magnitude is carried by the number alone. This applies regardless of
+how many other measures already carry a color fill.
 
 Cross-linked from `big_color/column_gradient_fill.md`'s priority ladder, which picks
-which measures earn the full fill first; this rule is what the ones that don't make
-the cut do instead of going bare.
+which measures earn the full fill (that ranking is deterministic; how many of the
+ranked measures actually earn a fill is a judgment call weighing the request's core
+ask against table noise) — but whichever measures don't make the cut follow this same
+plain-text rule, never a bold/text-color consolation.
 
 ## Sub-note — row-group emphasis
 

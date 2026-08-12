@@ -134,8 +134,8 @@ both orientations — see `big_color/diverging_fill.md` for the full test.
   Resolve deterministically: the **primary** neutral measure keeps **`Blues`**; the
   **secondary** takes the next entry from the pinned fallback ladder **`Blues →
   Greens → Oranges`** (second neutral → `Greens`; a third — reached only if a table
-  gives three neutral measures a full fill at once, which the color-restraint
-  principle makes rare — → `Oranges`). `Reds` is excluded from this ladder (reserved
+  gives three neutral measures a full fill at once, which is unusual but not
+  disallowed — → `Oranges`). `Reds` is excluded from this ladder (reserved
   for a directional "worse" measure). The ladder is for **distinctness only**; the
   fallback hue carries no good/bad meaning here.
   - **Which measure is "primary" (total, computable order):** (1) the measure the

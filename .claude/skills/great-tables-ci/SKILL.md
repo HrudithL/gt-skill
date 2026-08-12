@@ -67,16 +67,15 @@ separate follow-up, not something to assume exists today):
 - **The footer's two-call convention** (`small_color.md` (f)): an analytical
   caption AND a separate source note, not one combined line, on any table with
   ≥5 rows.
-- **A named-but-uncolored measure stays fully plain** — no fill, no bold. This
-  one needs the prompt (which measure is the request's actual topic), so no
-  mechanical check could verify it even if one existed. If the request names 2+
-  measures and only one earns the fill, leave every other named measure as a
-  plain, unstyled value column — do not bold it as a consolation prize.
-- **Color is purposeful, not maxed out.** If 2 or more measures already carry a
-  full heatmap fill, a further secondary-but-notable measure earns emphasis via
-  bold text and/or text color, not a competing third heatmap — recount every
-  `data_color`/`heatmap` call and check each one is still the *right* choice for
-  that measure, not just an available slot.
+- **Every unselected measure stays fully plain — no consolation bold, no numeric
+  cap either way.** This needs the prompt (which measure is the request's actual
+  topic), so no mechanical check could verify it even if one existed. Recount
+  every `data_color`/`heatmap` call: each fill should still be earning its place
+  for this data — there is no fixed count, so don't cut a fill just to hit a
+  number, and don't keep one just because it's already there. Any measure that
+  doesn't carry a fill — because it never qualified, or because it qualified but
+  didn't make the ranked cut — renders as a plain, unstyled value column: no
+  `style.text(weight="bold")`, no text-color treatment, no fill.
 
 Small polish matters as much as Big Color — audit all of these by eye every time,
 don't rely on a checker that doesn't exist yet to catch them for you.
