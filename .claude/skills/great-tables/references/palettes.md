@@ -11,10 +11,13 @@ tints are washed-out versions of the Big-Color solids); §0 never varies by tabl
 
 ---
 
-## 0. Branding tier — fixed Blues/navy, every table
+## 0. Branding tier — fixed branding surfaces, every table
 
-The heading band, stub tint, and row stripe are a **branding tier**: the same three
-hexes on every table, always.
+The heading band, stub tint, and row stripe are a **branding tier** (navy heading
+band, pale-blue stub tint, neutral-grey row stripe): the same three hexes on every
+table, always. Only the header band and stub tint are part of the Blues/navy family
+— the row stripe (`#F6F6F6`) is a pure neutral grey (equal R/G/B), not a blue tint,
+and should not be "corrected" toward one.
 
 | Branding surface | Hex |
 |---|---|
@@ -25,11 +28,12 @@ hexes on every table, always.
 These do **not** follow the same *data-driven, per-measure* hue selection used for a
 heatmapped measure's own fill (§3 below): a heatmapped measure still resolves its own
 hue by semantic — `Greens` for "more is better," `Reds` for "more is worse," `Blues`
-for a neutral magnitude — but the branding surfaces around it always resolve to this
-standard Blues/navy family regardless of what hue that measure ends up using. Blues is
-simply the **default/standard hue for branding surfaces specifically** — not a
-harmonization step that adapts per table, and not something a heatmap's own hue ever
-overrides.
+for a neutral magnitude — but the branding surfaces around it always resolve to these
+same fixed values regardless of what hue that measure ends up using. The header band
+and stub tint default to Blues/navy specifically; the row stripe is a separate,
+neutral-grey fixed value, not part of that hue family. None of the three is a
+harmonization step that adapts per table, and a heatmap's own hue never overrides any
+of them.
 
 ---
 
