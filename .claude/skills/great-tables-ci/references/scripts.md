@@ -78,21 +78,31 @@ Every rule maps to the single reference file that pins its fix (this is the
 
 | Rule id | Level | What it catches | Read |
 |---|---|---|---|
-| `too-many-measures` | FAIL | More than 2 colored measures (`data_color`/`heatmap` targets, or DOM-colored columns) | `palettes.md` |
 | `palette-signedness` | FAIL | A **diverging** palette on **unsigned** data (domain does not straddle 0) | `big_color/diverging_fill.md` |
 | `domain-symmetry` | FAIL | A signed diverging `domain=` that is **not symmetric about 0** | `big_color/diverging_fill.md` |
 | `domain-present` | FAIL | A literal `data_color(...)` with **no explicit `domain=`** | `big_color/column_gradient_fill.md` |
 | `frame-missing` | FAIL | No enclosing boxed frame, or LEFT/RIGHT border **style** left at `none` (color/width alone is invisible) | `small_color.md` |
-| `heading-band` | FAIL | No band, wrong **shade** for the Big-Color state (light w/ Big Color, dark w/o), a non-palette hex, or a dark band without white labels | `palettes.md` |
+| `heading-band` | FAIL | No band, a hex other than the fixed branding navy (`#08306B`), column labels not bold, or a band without white label text — 2026-08-12: every table uses the SAME band regardless of Big Color; there is no more light/dark branching | `palettes.md` |
 | `render-params` | FAIL | `gtsave` `zoom < 2.0` or `expand <= 5` (INFO if no `gtsave` call is detected) | `small_color.md` |
-| `striping-gate` | FAIL | ≥10 body rows, body **not** fully color-filled, but striping not enabled | `small_color.md` |
+| `striping-gate` | FAIL | Striping not enabled on a body that is **not genuinely 100% color-filled** — 2026-08-12: striping is the default with no row-count floor; the old `>=10 rows` gate is gone | `small_color.md` |
+| `stub-tint` | FAIL | A stub exists but its fill isn't the fixed branding tint (`#EAF0F6`) | `small_color.md` |
+| `stripe-color` | FAIL | Row striping is enabled but its background isn't the fixed neutral grey (`#F6F6F6`) | `small_color.md` |
+| `force-sign` | FAIL | A percent column whose own data genuinely crosses zero, formatted with `fmt_percent(...)` but no `force_sign=True` | `small_color.md` |
+| `hero-not-bold` | FAIL | A column with no `data_color`/`heatmap` fill is bolded across its WHOLE body (a row-scoped highlight, e.g. only a top-N/bottom-N subset, is not this rule's target) | `small_color.md` |
 | `orphan-stub` | FAIL | `tab_stubhead(...)` set but no `rowname_col=` in `GT(...)` | `small_color.md` |
 | `opt-stylize-banned` | FAIL | `opt_stylize(...)` used as a whole-table styler | `small_color.md` |
 | `formatting` | INFO | Numeric `data_color` present but **no** `fmt_*` formatter (numbers may render raw) | `small_color.md` |
+| `layout-advisory` | INFO | No `cols_width(cases={...})` call, and/or the standard `tab_options` padding block is incomplete — a consistency nicety, never a hard gate | `small_color.md` |
 | `gt-missing` | FAIL | Ran clean, but **no module-level `gt`** to inspect | `small_color.md` |
 | `exec-error` | FAIL | `table.py` raised while executing | `small_color.md` |
 | `dom-error` | INFO | `gt.as_raw_html()` failed; DOM-level checks skipped (source checks still ran) | `small_color.md` |
 | `check-error` | FAIL/INFO | File not found, or an internal checker error (a checker bug, not a table problem) | `small_color.md` |
+
+> **Note (2026-08-12):** a hard ceiling on the number of distinct colored
+> measures used to live here and has been REMOVED entirely (not downgraded to
+> an advisory) — the project owner rejected any numeric cap outright: color
+> the measures that deserve emphasis, with the correct palette for each.
+> Nothing in `gt_check.py` reports on colored-measure count any more.
 
 Source-level checks always run; DOM-level checks degrade gracefully — if exec
 or `as_raw_html()` fails, that failure is reported as its own finding and the
