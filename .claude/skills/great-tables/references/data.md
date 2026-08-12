@@ -77,6 +77,38 @@ silently breaks `fmt_*` / `data_color` downstream.
    `sub_missing(missing_text="—")` (an em dash reads as *intentionally blank*, not
    *broken*). This pairs with the NA-cell neutral in `small_color.md`.
 
+## Grain & identifiers — does every row have a distinct stub label?
+
+Before Step 2 turns a column into the stub, confirm the DataFrame's **grain** — what
+one row actually represents — has an identifier that is genuinely unique at that
+grain, not just present.
+
+- **Single-column identifier.** A single existing column (name, ID, date) is enough
+  when it alone is unique at the row's grain — use it directly as the stub.
+- **Composite identifier.** When no single column is unique alone, concatenate the
+  columns that jointly are. A car dataset keyed by manufacturer + model is the
+  concrete case: neither `mfr` nor `model` alone identifies a row (several
+  manufacturers share a model name across trims, and "GT" alone isn't a known car),
+  but `mfr + " " + model` is:
+  ```python
+  df["car"] = df["mfr"] + " " + df["model"]
+  ```
+- **Constructed identifier.** When the grain is itself a combination of columns with
+  no natural label (e.g. one row per year-month), build a display label from them
+  rather than showing the raw parts side by side:
+  ```python
+  df["month_label"] = pd.to_datetime(
+      df["year"].astype(str) + "-" + df["month"].astype(str) + "-01"
+  ).dt.strftime("%b %Y")   # -> "Jan 2010"
+  ```
+
+**The decidable test:** would two different rows render an **identical** stub label?
+If so, the identifier is incomplete — extend it (add another column to the
+composite, or construct a finer label) until every row's label is unique. Check this
+against the actual data, the same way the composite-identifier case above is
+verified against every row before it's trusted, rather than assuming a column
+"looks like" an identifier.
+
 ## Do NOT fabricate
 
 If cleaning reveals the data cannot answer the request (a needed column is absent or
