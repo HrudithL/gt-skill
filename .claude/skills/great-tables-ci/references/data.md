@@ -72,6 +72,50 @@ column silently breaks `fmt_*`/`data_color` downstream.
    `sub_missing(missing_text="—")` (an em dash reads as *intentionally blank*, not
    *broken*). Pairs with the NA-cell neutral in `small_color.md`.
 
+## Grain & identifiers — does every row have a distinct stub label?
+
+Before Step 2 turns a column into the stub, confirm the DataFrame's **grain** — what
+one row actually represents — has an identifier that is genuinely unique at that
+grain, not just present.
+
+- **Single-column identifier.** A single existing column (name, ID, date) is enough
+  when it alone is unique at the row's grain — use it directly as the stub.
+- **Composite identifier — two distinct motivations, not one.** A composite (joining
+  two or more columns into one stub label) can be built for either reason, and it's
+  worth being clear about which one actually applies:
+  - **Uniqueness** — a single column has duplicate values across rows, so a
+    composite is *required* to disambiguate at all.
+  - **Readability** — a single column is already unique on its own, but pairing it
+    with another column produces a more self-describing label, so the reader isn't
+    forced to cross-reference a second column to understand what the stub names.
+    A column can pass the uniqueness test below and still be worth combining for
+    this reason alone.
+
+  A hypothetical product-catalog dataset illustrates the readability case: suppose
+  `sku_name` (e.g. "Trail Runner 3") is already unique across every row on its own
+  (verified directly against the data), so uniqueness alone would not require a
+  composite. A stub can still combine `brand + " " + sku_name` into one label
+  anyway, because "Trail Runner 3" read alone doesn't say which brand makes it,
+  while "Summit Trail Runner 3" is self-describing without a separate brand column:
+  ```python
+  df["display_name"] = df["brand"] + " " + df["sku_name"]
+  ```
+- **Constructed identifier.** When the grain is itself a combination of columns with
+  no natural label (e.g. one row per region-quarter), build a display label from them
+  rather than showing the raw parts side by side:
+  ```python
+  df["period_label"] = df["yr"].astype(str) + " Q" + df["qtr"].astype(str)  # -> "2010 Q1"
+  ```
+
+**The decidable test (uniqueness only):** would two different rows render an
+**identical** stub label? If so, the identifier is incomplete for uniqueness —
+extend it (add another column to the composite, or construct a finer label) until
+every row's label is unique. This test only checks uniqueness, not readability — a
+column can pass it (be unique on its own) and still benefit from a composite for the
+readability reason above. Check the test against the actual data, the same way the
+product-catalog case above is verified against every row before it's trusted, rather
+than assuming a column "looks like" an identifier.
+
 ## Do NOT fabricate
 
 If cleaning reveals the data cannot answer the request (a needed column is absent or

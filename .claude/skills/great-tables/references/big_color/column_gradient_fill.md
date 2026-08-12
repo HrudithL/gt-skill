@@ -10,17 +10,21 @@ branch, **not** a judgment call — do not ask "should this be colored?" The ≥
 magnitude answers it: yes, it qualifies. (Below 5 rows a gradient reads as random
 pastel — it does not qualify; use a targeted highlight instead, see the last rule.)
 
-"Qualifies" is not the same as "is colored": the router caps a table at **≤ 2 colored
-measures**. When **1 or 2** measures qualify, colour **all** of them (each is
-mandatory — do not leave a qualifying measure uncoloured). When **3 or more** qualify,
-you MUST colour exactly 2 — the ceiling wins — and the priority rule below picks
-**which** 2. This resolves the apparent conflict: qualifying is mandatory *eligibility*,
-the ceiling is a *hard cap*, and the priority rule is the deterministic selector.
+"Qualifies" is not the same as "earns a full heatmap fill." There is no numeric cap
+on colored measures — color what the request is actually about, with the correct
+palette for each (the ranking below decides which measures that is). A measure that
+qualifies but isn't part of what the request is about renders fully plain at the
+measure level: no whole-column fill, no whole-column bold, no whole-column
+text-color treatment — its magnitude is carried by the number alone. (This doesn't
+ban `bold_colored_number.md`'s separate technique of bolding a handful of individual
+outlier cells in an otherwise-plain column — that's a few-cells technique, not a
+whole-measure consolation.) This applies regardless of how many other measures
+already carry a color fill.
 
-## Selecting the ≤2 when 3+ qualify (deterministic priority)
+## Which measures earn the full fill first (deterministic priority)
 
-Rank every qualifying measure by this order and take the **top 2**. The order is total
-and computable, so two runs on the same prompt+data pick the SAME 2 columns:
+Rank every qualifying measure by this order. The order is total and computable, so
+two runs on the same prompt+data reach the same ranking:
 
 1. **Prompt-named / emphasised measures first**, in the order they appear in the
    prompt. A measure the user explicitly names, asks to "show/highlight/compare", or
@@ -29,10 +33,16 @@ and computable, so two runs on the same prompt+data pick the SAME 2 columns:
    priority (e.g. none named, or several named at once), the one whose column appears
    earlier (smallest column index) wins.
 
-Take the first 2 from this ranking; colour those, leave the rest uncoloured (a
-qualifying-but-unselected measure gets neither a fill nor a competing highlight — its
-magnitude is carried by the number alone). A measure that spans several facet columns
-(a matrix/heatmap block) counts as **one** measure occupying **one** of the 2 slots.
+The ranking above is fully deterministic — two runs on the same prompt+data always
+reach the same order. How many top-ranked measures actually earn a full fill is a
+judgment call: weigh how many measures the request's core ask is actually about
+against whether a 3rd or 4th fill would make the table read as noise. There is no
+fixed count and no numeric cap. A measure that doesn't make the cut renders fully
+plain at the measure level — no whole-column fill, no whole-column bold, no
+whole-column text-color treatment — its magnitude is carried by the number alone
+(again, this doesn't affect `bold_colored_number.md`'s few-outlier-cells technique).
+A measure that spans several facet columns (a matrix/heatmap block) counts as **one**
+measure in this ranking.
 
 ## When to use
 
