@@ -19,16 +19,24 @@ Design decisions:
   not left implicit.
 - Color: `size` is a single, plain magnitude column with no inherent
   direction -- and it IS the entire point of this table, so it gets the
-  sequential Blues heatmap with an explicit domain=[min, max], per the
-  house rule for a magnitude-column-as-hero. The domain spans a huge
-  range (12 to 16,988) because a handful of continents sit two to three
-  orders of magnitude above the rest -- most individual islands will
-  render quite pale under a LINEAR scale. That is an honest reflection of
-  how lopsided this data actually is (few huge continents, many small
-  islands), not a reason to invent a log/rank-transformed domain instead:
-  the house rule is explicit that a literal domain must be the data's own
-  [min, max], and a transformed domain would misrepresent the actual
-  magnitude relationship between e.g. Asia and Vancouver Island. Text
+  sequential Blues heatmap, still linear (no log/rank transform -- a
+  transformed domain would misrepresent the actual magnitude relationship
+  between e.g. Asia and Vancouver Island). Domain floor, by author
+  direction: a NEGATIVE pre-tint buffer, NOT 0 and NOT the sample's own
+  minimum (12). The sample min (or even a literal 0) as the domain floor
+  still puts the smallest island(s) at, or arbitrarily close to, t=0 --
+  the palette's absolute lightest swatch, which renders visually
+  indistinguishable from an uncolored/background cell (a reader could
+  easily misread that as "this cell's color wasn't computed" rather than
+  "this is a genuinely small landmass"). Reserving the bottom 20% of the
+  scale as a buffer -- domain floor = `-0.2 * size_hi` -- guarantees every
+  real value (even the smallest, 12) lands at a visibly non-zero, if pale,
+  shade, while the domain ceiling stays the data's real max (16,988) so
+  the largest continent still anchors the darkest swatch exactly. This
+  is a deliberate, reproducible rule (20% of the real max, not a magic
+  literal), not a literal [min, max] domain -- an explicit exception to
+  the usual "domain must be the data's own [min, max]" default, made here
+  because that default actively misleads on a range this skewed. Text
   stays legible either way via `autocolor_text=True`.
 - Striping: with only ONE non-stub column (`size`), coloring it alone
   already accounts for 100% of the visible body columns -- by the same
@@ -96,11 +104,12 @@ df = pd.read_csv(_ROOT / "data" / "islands.csv")
 top = df.sort_values("size", ascending=False).reset_index(drop=True)
 
 # ---- Color domain ----------------------------------------------------------
-# Single sequential measure, full [min, max] of the actual data -- see
-# "Color" in the module docstring for why the domain is left linear/
-# untransformed even though it's wildly skewed.
-size_lo = float(top["size"].min())
+# Single sequential measure, linear, ceiling = the actual data max. Floor is
+# a NEGATIVE 20%-of-max pre-tint buffer, NOT 0 and NOT top["size"].min() --
+# see "Color" in the module docstring for why a zero/sample-minimum floor
+# would make the smallest row(s) look uncolored rather than genuinely small.
 size_hi = float(top["size"].max())
+size_lo = -0.2 * size_hi
 
 # ---- Table -----------------------------------------------------------------
 gt = (
@@ -123,11 +132,15 @@ gt = (
         truncate=False,
         autocolor_text=True,
     )
-    # Column-label band -- house DEFAULT shade="light": the MORE-visible
-    # accent_tint (navy -- matches the size heatmap's Blues family, per the
-    # DA hue-selection rule: match an existing heatmap hue first).
+    # Columns sized to their own content (+ a small buffer), not left to
+    # auto-stretch -- author-directed, to kill excess whitespace.
+    .cols_width(cases={"name": "180px", "size": "150px"})
+    # Column-label band -- DEEP navy (#08306B, sampled from the dark end of
+    # the size Blues heatmap, matching the gtcars tables' header treatment
+    # for consistency across all tables), bold, white text.
     .tab_options(
-        column_labels_background_color="#C9E0F0",
+        column_labels_background_color="#08306B",
+        column_labels_font_weight="bold",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
         column_labels_border_bottom_style="solid",
@@ -138,19 +151,24 @@ gt = (
         table_border_bottom_style="solid", table_border_bottom_color="#CCCCCC", table_border_bottom_width="1px",
         table_border_left_style="solid", table_border_left_color="#CCCCCC", table_border_left_width="1px",
         table_border_right_style="solid", table_border_right_color="#CCCCCC", table_border_right_width="1px",
+        # Tighter padding throughout -- less whitespace per cell, by author
+        # direction.
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
     )
+    .tab_style(style=style.text(color="white"), locations=loc.column_labels())
     # Stub tint -- the quieter washed navy, one tier down from the band, so
     # the stub stays subtler than the louder column-label band above it.
     .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub())
     .cols_align(align="right", columns=["size"])
     .tab_source_note(
         source_note=html(
-            "Ordered largest to smallest by land area; the source dataset's own definition of "
-            "“landmass” includes continents (Asia, Africa, North America, ...) alongside "
-            "literal islands, so both appear together in one ranking rather than being split out. "
-            "The color scale is linear across the full range (12 to 16,988 thousand sq. mi.), so "
-            "continents render darkest and the many smaller islands, being far below that maximum, "
-            "render pale — an accurate reflection of the data's own scale, not a rendering artifact."
+            "Ordered largest to smallest by land area; “landmass” includes continents "
+            "(Asia, Africa, ...) alongside literal islands in one ranking."
         )
     )
     .tab_source_note(
@@ -161,4 +179,4 @@ gt = (
     )
 )
 
-gt.gtsave(str(_HERE / "islands_sizes.png"), zoom=2.0, expand=15)
+gt.gtsave(str(_HERE / "islands_sizes.png"), zoom=2.0, expand=8)
