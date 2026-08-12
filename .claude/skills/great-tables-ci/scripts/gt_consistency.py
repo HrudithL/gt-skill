@@ -58,7 +58,6 @@ PALETTE = {
     },
     # §2 — neutral structural surfaces (light greys).
     "neutral": {
-        "label_band": "#F0F0F0",         # light label band
         "row_stripe": "#F6F6F6",         # row stripe
         "hairline": "#E8E8E8",           # cell hairline between rows, 1px
         "column_label_rule": "#CCCCCC",  # column-label bottom rule, 2px

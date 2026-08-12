@@ -3156,15 +3156,20 @@ def check_colored_measure_selection(cand: dict, truth: dict, meta: dict) -> Chec
         # canonical colored measures, so when none are required there is
         # nothing left for it to check -- even a candidate that rainbow-
         # colors many unrelated columns for no reason still scores 6/6 on
-        # THIS check alone. Penalizing that kind of purposeless/excessive
-        # coloring is deliberately NOT this check's job; it's the sibling
-        # `color_restraint_quality` judge dimension (PR #96, branch
-        # `skill-align/judge-color-restraint-dimension`), which triggers
-        # whenever a candidate has 2+ full heatmap fills regardless of
-        # what the ground truth requires. None of the current 6 ground
-        # truths have an empty canonical-colored-measures list, so this
-        # branch is latent today, but the coverage/restraint split is a
-        # matched pair once both PRs land on `skill-align/root`.
+        # THIS check alone. A sibling judge dimension scoring that kind of
+        # purposeless/excessive coloring was proposed and implemented
+        # (PR #96, `skill-align/judge-color-restraint-dimension`), but the
+        # project owner reversed that direction after two independent
+        # reviews found the underlying "bold/text-color as a restraint
+        # signal" premise empirically false against this corpus: do not
+        # evaluate or teach anything about bolding/text-color as a color-
+        # restraint mechanic, in any form. PR #96 was closed unmerged as a
+        # result. So excessive coloring on a hypothetical zero-required-
+        # color ground truth is, by explicit direction, simply not scored
+        # anywhere in this comparator -- an accepted, known limitation, not
+        # a gap awaiting a sibling PR. None of the current 6 ground truths
+        # have an empty canonical-colored-measures list, so this branch is
+        # latent today regardless.
         identity_pts = 6
         identity_detail = "ground truth declares no canonical colored measures"
     elif not cand["tier2"].get("ok"):

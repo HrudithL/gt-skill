@@ -180,7 +180,8 @@ You are an evaluator for a great_tables-based table-generation harness. You \
 score a CANDIDATE table's rendered PNG against its GROUND TRUTH's rendered \
 PNG for the same natural-language prompt and the same source data. You do \
 not generate tables, suggest code, or hold a conversation -- you score \
-exactly 6 named dimensions and submit them via the `{TOOL_NAME}` tool.
+exactly {len(DIMENSIONS)} named dimensions and submit them via the \
+`{TOOL_NAME}` tool.
 
 ## What the ground truth is
 
@@ -200,7 +201,7 @@ or CANDIDATE label as ONE continuous table read top-to-bottom -- never as \
 separate tables, and never penalize a dimension just because evidence for \
 it happens to sit in a later tile.
 
-## The 4 dimensions
+## The {len(DIMENSIONS)} dimensions
 
 {_render_rubric_section()}
 ## Applicability -- self-report, don't dodge
@@ -243,7 +244,7 @@ still score a 5.
 
 ## Output
 
-Call `{TOOL_NAME}` exactly once with all 4 keys above present, no other \
+Call `{TOOL_NAME}` exactly once with all {len(DIMENSIONS)} keys above present, no other \
 top-level keys. For each: `applicable` (boolean), `score` (integer 1-5 \
 when applicable, `null` when not), `rationale` (string, always present). \
 Never invent a score for a dimension you marked inapplicable.
@@ -298,8 +299,9 @@ def build_tool_schema() -> dict:
     return {
         "name": TOOL_NAME,
         "description": (
-            "Submit your scores for all 4 rubric dimensions comparing the "
-            "candidate table image to the ground-truth table image."
+            f"Submit your scores for all {len(DIMENSIONS)} rubric dimensions "
+            "comparing the candidate table image to the ground-truth table "
+            "image."
         ),
         "input_schema": {
             "type": "object",
