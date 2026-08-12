@@ -74,6 +74,9 @@ Unit notation: `"Speed ({{m/s}})"` renders as "Speed (m/s)" with proper formatti
 .cols_move_to_end(columns)           # move to rightmost position
 ```
 
+The mechanism for placing the primary heatmapped measure at an outer edge — see
+`REFERENCE.md` §2b and `SKILL.md`'s Step 2.
+
 ### cols_width
 
 ```python
