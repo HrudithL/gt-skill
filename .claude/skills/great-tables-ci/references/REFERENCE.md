@@ -43,8 +43,8 @@ only — the helpers execute a decision you already made.
   palette *names*. Open before writing any color.
 - **`small_color.md`** — the fixed Small-Color polish checklist (cell
   borders, column dividers, the row-striping gate, stub tint, `fmt_*` per
-  semantic type, the grey-budget rule, row-group emphasis) plus **all
-  neutral hexes** and the **frame border color/width + `gtsave`
+  semantic type, row-group emphasis, the compact-layout padding values) plus
+  **all neutral hexes** and the **frame border color/width + `gtsave`
   margin/zoom values**. Open before Step 5 and before setting the frame; run
   every gated item.
 
@@ -65,28 +65,41 @@ rule.
 | A few **outlier cells** | `big_color/bold_colored_number.md` |
 | **One text column that IS the column** | `big_color/full_column_fill.md` |
 
-Ceiling: **≤ 2 colored measures**. One measure ⇒ it's the hero and gets
-colored. A pure categorical/text table with no magnitude/trend/signed/winner
-story gets **no** fill — its anchor is the dark heading band (Step 4). (Hero
-text that is not a colored measure gets **bold text**, never a second fill —
-no file needed.)
+Which measures earn fill: one qualifying measure ⇒ it's the hero and gets
+colored. When several qualify, `big_color/column_gradient_fill.md`'s priority
+ladder picks which earn a full heatmap fill first and which instead step down
+to bold text/text color (the color-restraint principle, `small_color.md`). A
+pure categorical/text table with no magnitude/trend/signed/winner story gets
+**no** fill — its anchor is the branding heading band (Step 4), which every
+table gets regardless. (A measure the request names that does not earn a fill
+renders **fully plain** — no fill, no bold — see `small_color.md`.)
+
+## 2b. Column placement for the primary heatmapped measure (Step 2)
+
+Once you know which measure will carry the table's primary heatmap fill, keep
+it at an **outer edge** — immediately after the stub, or as the last
+column(s) — never buried in the middle. Columns providing context/inputs a
+reader needs first precede columns reporting a derived/resulting outcome, so
+an outcome-type measure naturally lands at the right edge, while a measure
+that IS the subject's defining fact lands at the left edge (right after the
+stub). Use **`api.md`**'s `cols_move` / `cols_move_to_start` /
+`cols_move_to_end` entries as the mechanism.
 
 ## 3. Choosing the heading band (Step 4)
 
-Open **`big_color/column_label_emphasis.md`** for the band decision itself
-(dark-vs-light branch keyed off Big Color), then **`palettes.md`** for the
-exact **band hex** — a washed tint of the Big-Color hue if the table has ANY
-Big Color, else a **dark DA solid with white text** — and the **DA
-hue-selection rule**. Keep the column-label bottom rule regardless of band
-(hex in `small_color.md`).
+Open **`palettes.md`**'s branding tier for the fixed **band hex**, weight, and
+label text color — the same on every table, unconditionally, regardless of
+whether (or what) the body heatmaps. Keep the column-label bottom rule
+regardless of band (hex in `small_color.md`). `big_color/column_label_emphasis.md`
+has the mechanics.
 
 ## 4. Titles & annotations (Step 6)
 
 **Before writing the footer**, open **`small_color.md` → "(f) Titles &
 annotations"**: the footer is **two separate `tab_source_note(...)` calls**
 (an analytical caption + a source/provenance note), not one combined line —
-and a bold-but-uncolored hero measure still needs `style.text(weight="bold")`
-explicitly set.
+and a named-but-uncolored measure stays fully plain text, no
+`style.text(weight="bold")`, no fill.
 
 ## 5. Your data matches an archetype (Steps 2 & 5)
 
