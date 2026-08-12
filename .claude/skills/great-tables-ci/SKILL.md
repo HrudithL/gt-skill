@@ -33,7 +33,8 @@ default.
                          validate request vs data (blank table if unanswerable)
 2. ORGANIZE COLUMNS      show/hide · limit rows · stub (default) · groups (gated)
                          spanners (column groups) · name the hero column · primary
-                         heatmapped measure at an outer edge, not buried mid-table
+                         heatmapped measure prefers an outer edge (strong default,
+                         not absolute)
 3. BIG COLOR             which measure(s) earn fill (the hero if only 1); encoding
                          by data shape; gradients use sequential/diverging, everything
                          else uses Dark Academia solids
@@ -92,13 +93,16 @@ signature from memory.
   SQL `Decimal`s. `great_tables` *formats* numbers, it does not parse strings; a
   `"$1,200"` value silently breaks `fmt_*`/`data_color`.
 - **Before you finalize column order** (Step 2): the column (or column-group)
-  carrying the primary/most-important heatmap fill belongs at an outer edge —
-  right after the stub, or as the last column(s) — never buried in the middle.
-  Columns providing context/inputs a reader needs first precede columns
-  reporting a derived/resulting outcome, so an outcome-type measure naturally
-  lands at the right edge while a measure that IS the subject's defining fact
-  lands at the left edge. Use `cols_move`/`cols_move_to_start`/`cols_move_to_end`
-  (`api.md`) to place it.
+  carrying the primary/most-important heatmap fill should prefer an outer edge —
+  right after the stub, or as the last column(s). This is a strong preference,
+  not an absolute; a table with multiple qualifying measures may reasonably
+  place one a column or two inside the edge if that better serves the table's
+  narrative order — don't force a reordering that fights the data's natural
+  grouping just to satisfy it. Columns providing context/inputs a reader needs
+  first precede columns reporting a derived/resulting outcome, so an
+  outcome-type measure naturally lands at the right edge while a measure that IS
+  the subject's defining fact lands at the left edge. Use
+  `cols_move`/`cols_move_to_start`/`cols_move_to_end` (`api.md`) to place it.
 - **Before you write any `data_color(...)`** (Step 3): the palette name, hexes,
   and domain live only in the `big_color/<shape>.md` file `REFERENCE.md` names
   for your data shape (plus `palettes.md`). Copy them.
