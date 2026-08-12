@@ -22,8 +22,11 @@ this comparison — nothing ever silently passes or fails.
 visible in the printed report, not just in code comments.
 
 Report shape: a 0–108 total = Data-compliance (0–53) + Formatting-compliance
-(0–55), plus one line per check naming its tier, what passed/failed, its
-point value, and why (§7).
+(0–55) for a table with fewer than 2 full-heatmap-filled measures; 0–109
+(0–53 + 0–56) once `check_color_restraint_quality` becomes applicable (a
+candidate with 2+ such measures) -- see that check's docstring. Plus one
+line per check naming its tier, what passed/failed, its point value, and
+why (§7).
 
 2026-08-12: the 6 ground truths were rewritten to pin down several
 formerly per-table/discretionary decisions as flat, universal house rules
@@ -4152,7 +4155,8 @@ DATA_CHECKS: list[CheckFn] = [
 
 
 # ----------------------------------------------------------------------- #
-# Formatting-compliance checks (§9, 55 pts as of the 2026-08-12 rewrite)
+# Formatting-compliance checks (§9, 55 pts as of the 2026-08-12 rewrite;
+# 56 pts once `check_color_restraint_quality` is applicable)
 # ----------------------------------------------------------------------- #
 
 def _domain_element_symmetric(lo: str, hi: str, value_range: tuple[float, float] | None = None) -> bool:
@@ -5277,6 +5281,24 @@ def check_column_order_quality(cand: dict, truth: dict, meta: dict) -> CheckResu
     return _judge_dimension_check(meta, "column_order_quality", "Column order quality", 2)
 
 
+def check_color_restraint_quality(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    # New: a table that already carries 2+ full heatmap fills shouldn't
+    # reach for yet another full fill on a secondary-but-notable measure --
+    # bold text or text color should carry that emphasis instead, so the
+    # measure(s) that anchor the table's main story stay visually distinct.
+    # Weight is deliberately the minimum expressible value (1): this is a
+    # light, general judgment call, not a mechanical gate, and `weight=1`
+    # under `_judge_dimension_check`'s `_round_points(score/5, 1)` rounds a
+    # judge score of 1-2 to 0 points and 3-5 to 1 point (Python's
+    # round-half-to-even on 0.2/0.4/0.6/0.8/1.0) -- it ties, not exceeds,
+    # `check_label_concept_correctness`, the other minimum-weighted
+    # judge-backed check. The judge itself gates applicability (candidate
+    # has fewer than 2 full heatmap fills -- see judge_rubric.py), so no
+    # extra gating is needed here beyond the shared _judge_dimension_check
+    # degrade path.
+    return _judge_dimension_check(meta, "color_restraint_quality", "Color-restraint quality", 1)
+
+
 FORMAT_CHECKS: list[CheckFn] = [
     check_domain_computation,
     check_frame_hairlines_dividers,
@@ -5295,6 +5317,7 @@ FORMAT_CHECKS: list[CheckFn] = [
     check_summary_row_visual_distinction,
     check_title_quality,
     check_column_order_quality,
+    check_color_restraint_quality,
 ]
 
 

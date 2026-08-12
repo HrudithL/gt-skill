@@ -150,6 +150,43 @@ DIMENSIONS: dict[str, dict] = {
             ),
         },
     },
+    "color_restraint_quality": {
+        "title": "Color-restraint quality (discretionary only)",
+        "assesses": (
+            "ONLY applicable when the CANDIDATE table itself renders 2 or "
+            "more distinct measures with a full heatmap-style cell fill. "
+            "When applicable: once that many measures already carry a "
+            "full fill, does the candidate favor bold text or text color "
+            "-- rather than yet another full fill -- for additional "
+            "secondary-but-notable measures, so the measure(s) that "
+            "actually carry the table's main story stay visually "
+            "distinguishable from the rest? See the Applicability section "
+            "below -- self-report applicable=false whenever the candidate "
+            "has fewer than 2 full heatmap fills. This is a light, "
+            "general judgment call about restraint, not a check against "
+            "any specific count or selection of cells."
+        ),
+        "anchors": {
+            1: (
+                "Candidate already has 2+ full heatmap fills and still "
+                "gives another full fill to a minor/secondary measure, "
+                "so a viewer can't tell which measure(s) actually carry "
+                "the table's main story."
+            ),
+            3: (
+                "Restraint is only partially exercised -- some "
+                "secondary-but-notable measures step down to bold text "
+                "or text color instead of a fill, but at least one still "
+                "gets an unnecessary additional full heatmap fill."
+            ),
+            5: (
+                "Emphasis is clearly layered: full heatmap fills are "
+                "reserved for the measure(s) that carry the table's main "
+                "story, and secondary-but-notable measures are carried "
+                "by bold text or text color instead of another fill."
+            ),
+        },
+    },
 }
 
 DIMENSION_KEYS: tuple[str, ...] = tuple(DIMENSIONS)
@@ -215,6 +252,10 @@ separate deterministic mechanism elsewhere in the harness -- self-report \
 `applicable=false` with a rationale saying so. If the ground truth does \
 not group at all, this is not a discretionary editorial choice being \
 tested here either -- self-report `applicable=false`.
+- `color_restraint_quality` is applicable ONLY when the CANDIDATE table \
+itself renders 2 or more distinct measures with a full heatmap-style cell \
+fill. When the candidate has 0 or 1 such measures, the restraint question \
+doesn't arise -- self-report `applicable=false` with a rationale saying so.
 - For every OTHER dimension, self-report `applicable=false` only when the \
 dimension genuinely cannot be assessed from what's rendered (e.g. a table \
 has only one non-stub column on EITHER side, so `column_order_quality` has \
