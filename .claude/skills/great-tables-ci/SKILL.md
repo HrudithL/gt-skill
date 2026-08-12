@@ -1,6 +1,6 @@
 ---
 name: great-tables-ci
-description: Use when building a table with `great_tables`, `gt.GT`, or `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Deterministic 7-step flowchart — understand data, organize columns, Big Color (≤2 colored measures), heading band, Small-Color checklist, titles/annotations, render+verify. Read `references/REFERENCE.md` before writing any Python; it routes every color/band/polish/API decision to the exact value that pins it. The mandatory renderer is `gt.gtsave("table.png")`. Invoke before reading the data or writing any Python. CI-checked variant.
+description: Use when building a table with `great_tables`, `gt.GT`, or `gtsave`, or turning tabular data (CSV, DataFrame, spreadsheet) into a rendered PNG. Deterministic 7-step flowchart — understand data, organize columns, Big Color (which measures earn fill), heading band, Small-Color checklist, titles/annotations, render+verify. Read `references/REFERENCE.md` before writing any Python; it routes every color/band/polish/API decision to the exact value that pins it. The mandatory renderer is `gt.gtsave("table.png")`. Invoke before reading the data or writing any Python. CI-checked variant.
 ---
 
 # Great Tables Skill
@@ -32,26 +32,29 @@ default.
                          clean → ONE correctly-typed DataFrame (references/data.md)
                          validate request vs data (blank table if unanswerable)
 2. ORGANIZE COLUMNS      show/hide · limit rows · stub (default) · groups (gated)
-                         spanners (column groups) · name the hero column
-3. BIG COLOR             ≤ 2 colored MEASURES (the hero if only 1); encoding by
-                         data shape; gradients use sequential/diverging, everything
+                         spanners (column groups) · name the hero column · primary
+                         heatmapped measure at an outer edge, not buried mid-table
+3. BIG COLOR             which measure(s) earn fill (the hero if only 1); encoding
+                         by data shape; gradients use sequential/diverging, everything
                          else uses Dark Academia solids
-4. HEADING BAND          any Big Color? → LIGHT band.  none? → DARK saturated band
+4. HEADING BAND          unconditional: dark navy band, bold labels, white text —
+                         every table, regardless of Big Color
 5. SMALL COLOR           fixed checklist: borders · dividers · striping · stub tint ·
-                         fmt_* per column · grey-budget rule
+                         fmt_* per column · row-group rule (bold + border, no fill)
 6. TITLES & ANNOTATIONS  title + subtitle (both required) · caption (≥5 rows) +
                          source (when known), stacked footer notes
 7. RENDER & VERIFY       gt.gtsave("table.png") · read it back · audit every rule
 ```
 
 The order is fixed: color intent (Step 3) is decided before the quiet polish
-(Step 5), and the band (Step 4) can only be decided once Big Color is known.
+(Step 5). The heading band (Step 4) is a fixed branding constant, not a decision —
+it renders the same way whether or not Step 3 produced any Big Color.
 
 ## Step 7 is a full manual audit — `gt_check.py` does not cover these items
 
 Before you consider the table done, re-check every item below by eye against the
-rendered PNG. `gt_check.py` mechanically enforces the ≤2-colored-measure ceiling
-and the frame; it does **not** currently check hairlines, column dividers, stub
+rendered PNG. `gt_check.py` mechanically enforces its own colored-measure and
+frame rules; it does **not** currently check hairlines, column dividers, stub
 tint, or the footer's two-call convention (an earlier version of this checklist
 claimed it did — that was wrong, and mechanical checks for these are a real but
 separate follow-up, not something to assume exists today):
@@ -64,12 +67,16 @@ separate follow-up, not something to assume exists today):
 - **The footer's two-call convention** (`small_color.md` (f)): an analytical
   caption AND a separate source note, not one combined line, on any table with
   ≥5 rows.
-- **Hero-uncolored measures must be bold, not bare** — this one needs the
-  prompt (which measure is the request's actual topic), so no mechanical check
-  could verify it even if one existed. If the request names 2+ measures and you
-  colored both because both fit under the ceiling, that's still wrong — re-read
-  Step 3's ceiling, color the one that's the request's actual topic, and
-  `style.text(weight="bold")` the other.
+- **A named-but-uncolored measure stays fully plain** — no fill, no bold. This
+  one needs the prompt (which measure is the request's actual topic), so no
+  mechanical check could verify it even if one existed. If the request names 2+
+  measures and only one earns the fill, leave every other named measure as a
+  plain, unstyled value column — do not bold it as a consolation prize.
+- **Color is purposeful, not maxed out.** If 2 or more measures already carry a
+  full heatmap fill, a further secondary-but-notable measure earns emphasis via
+  bold text and/or text color, not a competing third heatmap — recount every
+  `data_color`/`heatmap` call and check each one is still the *right* choice for
+  that measure, not just an available slot.
 
 Small polish matters as much as Big Color — audit all of these by eye every time,
 don't rely on a checker that doesn't exist yet to catch them for you.
@@ -85,12 +92,20 @@ signature from memory.
   floats, coerce `object`-dtype numeric columns, fix a non-zero header row, cast
   SQL `Decimal`s. `great_tables` *formats* numbers, it does not parse strings; a
   `"$1,200"` value silently breaks `fmt_*`/`data_color`.
+- **Before you finalize column order** (Step 2): the column (or column-group)
+  carrying the primary/most-important heatmap fill belongs at an outer edge —
+  right after the stub, or as the last column(s) — never buried in the middle.
+  Columns providing context/inputs a reader needs first precede columns
+  reporting a derived/resulting outcome, so an outcome-type measure naturally
+  lands at the right edge while a measure that IS the subject's defining fact
+  lands at the left edge. Use `cols_move`/`cols_move_to_start`/`cols_move_to_end`
+  (`api.md`) to place it.
 - **Before you write any `data_color(...)`** (Step 3): the palette name, hexes,
   and domain live only in the `big_color/<shape>.md` file `REFERENCE.md` names
   for your data shape (plus `palettes.md`). Copy them.
-- **Before you set the heading band** (Step 4): open `palettes.md` for the exact
-  band hex — washed tint if Big Color is present, dark DA solid + white text if
-  not — and the hue-selection rule.
+- **Before you set the heading band** (Step 4): open `palettes.md`'s branding
+  tier for the exact band hex, weight, and label text color — a fixed value,
+  the same on every table, independent of whether the body has Big Color.
 - **Before you run the Small-Color polish** (Step 5): open `small_color.md` and
   run its fixed checklist top to bottom — every neutral hex, the striping gate,
   the stub tint, the fmt-per-type rules.
@@ -118,6 +133,11 @@ numeric values live in the references.
   restores clarity. The default zoom and margin value are in
   `references/small_color.md`. Relative scale: title > subtitle > body >
   source/caption.
+- **Compact layout.** Every table sizes each column with `cols_width(cases={...})`
+  to its own content plus a small buffer, and pins six padding values via
+  `tab_options(...)`. Widths are content-dependent (pick per table); the padding
+  literals are pinned in `references/small_color.md`. A consistency addition,
+  not currently mechanically checked.
 
 ## Correctness gotchas (named rules — the values live in the references)
 
@@ -191,9 +211,10 @@ from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub
 ```
 
 `heatmap` colors a measure (computes the shared domain, looks up the palette);
-`band` applies the exact band hex + the mandatory bottom rule; `frame`/
-`finalize` apply the boxed border and the `gtsave` margin/zoom; `stripe`/
-`stub_tint` apply the pinned surfaces; `PALETTE` holds every hex and mirrors
-`palettes.md` (**zero inlined hexes**). **They choose nothing** — you still
-decide which columns, sequential vs diverging, which hue, light vs dark band,
-and pass each in as an argument. This is the only place scripts enter the flow.
+`band` applies the fixed branding band hex + the mandatory bottom rule (the band
+itself no longer varies — see `references/palettes.md` §0); `frame`/`finalize`
+apply the boxed border and the `gtsave` margin/zoom; `stripe`/`stub_tint` apply the
+pinned branding surfaces; `PALETTE` holds every hex and mirrors `palettes.md`
+(**zero inlined hexes**). **They choose nothing** — you still decide which columns,
+sequential vs diverging, which hue for a heatmapped measure's own fill, and pass
+each in as an argument. This is the only place scripts enter the flow.
