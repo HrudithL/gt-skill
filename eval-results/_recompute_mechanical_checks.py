@@ -35,6 +35,10 @@ EVAL_RESULTS = ROOT / "eval-results"
 sys.path.insert(0, str(ROOT))
 from runner import comparator as c  # noqa: E402
 
+# FROZEN against the pre-`color_restraint_quality` 4-dimension rubric -- add
+# "Color-restraint quality" (or whatever that check's name ends up being)
+# before ever re-running this script against results scored under the
+# newer 5-dimension rubric.
 JUDGE_CHECK_NAMES = {
     "Grouping-choice quality",
     "Column-label concept-correctness",
