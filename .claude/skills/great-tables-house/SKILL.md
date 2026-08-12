@@ -53,9 +53,11 @@ unconditional, regardless of how simple the request looks:
 3. **The boxed frame** — `frame(gt)`.
 4. **Big Color stays restrained** — `heatmap()`/`data_color()` targets only
    the measure(s) the request is actually about, never one heatmap per
-   numeric column; once 2+ measures already carry a full heatmap, a
-   further notable measure gets bold/text-color emphasis, not another
-   heatmap fill.
+   numeric column; if 3+ measures would each independently qualify for a
+   full heatmap fill, the one(s) beyond the first 1-2 step down to
+   bold/text-color emphasis instead of a fill — a measure that was never a
+   fill-candidate in the first place still stays fully plain (no fill, no
+   bold).
 5. **Body-row hairlines** — `hairlines(gt)`. A separate option family from
    item 3's frame, not covered by it — `great_tables` already renders a
    raw gray hairline by default, so skipping this call doesn't leave the

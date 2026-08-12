@@ -26,9 +26,10 @@ ambiguous measure, THEN a separate provenance note — a generic provenance
 note if the real one is unknown, never omitted), (3) the boxed frame
 (``frame(gt)``), (4) Big Color kept restrained — the ``heatmap()``/
 ``data_color()`` calls target only the measure(s) the request is actually
-about, never one heatmap per numeric column, and once 2+ measures already
-carry a full heatmap, any further notable measure gets bold/text-color
-emphasis instead of another heatmap (not a fixed numeric cap — see
+about, never one heatmap per numeric column; if 3+ measures would each
+independently qualify for a fill, the one(s) beyond the first 1-2 step
+down to bold/text-color instead of a fill, while a measure that was never
+a fill-candidate stays fully plain (not a fixed numeric cap — see
 ``references/RULES.md``'s "Color restraint"), (5) the body-row
 ``hairlines(gt)`` rule (a completely separate `great_tables` option family
 from the outer ``frame()`` border — `great_tables` already renders a raw
@@ -87,10 +88,13 @@ from great_tables import GT, loc, md, style
 PALETTE = {
     # Dark Academia SOLID Big-Color palette (white text on every solid). Each
     # hue exists for a specific subject-matter cue, not decoration — see the
-    # "Use when..." comment on each entry. Navy is the deterministic default
-    # when no other cue applies (references/palettes.md §1's hue-selection
-    # rule: match an existing heatmap hue first, else the data's subject,
-    # else any color already in the table, else Navy).
+    # "Use when..." comment on each entry. Navy is also the fixed default for
+    # BRANDING surfaces (band()/stub_tint()) specifically, because Blues/navy
+    # is the standard house hue for branding — not because it's re-derived by
+    # matching whichever hue a heatmapped measure elsewhere in the table
+    # happens to use (see references/RULES.md's "Unified color theme"; the
+    # "solid"/"washed" hue system itself is copied from
+    # great-tables-ci/references/palettes.md, not a file in this skill).
     "solid": {
         "navy": "#22384F",      # default with no other cue
         "forest": "#2F4A38",    # nature, growth, environment, money/finance
@@ -100,8 +104,10 @@ PALETTE = {
         "tan": "#8A7452",       # secondary warm accent / mid (cream tint)
     },
     # The washed light tint paired with each solid above (same keys). Used
-    # for quiet structural surfaces (band, stub, stripe) so the quiet polish
-    # echoes whichever solid hue is doing the loud work elsewhere.
+    # for the stub's quiet tint (`stub_tint()`) — navy/Blues is the fixed
+    # branding default here because Blues is the standard house hue for
+    # branding, not a tint re-derived by matching whichever solid hue a
+    # heatmapped measure elsewhere in the table happens to use.
     "washed": {
         "navy": "#EAF0F6",
         "forest": "#EAF1EC",
@@ -128,10 +134,13 @@ PALETTE = {
         "tan": "#9C8258",
     },
     # The visibly-tinted (not barely-there) light pairing for "accent" above —
-    # used for the stub and group-header fill. Noticeably more saturated than
-    # "washed" below on purpose: "washed" is reserved for the whisper-quiet
-    # row stripe, so stripe and stub read as two distinct strengths of the
-    # same hue rather than blurring into one another.
+    # used for the column-label band when `band(gt, shade="light")` is
+    # chosen (the house DEFAULT is `shade="dark"`, which paints the band with
+    # the solid "accent" tier itself instead — see band()'s docstring). NOT
+    # used for the stub (`stub_tint()` always uses the quieter "washed" tier
+    # below) or for group headers (`group_emphasis()` applies bold + a rule
+    # only, no fill at all). The row stripe is a third, separate tier
+    # entirely — the flat, never-tinted "neutral" grey (see stripe()).
     "accent_tint": {
         "navy": "#C9E0F0",
         "forest": "#CFEAD9",
@@ -309,12 +318,15 @@ def band(gt, *, shade="dark", hue):
     for ``shade="light"`` only if you have an explicit reason to want the
     quieter tint instead.)
 
-    NOTE the band uses ``accent_tint`` while ``stub_tint()`` uses the
-    quieter ``washed`` tier — the OPPOSITE pairing of what a first guess
-    might assume. The band is the more prominent surface (it spans every
-    column and sits right under the title), so it carries the
-    more-visible tint; the stub is a narrower, secondary surface and stays
-    quieter so it doesn't out-compete the band above it.
+    NOTE the default ``shade="dark"`` band uses the solid ``accent`` tier
+    (the most visible option) while ``stub_tint()`` always uses the quieter
+    ``washed`` tier. The band is the more prominent surface (it spans every
+    column and sits right under the title), so it carries the most-visible
+    fill; the stub is a narrower, secondary surface and stays quieter so it
+    doesn't out-compete the band above it. (``shade="light"`` paints the
+    band with the lighter ``accent_tint`` tier instead of the default's
+    solid ``accent`` — still more visible than the stub's ``washed`` tint
+    either way.)
     """
     rule = PALETTE["neutral"]["column_label_rule"]
     options = {
@@ -665,10 +677,11 @@ def build_house_table():
     - ``rank``       -> plain integer, no color, no decimals — a rank's
                         information is its order, not its size.
 
-    Column order: `revenue`, the primary heatmapped measure, sits at the
-    left outer edge — right after its lone context column (`units_sold`)
-    — never buried mid-table; this demo already satisfies that, no
-    reordering needed.
+    Column order: `revenue`, the primary heatmapped measure, sits in the
+    first value column or two — right after its lone context column
+    (`units_sold`), not literally the very first column — never buried
+    among trailing categorical/rank columns; this demo already satisfies
+    that, no reordering needed.
     """
     products = pd.DataFrame(
         [
