@@ -15,18 +15,20 @@ unchecked, the table isn't done yet.
 1. **Title AND subtitle, both, always** — `tab_header(title=..., subtitle=...)`.
    A subtitle-less or title-less table is incomplete, full stop — there is
    no data shape simple enough to skip this.
-2. **A source note, always** — `tab_source_note(source_note=...)`. If the
-   actual provenance is unknown, write a generic-but-real one ("Source:
-   provided dataset.") rather than omitting it — an unstated source is
-   still a gap, not a neutral default.
+2. **TWO source notes: an analytical caption stating the finding or the
+   chosen definition, then a separate provenance note** — two
+   `tab_source_note(source_note=...)` calls, caption first. If the actual
+   provenance is unknown, write a generic-but-real provenance note
+   ("Source: provided dataset.") rather than omitting it — an unstated
+   source is still a gap, not a neutral default.
 3. **The boxed frame, always** — `frame(gt)`.
-4. **At most 2 colored measures, TOTAL, no exceptions** — `data_color`/
-   `heatmap()` calls across the WHOLE table, not per column-group and not
-   "one per numeric column." A table with 5 numeric columns still gets
-   **at most 2** heatmaps — pick the 1–2 that are actually the point of the
-   request and leave the rest uncolored (bold text at most). Three or more
-   `heatmap(...)` calls in one script is always a bug, never a stylistic
-   choice — if you catch yourself writing a third one, delete it.
+4. **Big Color stays restrained, not capped at a fixed number** —
+   `data_color`/`heatmap()` calls across the WHOLE table target only the
+   measure(s) that are actually the point of the request, never "one per
+   numeric column." Leave the rest plain (no fill, no bold). Once 2 or
+   more measures already carry a full heatmap fill, give any additional
+   secondary-but-notable measure emphasis via bold text/text color instead
+   of another heatmap — see "Color restraint" below.
 5. **Body-row hairlines pinned to the house tone, always** — `hairlines(gt)`.
    `great_tables` renders a hairline between body rows ON BY DEFAULT (a
    raw library gray, `#D3D3D3`) even without this call — the gap this
@@ -81,8 +83,9 @@ a stylistic one.
 **"Pick one and state it" is not enough by itself** — two independent runs
 can each honestly state a different pick and still diverge. Resolve the
 pick with a deterministic precedence, in this order, then STATE the
-result in the subtitle or a source note (e.g. "ranked by overall
-population growth, 1996–2021"):
+result in the analytical caption note — the FIRST of the two
+`tab_source_note()` calls, not the subtitle (see "TWO source notes" above)
+— e.g. "ranked by overall population growth, 1996–2021":
 
 1. **Find the ranking/selection metric FIRST, separately from the display
    columns** — it's usually the request's stated TOPIC (the noun phrase
@@ -109,9 +112,9 @@ population growth, 1996–2021"):
    type, not just the rows whose type-value literally matches the
    request's word ("town-type records only" is NOT an acceptable
    alternative reading — it's the narrower literal subset this rule
-   exists to rule out). State the scope in the subtitle/source note (e.g.
-   "all municipality types") so the choice is explicit, not because there
-   are two valid options to pick between.
+   exists to rule out). State the scope in the analytical caption note
+   (e.g. "all municipality types") so the choice is explicit, not because
+   there are two valid options to pick between.
 3. **A stated date range always means the FULL span, not a sub-period** —
    "from 1996 to 2021" compares `value_2021` against `value_1996`, never a
    single interior period, unless the request names that period
@@ -132,8 +135,8 @@ population growth, 1996–2021"):
    absolute change just because the measure's category is capable of it.
    When a real zero/negative baseline IS present: if the request left the
    metric **unstated** (just "growth"/"fastest-growing"), fall back to
-   absolute change for the whole table and say so in the subtitle/source
-   note. If the request **explicitly** asked for a rate/percentage
+   absolute change for the whole table and say so in the analytical
+   caption note. If the request **explicitly** asked for a rate/percentage
    specifically, don't silently swap the whole table to a different metric
    — instead **exclude only the rows with a non-positive baseline** from
    the ranking (a rate is genuinely undefined for them, not just
@@ -190,7 +193,7 @@ figures. Always a currency symbol: `fmt_currency(columns=..., decimals=0|2)`.
 A single neutral magnitude column is the sequential **Blues** heatmap hero —
 `heatmap(gt, "revenue", kind="sequential", hue="neutral")` — see `revenue` in
 `house_table.py` — **only** when it's the hero measure the request is
-actually about. Otherwise leave it uncolored (bold text at most).
+actually about. Otherwise leave it plain — no fill and no bold.
 
 ## Percent / rate / change
 
@@ -203,10 +206,11 @@ above/below target) is the diverging **RdYlGn** measure —
 orientation; pass `reverse=True` only when positive genuinely means worse
 (cost overrun, error rate, latency, churn).
 
-**Want an explicit `+`/`−` sign on a signed value?** Pass `force_sign=True`
-— do NOT hand-rewrite it with `pattern="{x:+.1f}%"`. `force_sign=True` is a
-plain keyword on `fmt_number`/`fmt_percent`/`fmt_currency`/`fmt_integer`
-(the formatters this skill actually uses); `fmt_scientific` is the one
+**Any percent or signed-number column whose real data crosses zero uses
+`force_sign=True`** — this is a rule, not a stylistic option. Do NOT
+hand-rewrite it with `pattern="{x:+.1f}%"`. `force_sign=True` is a plain
+keyword on `fmt_number`/`fmt_percent`/`fmt_currency`/`fmt_integer` (the
+formatters this skill actually uses); `fmt_scientific` is the one
 exception, with separate `force_sign_m=`/`force_sign_n=` keywords instead
 of a single `force_sign=`.
 
@@ -261,12 +265,17 @@ story — see `region` / `group_emphasis` in `house_table.py`.
 
 ## Unified color theme — the band/stub/group/stripe hierarchy
 
-Pick ONE hue for the whole table (the DA hue-selection rule: match an
-existing heatmap's family first, else the data's subject, else Navy) and
-run every quiet structural surface through it — but not at the same
-strength. Only ONE row deserves its own distinct, highlighted treatment: a
-summary/total row (see below). Column labels, the stub, and group headers
-are all quieter than that, and quieter than each other:
+Branding surfaces (the column-label band, the stub, and the row stripe)
+are fixed to the same navy/Blues family by default — this is a branding
+decision, not the same data-driven, per-measure hue selection used for a
+heatmapped measure's own fill color. Branding never adopts a heatmap's
+semantic hue (a "more is better" green heatmap elsewhere never turns the
+header green). `hue=` stays available as an escape hatch on
+`band()`/`stub_tint()` for the rare table with an explicit reason to
+diverge, but it is not a default decision point. Only ONE row deserves its
+own distinct, highlighted treatment: a summary/total row (see below).
+Column labels, the stub, and group headers are all quieter than that, and
+quieter than each other:
 
 1. **Column-label band** — `band(gt, hue=...)` — the house DEFAULT is now
    `shade="dark"` (a solid `accent` fill, `#08306B` for navy, + bold white
@@ -277,9 +286,10 @@ are all quieter than that, and quieter than each other:
    and defaulted colored tables to the lighter `accent_tint` band instead;
    that's no longer the house convention — every current reference table
    uses the dark band, with or without a heatmap present.)
-2. **Stub** — `stub_tint(gt, hue=...)` — the quieter `washed` tint. A
-   narrower, secondary surface next to the more prominent band, so it
-   stays subtler rather than competing with it.
+2. **Stub** — `stub_tint(gt, hue=...)` — the quieter `washed` tint of the
+   SAME fixed navy/Blues family as the band. A narrower, secondary surface
+   next to the more prominent band, so it stays subtler rather than
+   competing with it.
 3. **Group headers** — `group_emphasis(gt)` — bold weight + the `#BDBDBD`
    structural rule ONLY, deliberately **no background fill**. A group
    label is a section break, not a result worth its own highlight.
@@ -318,17 +328,22 @@ Always `sub_missing(columns=..., missing_text="—")` — never a raw blank
 cell. See the injected `yoy_change` gap on `Zeta Kit` and the blank
 `Total` row cells in `house_table.py`.
 
-## The ≤2 colored-measures ceiling
+## Color restraint — no fixed ceiling, but restraint still applies
 
-Hard rule, same as the other two skills: at most 2 columns get continuous
-color treatment (`data_color`/`heatmap`). A pure categorical/text table
-gets no fill at all — its anchor is the heading band, which is
+An earlier version of this rule capped colored measures at a fixed count;
+that numeric ceiling was rejected as arbitrary and is gone. Restraint
+instead: `data_color`/`heatmap()` targets only the measure(s) that are
+actually the point of the request, never a treatment to spread across
+every numeric column. Once a table already carries 2+ full heatmap fills,
+give any additional secondary-but-notable measure emphasis via bold
+text/text color rather than another full heatmap — a heatmap on every
+numeric column reads as noise, not thoroughness. A pure categorical/text
+table still gets no fill at all — its anchor is the heading band, which is
 `band(gt, shade="dark", hue=...)` regardless (see "Unified color theme"
-below — dark is the universal default now, not a no-heatmap-only
-fallback). `house_table.py` uses exactly 2:
-`revenue` (sequential) and `yoy_change` (diverging); `status` is a 3rd
-color story but is a categorical chip, not a heatmap, so it doesn't count
-against the ceiling.
+above — dark is the universal default now, not a no-heatmap-only
+fallback). `house_table.py` uses 2 full heatmaps: `revenue` (sequential)
+and `yoy_change` (diverging); `status` is a 3rd color story but a
+categorical chip, not a heatmap.
 
 ## Global constants
 
@@ -340,3 +355,14 @@ constants:
 - Font size: shrink only as a last resort, in this order — bigger canvas
   (`gtsave(vwidth=..., vheight=...)`) → higher zoom (`gtsave(zoom=...)`) →
   smaller font.
+- Column widths & padding: `cols_width(cases={...})` sized to each
+  column's content plus a small buffer — don't let auto-layout stretch a
+  narrow column; pair with the six pinned `tab_options` padding values
+  (`heading_padding="6px"`, `column_labels_padding="6px"`,
+  `column_labels_padding_horizontal="8px"`, `data_row_padding="5px"`,
+  `data_row_padding_horizontal="8px"`, `source_notes_padding="6px"`) —
+  see `house_table.py`'s `cols_width`/padding block.
+- Column order: the primary heatmapped measure sits at an outer edge
+  (right after the stub, or last) — never buried mid-table; which edge
+  depends on narrative sequencing (context/input columns precede a
+  derived-outcome column).

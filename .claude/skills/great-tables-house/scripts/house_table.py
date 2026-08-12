@@ -20,11 +20,16 @@ This file is two things at once:
    saves it to ``house_table.png`` next to this script.
 
 THE NON-NEGOTIABLE BASE (see ``references/RULES.md`` for the full rule):
-every table gets ALL of — (1) a title AND subtitle, (2) a source note (a
-generic one if the real provenance is unknown — never omitted), (3) the
-boxed frame (``frame(gt)``), (4) AT MOST 2 colored measures total across
-the whole table (never one heatmap per numeric column — a 3rd
-``heatmap()``/``data_color()`` call is always a bug), (5) the body-row
+every table gets ALL of — (1) a title AND subtitle, (2) TWO source notes
+(an analytical caption stating the finding or the chosen definition for an
+ambiguous measure, THEN a separate provenance note — a generic provenance
+note if the real one is unknown, never omitted), (3) the boxed frame
+(``frame(gt)``), (4) Big Color kept restrained — the ``heatmap()``/
+``data_color()`` calls target only the measure(s) the request is actually
+about, never one heatmap per numeric column, and once 2+ measures already
+carry a full heatmap, any further notable measure gets bold/text-color
+emphasis instead of another heatmap (not a fixed numeric cap — see
+``references/RULES.md``'s "Color restraint"), (5) the body-row
 ``hairlines(gt)`` rule (a completely separate `great_tables` option family
 from the outer ``frame()`` border — `great_tables` already renders a raw
 gray hairline by default, so skipping this call leaves an otherwise
@@ -33,8 +38,8 @@ and (6)
 ``finalize(gt, path="table.png")`` as the final call. These six are
 unconditional, unlike the stub/group/spanner/status-chip/summary-row
 choices below, which stay genuinely data-dependent — and unlike striping
-(conditional on row count/fill, see ``stripe()`` below), which stays a
-gate you must evaluate every time, not skip. Importing a helper
+(conditional on full heatmap coverage, see ``stripe()`` below), which
+stays a gate you must evaluate every time, not skip. Importing a helper
 (``stripe``, ``stub_tint``, ``humanize_labels``, ...) and then not calling
 it is fine when its own gate doesn't fire; skipping one of the six items
 above because your table "didn't seem to need it" is not — small polish
@@ -371,9 +376,10 @@ def stub_tint(gt, *, hue):
     quieter tier (NOT ``accent_tint``, which ``band()`` uses): the stub is
     a narrower, secondary surface next to the more prominent column-label
     band, so it stays subtler than the band rather than competing with it.
-    Pick the hue that matches the table's dominant heatmap family (see the
-    DA hue-selection rule: a Blues heatmap harmonizes to navy, Greens to
-    forest, etc.) so the stub doesn't clash with the loud color elsewhere.
+    Pass the SAME hue as ``band()`` — branding surfaces default to the
+    fixed navy/Blues family regardless of which hue a heatmap elsewhere on
+    the table happens to use; this is a branding decision, not something
+    re-derived from the body's own data-driven color.
     """
     if hue == "grey":
         color = PALETTE["neutral"]["label_band"]
@@ -652,12 +658,17 @@ def build_house_table():
     - ``units_sold`` -> plain magnitude, thousands separator, UNCOLORED.
     - ``revenue``    -> the sequential heatmap HERO measure (Blues/neutral).
     - ``yoy_change`` -> the diverging heatmap measure (RdYlGn/default) — the
-                        2nd and LAST colored measure. Two is the ceiling;
-                        a 3rd colored column would break the rule.
+                        2nd full-heatmap measure in this demo (Big Color
+                        stays restrained, not capped at a fixed count).
     - ``status``     -> categorical good/bad/neutral via status_chip, NOT a
                         heatmap — it is 3 discrete states, not a magnitude.
     - ``rank``       -> plain integer, no color, no decimals — a rank's
                         information is its order, not its size.
+
+    Column order: `revenue`, the primary heatmapped measure, sits at the
+    left outer edge — right after its lone context column (`units_sold`)
+    — never buried mid-table; this demo already satisfies that, no
+    reordering needed.
     """
     products = pd.DataFrame(
         [
@@ -702,7 +713,7 @@ def build_house_table():
         )
         .fmt_number(columns="units_sold", decimals=0, use_seps=True)
         .fmt_currency(columns="revenue", decimals=0)
-        .fmt_percent(columns="yoy_change", decimals=1)
+        .fmt_percent(columns="yoy_change", decimals=1, force_sign=True)
         .fmt_integer(columns="rank")
         .sub_missing(columns=["yoy_change", "status", "rank"], missing_text="—")
     )
@@ -712,11 +723,35 @@ def build_house_table():
         overrides={"units_sold": "Units Sold", "yoy_change": "YoY Change"},
     )
 
-    # Big Color: exactly 2 colored measures (the ceiling). `revenue` is the
+    # Column widths + padding: size each column to its content plus a
+    # small buffer; don't let auto-layout stretch narrow columns (`rank`)
+    # to match the widest label elsewhere. Padding values are the six
+    # pinned house constants (see references/RULES.md's "Global constants").
+    gt = gt.cols_width(
+        cases={
+            "product": "150px",
+            "units_sold": "110px",
+            "revenue": "110px",
+            "yoy_change": "110px",
+            "status": "100px",
+            "rank": "70px",
+        }
+    )
+    gt = gt.tab_options(
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
+    )
+
+    # Big Color, kept restrained: 2 full heatmaps in this demo (no fixed
+    # cap — see references/RULES.md's "Color restraint"). `revenue` is the
     # sequential hero (a neutral magnitude -> Blues); `yoy_change` is the
-    # diverging 2nd-and-last measure (signed, positive=good -> RdYlGn
-    # default orientation, no reverse). `status` is a categorical good/bad/
-    # neutral column, NOT a 3rd heatmap — status_chip, not data_color. The
+    # diverging 2nd measure (signed, positive=good -> RdYlGn default
+    # orientation, no reverse). `status` is a categorical good/bad/
+    # neutral column, NOT a heatmap — status_chip, not data_color. The
     # domain for each is computed from `products` alone (heatmap()'s default
     # when domain=None) — safe because the grand-summary Total added below
     # is NOT part of `gt._tbl_data`; unlike a manually appended total ROW, it
@@ -725,23 +760,25 @@ def build_house_table():
     gt = heatmap(gt, "yoy_change", kind="diverging", hue="default")
     gt = status_chip(gt, "status", {"On Track": "good", "At Risk": "bad", "Watch": "neutral"})
 
-    # Heading band: the house DEFAULT is the "accent_tint" band (a clearly
-    # visible light tint, not a solid fill) — here, navy (the Blues
-    # heatmap's family, per the DA hue-selection rule: match an existing
-    # heatmap hue first). Quiet enough that the heatmap stays the star, but
-    # the band is still the MORE visible of the band/stub pairing below.
+    # Heading band: the house DEFAULT (shade="dark") is a solid, branded
+    # navy fill (`accent["navy"]`, #08306B) with bold white text. Branding
+    # surfaces are fixed to this navy/Blues family always — navy here is
+    # NOT re-derived by matching the heatmap's own hue elsewhere in the
+    # table (a heatmap could be Blues, Reds, or RdYlGn and the band stays
+    # navy regardless); see references/RULES.md's "Unified color theme".
     gt = band(gt, hue="navy")
 
-    # Small-Color polish: 12 body rows clears the >=10-row striping gate,
-    # and only 2 of 6 columns carry continuous color (revenue, yoy_change)
-    # — the body is far from "essentially fully covered," so striping and
-    # fills don't fight. Stub tint harmonizes to the same navy family as
-    # the band, at the quieter "washed" tier (the band is the louder of
-    # the two). The stripe is always flat grey, never tinted — an
-    # alternating fill reads as busy in a way a single flat surface
-    # doesn't. Group headers get bold + a rule ONLY (no fill) — the one
-    # row that earns its own distinct highlight is the summary/total row
-    # below, not a section break.
+    # Small-Color polish: striping applies by DEFAULT regardless of row
+    # count — the real gate is whether the body's visible cells are
+    # already 100% heatmap-covered. Only 2 of 6 columns here carry
+    # continuous color (revenue, yoy_change), so plenty of plain cells
+    # remain for a stripe to show through on. Stub tint harmonizes to the
+    # same navy family as the band, at the quieter "washed" tier (the band
+    # is the louder of the two). The stripe is always flat grey, never
+    # tinted — an alternating fill reads as busy in a way a single flat
+    # surface doesn't. Group headers get bold + a rule ONLY (no fill) —
+    # the one row that earns its own distinct highlight is the
+    # summary/total row below, not a section break.
     gt = stripe(gt)
     gt = stub_tint(gt, hue="navy")
     gt = group_emphasis(gt)
@@ -790,6 +827,12 @@ def build_house_table():
         gt.tab_footnote(
             footnote="Restated to include a distributor rebate posted in Q4.",
             locations=loc.body(columns="revenue", rows=[kappa_row_index]),
+        )
+        # Two source notes, analytical caption FIRST: "YoY Change" is a
+        # derived, potentially ambiguous measure (revenue growth vs. unit
+        # growth) — state the chosen definition here, not in the subtitle.
+        .tab_source_note(
+            source_note="YoY Change is the year-over-year percent change in revenue, not unit volume."
         )
         .tab_source_note(source_note="Source: internal sales ledger, FY close. Figures in USD.")
     )
