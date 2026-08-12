@@ -16,8 +16,12 @@ entirely rather than kept judge-backed -- caption-quality (one of the
 original two moved checks), subtitle-quality, and color-theme-quality --
 see ``.planning/12-consensus-tuning.md``. Column order and title clarity
 are still judged; subtitle wording and palette taste are, once again,
-unscored -- field data showed neither discriminated skill quality. The 4
-keys `judge()` returns today reflect all of this.)
+unscored -- field data showed neither discriminated skill quality. A
+color-RESTRAINT dimension (distinct from the removed color-theme-quality
+above -- this one grades emphasis technique, not hue choice) was added
+later. The keys `judge()` returns today -- see `DIMENSION_KEYS`, sourced
+from `judge_rubric.DIMENSIONS` so this docstring never has to restate a
+count that can drift -- reflect all of this.)
 
 This module NEVER renders, execs, or regenerates a PNG -- it only ever reads
 bytes from two already-existing paths (mirrors ``runner.execution_tier``'s
@@ -106,9 +110,9 @@ from runner.spec import MODELS
 # -- may not have done so yet).
 ROOT = Path(__file__).resolve().parent.parent
 
-# The 4 keys `judge()` always returns, in the exact fixed order Slice 2 will
-# look them up by name. Sourced from judge_rubric so the contract and the
-# rubric text can never drift apart.
+# The keys `judge()` always returns, in the exact fixed order Slice 2 will
+# look them up by name. Sourced from judge_rubric so the contract, the
+# rubric text, and the count of dimensions can never drift apart.
 DIMENSION_KEYS: tuple[str, ...] = judge_rubric.DIMENSION_KEYS
 
 _DEFAULT_MODEL = MODELS["sonnet"]  # "claude-sonnet-5" as of runner/spec.py
@@ -210,10 +214,11 @@ class JudgeDimension:
 
 
 def _unavailable(reason: str) -> dict[str, JudgeDimension]:
-    """The shared degrade path: all 4 keys, all ``applicable=False``, every
-    ``rationale`` prefixed with ``_UNAVAILABLE_PREFIX`` -- see `judge()`'s
-    docstring for why that prefix is the thing callers should key off of to
-    distinguish "the judge broke" from "genuinely not applicable."
+    """The shared degrade path: every key in ``DIMENSION_KEYS``, all
+    ``applicable=False``, every ``rationale`` prefixed with
+    ``_UNAVAILABLE_PREFIX`` -- see `judge()`'s docstring for why that prefix
+    is the thing callers should key off of to distinguish "the judge broke"
+    from "genuinely not applicable."
     """
     rationale = f"{_UNAVAILABLE_PREFIX}{reason}"
     return {key: JudgeDimension(applicable=False, score=None, rationale=rationale) for key in DIMENSION_KEYS}
@@ -258,10 +263,10 @@ def _load_image_tiles_b64(path: Path) -> list[str]:
     to mentally stitch bands back into one table (mitigated by the explicit
     "part i of N" labels ``_image_blocks`` attaches, and by the system
     prompt's "Image tiling" section) for keeping small text legible -- an
-    acceptable tradeoff here since this judge's 4 dimensions are about
-    labels/titles/grouping-choice/column-order, not the kind of precise
-    cross-row numeric reading the deterministic comparator's own value-diff
-    checks already own.
+    acceptable tradeoff here since this judge's dimensions are about
+    labels/titles/grouping-choice/column-order/color-restraint, not the
+    kind of precise cross-row numeric reading the deterministic
+    comparator's own value-diff checks already own.
     """
     from PIL import Image
 
@@ -396,7 +401,9 @@ def judge(
     prompt_text: str,
     metadata: dict,
 ) -> dict[str, JudgeDimension]:
-    """Score 7 quality dimensions of ``candidate_png`` against ``truth_png``.
+    """Score the rubric's quality dimensions (see ``DIMENSION_KEYS`` /
+    ``judge_rubric.DIMENSIONS`` for the current list and count) of
+    ``candidate_png`` against ``truth_png``.
 
     One batched, single-turn, vision-capable call to ``$GTSKILL_JUDGE_MODEL``
     (default: ``runner.spec.MODELS["sonnet"]``, i.e. ``claude-sonnet-5``) via
@@ -414,17 +421,19 @@ def judge(
 
     Returns
     -------
-    Always exactly the 4 keys in ``DIMENSION_KEYS`` (``label_concept_correctness``,
-    ``grouping_choice_quality``, ``title_quality``, ``column_order_quality``),
-    each a ``JudgeDimension(applicable, score, rationale)``. Never raises and
-    never fabricates a score -- ``score`` is only ever an int 1-5 when
-    ``applicable`` is True, else ``None``.
+    Always exactly the keys in ``DIMENSION_KEYS`` (currently
+    ``label_concept_correctness``, ``grouping_choice_quality``,
+    ``title_quality``, ``column_order_quality``, ``color_restraint_quality``
+    -- see that tuple, sourced from ``judge_rubric.DIMENSIONS``, for the
+    live, authoritative list), each a ``JudgeDimension(applicable, score,
+    rationale)``. Never raises and never fabricates a score -- ``score`` is
+    only ever an int 1-5 when ``applicable`` is True, else ``None``.
 
     Two distinct reasons a dimension can come back ``applicable=False``, and
     how to tell them apart (there is no separate top-level "ok"/"available"
-    flag -- the return shape is pinned to exactly the 7 ``JudgeDimension``
-    values Slice 2 looks up by name, so the signal lives in ``rationale``
-    instead, by explicit convention):
+    flag -- the return shape is pinned to exactly the ``JudgeDimension``
+    values in ``DIMENSION_KEYS`` that Slice 2 looks up by name, so the
+    signal lives in ``rationale`` instead, by explicit convention):
 
     - **Genuinely not applicable** to this specific comparison (e.g. the
       ground truth doesn't group at all, so ``grouping_choice_quality``
@@ -433,13 +442,13 @@ def judge(
       prefix below.
     - **The judge itself is unavailable** -- either PNG path doesn't exist,
       the model call failed or timed out, or its output couldn't be
-      validated as well-formed JSON matching the 4-key contract. In this
-      case ALL 4 dimensions come back ``applicable=False`` and EVERY
-      ``rationale`` starts with the literal prefix ``"judge unavailable: "``
-      followed by the reason. Callers that need to distinguish "not
-      applicable" from "judge broke" should check for this prefix
-      (``rationale.startswith("judge unavailable: ")``) rather than
-      treating every ``applicable=False`` the same way.
+      validated as well-formed JSON matching the ``DIMENSION_KEYS``
+      contract. In this case EVERY dimension comes back
+      ``applicable=False`` and EVERY ``rationale`` starts with the literal
+      prefix ``"judge unavailable: "`` followed by the reason. Callers that
+      need to distinguish "not applicable" from "judge broke" should check
+      for this prefix (``rationale.startswith("judge unavailable: ")``)
+      rather than treating every ``applicable=False`` the same way.
     """
     try:
         try:

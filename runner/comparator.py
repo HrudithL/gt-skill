@@ -5404,7 +5404,10 @@ def compare(candidate_path: Path, ground_truth_path: Path, prompt_text: str = ""
 
     The judge is invoked exactly ONCE per comparison (§4 of
     ``.planning/10-hybrid-comparator.md``: "one batched call... scoring all
-    4 dimensions together"), and its single combined result is stashed in
+    dimensions together" -- the exact dimension count lives in
+    ``judge_rubric.DIMENSIONS``, not restated here as a literal so this
+    docstring can't drift out of sync with it), and its single combined
+    result is stashed in
     ``meta["_judge_result"]`` before any check function runs, so every
     judge-backed check (see ``_judge_dimension_check``) reads from the same
     call rather than each triggering its own.
