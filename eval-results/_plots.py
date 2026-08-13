@@ -22,11 +22,11 @@ Two plots per skill:
                          instead of a bar height + a disconnected label.
                          Faceted by difficulty tier.
   comparator_score.png  box plot of comparator score across 3 skill repeats
-                         per prompt (the box's width already *is* the
+                         per prompt (the box's height already *is* the
                          consistency metric -- no separate chart needed for
                          it), with the baseline score as a point, a computed
                          mean-lift subtitle, and a caption on how to read the
-                         box width. Faceted by difficulty tier.
+                         box height. Faceted by difficulty tier.
 """
 
 from __future__ import annotations
@@ -87,6 +87,58 @@ matplotlib.rcParams["font.family"] = ["Avenir Next", "Helvetica Neue", "Arial", 
 
 DIFFICULTY_ORDER = ["easy", "medium", "hard"]
 DIFFICULTY_LABELS = {"easy": "Easy", "medium": "Medium", "hard": "Hard"}
+
+
+def _difficulty_categories(raw_values: pd.Series) -> list[str]:
+    """The known tiers in fixed order, followed by any *unrecognized* tier
+    (alphabetical) instead of silently dropping it. `DIFFICULTY_ORDER` is a
+    fixed constant here, separate from `_lib.PROMPTS`'s actual per-prompt
+    difficulty strings -- if a future prompt is added with a new or
+    typo'd tier, casting straight to a `Categorical` over the fixed 3
+    would turn it into NaN (a blank facet strip, dropped data) with no
+    error. Folding the unknown value in as its own facet, rather than
+    failing loudly, matches how the rest of this module treats a
+    partial/unexpected sweep (see `_layer_or_blank`)."""
+    present = set(raw_values.dropna().unique())
+    known = [d for d in DIFFICULTY_ORDER if d in present]
+    unknown = sorted(present - set(DIFFICULTY_ORDER))
+    return known + unknown
+
+
+def _difficulty_label(d: str) -> str:
+    return DIFFICULTY_LABELS.get(d, str(d).title())
+
+
+def _prompt_order(prompt_ids: list[str], prompt_labels: dict[str, str]) -> list[str]:
+    return [prompt_labels[p].replace("\n", " ") for p in prompt_ids]
+
+
+def _adaptive_decimals(vals: list[float], min_decimals: int, max_decimals: int = 4) -> int:
+    """Enough decimal places that adjacent TICKS stay visually distinct even
+    on a narrow `scales="free"` panel -- a fixed `.2f`/`.0f` degenerates to
+    identical-looking ticks (e.g. every tick reading "$0.06" or "40K")
+    whenever a panel's own range is small, which free scales make routine.
+    Based on the smallest gap between the actual computed tick values
+    (not the panel's overall span), so a normal wide range still gets the
+    same clean, minimal-decimals output as a fixed formatter would."""
+    uniq = sorted({v for v in vals if v is not None})
+    if len(uniq) < 2:
+        return min_decimals
+    gap = min(b - a for a, b in zip(uniq, uniq[1:]) if b > a)
+    if gap <= 0:
+        return min_decimals
+    needed = int(np.ceil(-np.log10(gap)))
+    return min(max_decimals, max(min_decimals, needed))
+
+
+def _token_tick_labels(vals):
+    decimals = _adaptive_decimals(vals, min_decimals=0, max_decimals=2)
+    return [f"{v:.{decimals}f}K" for v in vals]
+
+
+def _cost_tick_labels(vals):
+    decimals = _adaptive_decimals(vals, min_decimals=2, max_decimals=4)
+    return [f"${v:.{decimals}f}" for v in vals]
 
 
 def base_theme():
@@ -185,11 +237,11 @@ def plot_usage(
     if not rows:
         return False
     df = pd.DataFrame(rows)
-    df["difficulty"] = pd.Categorical(df["difficulty"], categories=DIFFICULTY_ORDER, ordered=True)
-    df["difficulty_label"] = df["difficulty"].map(DIFFICULTY_LABELS)
-    df["difficulty_label"] = pd.Categorical(
-        df["difficulty_label"], categories=[DIFFICULTY_LABELS[d] for d in DIFFICULTY_ORDER], ordered=True
-    )
+    diff_categories = _difficulty_categories(df["difficulty"])
+    diff_label_categories = [_difficulty_label(d) for d in diff_categories]
+    df["difficulty"] = pd.Categorical(df["difficulty"], categories=diff_categories, ordered=True)
+    df["difficulty_label"] = df["difficulty"].map(_difficulty_label)
+    df["difficulty_label"] = pd.Categorical(df["difficulty_label"], categories=diff_label_categories, ordered=True)
 
     # Segments only where a prompt has both a skill point and a baseline
     # point to connect -- an incomplete pair just renders as a lone point.
@@ -213,25 +265,46 @@ def plot_usage(
         # progression, since this layer's data no longer carries an order
         # for plotnine's panel layout to inherit.
         seg_df["difficulty_label"] = pd.Categorical(
-            seg_df["difficulty_label"], categories=[DIFFICULTY_LABELS[d] for d in DIFFICULTY_ORDER], ordered=True
+            seg_df["difficulty_label"], categories=diff_label_categories, ordered=True
         )
-        # Label at each segment's own midpoint (always inside its panel's
-        # data range by construction) rather than nudged out from the
-        # skill point -- which, being the higher-token point, usually sits
-        # near a panel's right edge and would push long prompt names past
-        # it. The vertical offset is scaled to the whole FACET's y-range
-        # (not just this one segment's span) and staggered by each
-        # segment's rank within its facet, so two prompts whose points
-        # happen to sit close together still get visibly separated labels
-        # instead of stacking on top of each other.
         seg_df["label_x"] = (seg_df["x0"] + seg_df["x1"]) / 2
         seg_df["_top"] = seg_df[["y0", "y1"]].max(axis=1)
-        facet_range = seg_df.groupby("difficulty_label", observed=True)["_top"].transform(
-            lambda s: (s.max() - s.min()) if s.max() > s.min() else s.max() * 0.2
+
+        # Vertical stagger scaled to the FACET's full y-extent (every
+        # baseline/skill point in that panel, not just this segment's own
+        # span) -- staggering by *this segment's* span collapses to ~0
+        # exactly when two segments' tops are close together, which is
+        # precisely the collision case a stagger exists to prevent.
+        y_bounds = (
+            pd.concat([seg_df[["difficulty_label", "y0"]].rename(columns={"y0": "y"}),
+                       seg_df[["difficulty_label", "y1"]].rename(columns={"y1": "y"})])
+            .groupby("difficulty_label", observed=True)["y"]
+            .agg(y_min="min", y_max="max")
         )
+        y_bounds["y_span"] = (y_bounds["y_max"] - y_bounds["y_min"]).clip(lower=1e-9)
+        seg_df = seg_df.merge(y_bounds[["y_span"]], left_on="difficulty_label", right_index=True)
         rank = seg_df.groupby("difficulty_label", observed=True)["_top"].rank(method="first") - 1
-        seg_df["label_y"] = seg_df["_top"] + facet_range * (0.10 + rank * 0.16)
-        seg_df = seg_df.drop(columns="_top")
+        seg_df["label_y"] = seg_df["_top"] + seg_df["y_span"] * (0.16 + rank * 0.24)
+
+        # Horizontal anchor: grow the label toward whichever side of the
+        # facet's own x-extent has more room, rather than always growing
+        # from the segment's midpoint outward -- a short segment sitting
+        # near a panel's data extreme (set by some *other*, wider segment
+        # sharing the facet) would otherwise still run its label past the
+        # panel edge even though its anchor point is technically "inside".
+        x_bounds = (
+            pd.concat([seg_df[["difficulty_label", "x0"]].rename(columns={"x0": "x"}),
+                       seg_df[["difficulty_label", "x1"]].rename(columns={"x1": "x"})])
+            .groupby("difficulty_label", observed=True)["x"]
+            .agg(x_min="min", x_max="max")
+        )
+        x_bounds["x_mid"] = (x_bounds["x_min"] + x_bounds["x_max"]) / 2
+        x_bounds["x_span"] = (x_bounds["x_max"] - x_bounds["x_min"]).clip(lower=1e-9)
+        seg_df = seg_df.merge(x_bounds[["x_mid", "x_span"]], left_on="difficulty_label", right_index=True)
+        seg_df["ha"] = np.where(seg_df["label_x"] >= seg_df["x_mid"], "right", "left")
+        edge_sign = np.where(seg_df["ha"] == "right", -1, 1)
+        seg_df["label_x"] = seg_df["label_x"] + edge_sign * seg_df["x_span"] * 0.02
+        seg_df = seg_df.drop(columns=["_top", "y_span", "x_mid", "x_span"])
 
     plot = (
         ggplot(df, aes(x="tokens_k", y="cost"))
@@ -255,7 +328,7 @@ def plot_usage(
             seg_df,
             geom_text(
                 data=seg_df,
-                mapping=aes(x="label_x", y="label_y", label="prompt"),
+                mapping=aes(x="label_x", y="label_y", label="prompt", ha="ha"),
                 color=INK_SECONDARY,
                 size=7.5,
                 va="bottom",
@@ -263,8 +336,8 @@ def plot_usage(
             ),
         )
         + scale_color_manual(values={SKILL_LABEL: SKILL_COLOR, BASELINE_LABEL: BASELINE_COLOR})
-        + scale_x_continuous(labels=lambda vals: [f"{v:.0f}K" for v in vals], expand=(0.15, 0))
-        + scale_y_continuous(labels=lambda vals: [f"${v:.2f}" for v in vals], expand=(0.12, 0, 0.32, 0))
+        + scale_x_continuous(labels=_token_tick_labels, expand=(0.15, 0))
+        + scale_y_continuous(labels=_cost_tick_labels, expand=(0.12, 0, 0.42, 0))
         + facet_wrap("~difficulty_label", nrow=1, scales="free")
         + labs(
             title="Token usage and cost, per prompt",
@@ -283,10 +356,10 @@ def plot_comparator_score(
     metrics: dict, prompt_ids: list[str], prompt_labels: dict[str, str], out_path: Path
 ) -> bool:
     """Box plot of comparator total-score % across the 3 skill repeats per
-    prompt (box width already IS the consistency metric -- no separate
+    prompt (box HEIGHT already IS the consistency metric -- no separate
     chart needed), with the baseline score as a point. Faceted by difficulty
     tier; subtitle states the computed mean lift over baseline; caption
-    explains how to read the box width.
+    explains how to read the box height.
 
     Returns whether a chart was actually written."""
     box_rows = []
@@ -314,25 +387,43 @@ def plot_comparator_score(
         return False
     box_df = pd.DataFrame(box_rows)
     box_df["group"] = SKILL_LABEL
-    box_df["difficulty"] = pd.Categorical(box_df["difficulty"], categories=DIFFICULTY_ORDER, ordered=True)
-    box_df["difficulty_label"] = box_df["difficulty"].map(DIFFICULTY_LABELS)
+    diff_categories = _difficulty_categories(box_df["difficulty"])
+    diff_label_categories = [_difficulty_label(d) for d in diff_categories]
+    box_df["difficulty"] = pd.Categorical(box_df["difficulty"], categories=diff_categories, ordered=True)
+    box_df["difficulty_label"] = box_df["difficulty"].map(_difficulty_label)
     box_df["difficulty_label"] = pd.Categorical(
-        box_df["difficulty_label"], categories=[DIFFICULTY_LABELS[d] for d in DIFFICULTY_ORDER], ordered=True
+        box_df["difficulty_label"], categories=diff_label_categories, ordered=True
     )
     point_df = pd.DataFrame(point_rows)
     if not point_df.empty:
-        point_df["difficulty"] = pd.Categorical(point_df["difficulty"], categories=DIFFICULTY_ORDER, ordered=True)
-        point_df["difficulty_label"] = point_df["difficulty"].map(DIFFICULTY_LABELS)
+        point_df["difficulty"] = pd.Categorical(point_df["difficulty"], categories=diff_categories, ordered=True)
+        point_df["difficulty_label"] = point_df["difficulty"].map(_difficulty_label)
         point_df["difficulty_label"] = pd.Categorical(
-            point_df["difficulty_label"], categories=[DIFFICULTY_LABELS[d] for d in DIFFICULTY_ORDER], ordered=True
+            point_df["difficulty_label"], categories=diff_label_categories, ordered=True
         )
+
+    # Preserve the prompt-list order (matching every SUMMARY.md table) on
+    # the x-axis within each facet -- plain string columns would otherwise
+    # sort alphabetically, which happens to match today's 6 prompt names
+    # but would silently desync from `_lib.PROMPTS`'s order the moment a
+    # prompt is renamed or a new one added.
+    order = _prompt_order(prompt_ids, prompt_labels)
+    box_df["prompt"] = pd.Categorical(box_df["prompt"], categories=order, ordered=True)
+    if not point_df.empty:
+        point_df["prompt"] = pd.Categorical(point_df["prompt"], categories=order, ordered=True)
 
     if lifts:
         mean_lift = float(np.mean(lifts))
         direction = "above" if mean_lift >= 0 else "below"
+        point_word = "point" if round(abs(mean_lift)) == 1 else "points"
+        coverage = (
+            f"across all {len(prompt_ids)} prompts"
+            if len(lifts) == len(prompt_ids)
+            else f"across the {len(lifts)} of {len(prompt_ids)} prompts with both a baseline and 3 attempts"
+        )
         lift_line = (
-            f"Across {len(lifts)} prompts, the skill's mean score is {abs(mean_lift):.0f} points "
-            f"{direction} the unassisted baseline, on average."
+            f"The skill's mean score is {abs(mean_lift):.0f} {point_word} {direction} the unassisted "
+            f"baseline, on average {coverage}."
         )
     else:
         lift_line = "Comparator score per prompt, with the skill vs. without."
@@ -353,7 +444,7 @@ def plot_comparator_score(
             title="Comparator score: repeated attempts with the skill vs. without",
             subtitle=lift_line,
             caption="Box = spread of the skill's score across 3 attempts on the same prompt -- "
-            "narrower is more consistent. Dot = a single unassisted baseline attempt.",
+            "shorter is more consistent. Dot = a single unassisted baseline attempt.",
             x="",
             y="Comparator total score (%)",
         )
