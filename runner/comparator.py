@@ -483,6 +483,114 @@ def _blocks_target_table_png(
     return False
 
 
+def _module_level_functions(tree: ast.Module) -> dict[str, ast.FunctionDef]:
+    """name -> node for every plain `def` sitting directly in `tree.body`
+    -- used only to resolve the one special case `_walk_top_level` and
+    `_walk_exported_scope` unwrap (see their docstrings): a bare
+    `if __name__ == "__main__": some_name()` calling a function defined
+    at module level.
+
+    Deliberately excludes `async def` (2026-08-13 review finding): the
+    guard shape this resolves is a BARE, non-awaited call
+    (`_main_guard_call_target` requires it) -- calling an async function
+    that way only constructs a coroutine object and never runs its body
+    at all, so unwrapping it would score a script that renders NOTHING as
+    if its whole body executed. An `async def` target now simply fails to
+    resolve (falls back to the unrestricted walk), the same safe default
+    used whenever the guard's target can't be resolved at all.
+
+    Also requires the `def` be callable with ZERO arguments (2026-08-13
+    review finding): `_main_guard_call_target` only checks the CALL SITE
+    is zero-argument, not that the resolved `def` can actually accept
+    that -- `def build_table(df): ...` called as `build_table()` raises
+    `TypeError` and renders nothing, the same "scored as if it ran, but
+    it didn't" bug class as the `async def`/guard-ordering cases above.
+    A required positional/keyword-only parameter with no default excludes
+    a `def` here the same way `async` does; `*args`/`**kwargs`/defaulted
+    parameters don't (calling with zero arguments is still valid then).
+
+    Also excludes a DECORATED `def`, and any name later REBOUND by a
+    `class`/assignment/import (2026-08-13 review finding, round 5): a
+    decorator can replace the function entirely (`@tag def build_table():
+    ...` where `tag` returns something else, or a wrapper requiring an
+    argument) -- calling it bare then raises or does something other than
+    run the plain body, so crediting the undecorated body is the same
+    fabricated-execution bug the checks above exist to prevent. Likewise a
+    LATER `class build_table: ...` or `build_table = None` shadows an
+    earlier plain `def` at real runtime exactly like a later same-name
+    `def` already does -- generalizes that same-name resolution to every
+    kind of rebinding, not just def-vs-def.
+    """
+    resolved: dict[str, ast.FunctionDef | None] = {}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and not node.decorator_list:
+            resolved[node.name] = node
+            continue
+        for name in _rebound_names(node):
+            resolved[name] = None
+    defs = {name: node for name, node in resolved.items() if node is not None}
+    return {name: node for name, node in defs.items() if _is_zero_arg_callable(node)}
+
+
+def _rebound_names(node: ast.stmt) -> list[str]:
+    """Every module-level NAME `node` rebinds, for `_module_level_functions`'
+    poisoning pass above. Only plain `Name` targets count for `Assign`/
+    `AnnAssign` -- a tuple/attribute/subscript target isn't a simple
+    rebinding of one name, so it's ignored (conservative: can only
+    under-poison, matching this fix's existing safe-default philosophy).
+    A DECORATED `def`/`async def` reaching here (an undecorated plain
+    `def` is handled by the caller's own branch before this is ever
+    called) poisons its own name the same way a `class` does."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return [node.name]
+    if isinstance(node, ast.Assign):
+        return [t.id for t in node.targets if isinstance(t, ast.Name)]
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        return [node.target.id]
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return [a.asname or a.name.split(".")[0] for a in node.names]
+    return []
+
+
+def _is_zero_arg_callable(func_def: ast.FunctionDef) -> bool:
+    """True if `func_def` can be called with NO arguments at all."""
+    a = func_def.args
+    required_positional = len(a.posonlyargs) + len(a.args) - len(a.defaults)
+    if required_positional > 0:
+        return False
+    return all(default is not None for default in a.kw_defaults)
+
+
+def _main_guard_call_target(node: ast.stmt) -> str | None:
+    """If `node` is exactly `if __name__ == "__main__": name()` -- a
+    single bare, zero-argument call as the ENTIRE if-body, no `elif`/
+    `else`, no other statements -- returns the called `name`;
+    otherwise `None`. See `_walk_top_level`'s docstring for why this one
+    shape gets special-cased instead of generalized into real
+    reachability analysis.
+    """
+    if not isinstance(node, ast.If) or node.orelse:
+        return None
+    test = node.test
+    if not (
+        isinstance(test, ast.Compare)
+        and isinstance(test.left, ast.Name)
+        and test.left.id == "__name__"
+        and len(test.ops) == 1
+        and isinstance(test.ops[0], ast.Eq)
+        and len(test.comparators) == 1
+        and isinstance(test.comparators[0], ast.Constant)
+        and test.comparators[0].value == "__main__"
+    ):
+        return None
+    if len(node.body) != 1 or not isinstance(node.body[0], ast.Expr):
+        return None
+    call = node.body[0].value
+    if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and not call.args and not call.keywords):
+        return None
+    return call.func.id
+
+
 def _walk_top_level(tree: ast.AST):
     """Like `ast.walk`, but does NOT descend into the body of a `def`/
     `class` statement -- yields every node reachable from `tree` WITHOUT
@@ -506,10 +614,66 @@ def _walk_top_level(tree: ast.AST):
     real shape. A call buried inside a function definition (called or
     not) is unusual enough to exclude outright rather than try to prove
     reachability.
+
+    2026-08-13 addition: a script that wraps its ENTIRE body in
+    `def build_table(): ...` and only calls it via `if __name__ ==
+    "__main__": build_table()` is ordinary, idiomatic Python that
+    executes exactly like an inlined top-level script when the harness
+    runs `python table.py` -- but the blanket def/class exclusion above
+    made it invisible to every check built on this function. Confirmed
+    directly against the currently-committed `eval-results/house/
+    samples/airquality_monthly_summary/repeat_1/table.py` (scored ~18%
+    purely from this blind spot, not from any real quality problem).
+    `eval-results/house/SUMMARY.md`'s own round-2 write-up attributes the
+    same shape to `towny_growth_trends/repeat_1` in that round's sweep --
+    that sweep has since been regenerated, so the sample currently
+    checked in in its place no longer reproduces it; the attribution is
+    real but not independently re-verifiable against today's tree. This
+    is ONE narrow, additive special case, not a general
+    call-graph/reachability analysis (still explicitly out of scope,
+    per above): when the `if __name__ == "__main__":` guard's entire
+    body is a single bare, zero-argument call to a name that resolves to
+    a module-level `def` (`_main_guard_call_target` /
+    `_module_level_functions`), that function's OWN body is walked in
+    place of the `if` statement, as if inlined there -- one level of
+    unwrapping only. A `def`/`class` nested inside the unwrapped
+    function's own body is still excluded, same as ever.
+
+    2026-08-13 review finding: the unwrap must be gated to ONLY the
+    guard statement sitting directly in `tree.body` -- checking every
+    popped node unconditionally (the first cut of this fix) let an
+    unwrapped function's OWN body re-trigger the same special case if it
+    happened to contain another (or the same) `__main__`-guard shape,
+    which is not "one level" as claimed and, for a self-referential
+    shape (`def build(): if __name__=="__main__": build()`), never
+    terminates -- confirmed to push >200k nodes without returning.
+    `guard_ids` (the `id()` of every statement literally in `tree.body`)
+    restricts the special case to exactly those; anything reached BY an
+    unwrap is walked normally, with no second chance to unwrap again.
     """
+    main_guard_defs = _module_level_functions(tree) if isinstance(tree, ast.Module) else {}
+    if isinstance(tree, ast.Module):
+        guard_ids = {id(n) for n in tree.body}
+        body_index = {id(n): i for i, n in enumerate(tree.body)}
+    else:
+        guard_ids = set()
+        body_index = {}
     stack = [tree]
     while stack:
         node = stack.pop()
+        target_def = None
+        if id(node) in guard_ids:
+            target_name = _main_guard_call_target(node)
+            candidate = main_guard_defs.get(target_name)
+            # The def must appear BEFORE the guard -- calling it any earlier
+            # is a real `NameError` at runtime (2026-08-13 review finding),
+            # not an inlined-equivalent script.
+            if candidate is not None and body_index[id(candidate)] < body_index[id(node)]:
+                target_def = candidate
+        if target_def is not None:
+            yield node
+            stack.extend(reversed(target_def.body))
+            continue
         yield node
         for child in ast.iter_child_nodes(node):
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -649,6 +813,19 @@ def _walk_exported_scope(tree: ast.AST):
     from the restricted scope like any other statement that doesn't
     directly, syntactically target the exported name, matching this
     corpus's own linear top-level script convention.
+
+    2026-08-13 addition: this function's own `tree.body` loop -- unlike
+    `_walk_top_level`'s internal stack -- filters each MODULE-level
+    statement by `_stmt_targets_name` before ever calling `_walk_top_
+    level` on it, so an `if __name__ == "__main__": build_table()`
+    guard (an `ast.If`, not an `Assign`/`Expr`) never matched that filter
+    and was skipped outright, even after `_walk_top_level` itself learned
+    to unwrap it. Same fix, applied here too: when a top-level statement
+    is that one special guard shape calling a module-level `def`, this
+    walks the CALLED function's own body statements in its place,
+    filtering each of THOSE by `_stmt_targets_name` exactly like any
+    other module-level statement -- see `_walk_top_level`'s docstring for
+    the exact false-negative (and the real candidates) this closes.
     """
     if not isinstance(tree, ast.Module):
         yield from _walk_top_level(tree)
@@ -657,7 +834,20 @@ def _walk_exported_scope(tree: ast.AST):
     if exported_name is None:
         yield from _walk_top_level(tree)
         return
-    for node in tree.body:
+    main_guard_defs = _module_level_functions(tree)
+    body_index = {id(n): i for i, n in enumerate(tree.body)}
+    for guard_index, node in enumerate(tree.body):
+        target_name = _main_guard_call_target(node)
+        target_def = main_guard_defs.get(target_name)
+        # Same "def must appear before the guard" rule as `_walk_top_level`
+        # (2026-08-13 review finding) -- calling it any earlier is a real
+        # `NameError` at runtime, not an inlined-equivalent script.
+        if target_def is not None and body_index[id(target_def)] < guard_index:
+            for inner in target_def.body:
+                if not _stmt_targets_name(inner, exported_name):
+                    continue
+                yield from _walk_top_level(inner)
+            continue
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             continue
         if not _stmt_targets_name(node, exported_name):
@@ -4703,7 +4893,14 @@ def check_caption_keywords(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # Pure source-text extraction (title/subtitle/source_note are literal
     # strings, independent of whether the script's DATA execution
     # succeeds) -- not gated on tier2.ok, unlike the value-based checks.
-    caption_text = " ".join(cand["tier1"].get("source_note_texts") or []).lower()
+    # `source_note_texts` entries are `str | None` (`_source_note_texts_local`
+    # returns `None` for a note whose text isn't a static string literal --
+    # e.g. an f-string or a computed expression); `" ".join(...)` raises
+    # `TypeError` on any `None` entry, crashing this check on a candidate
+    # that legitimately renders fine. Drop `None` entries before joining --
+    # a dynamic caption's literal-text portion (if any) still contributes,
+    # it just can't check the part it couldn't statically read.
+    caption_text = " ".join(t for t in (cand["tier1"].get("source_note_texts") or []) if t).lower()
     subtitle_text = (cand["tier1"].get("subtitle_text") or "").lower()
     total = len(should_mention) + len(should_not_duplicate)
     ok_count = 0

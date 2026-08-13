@@ -53,10 +53,26 @@ for the palette *name* and the diverging-symmetric-domain rule.
 | **Signed** measure (neg/pos, opposite meaning) | `big_color/diverging_fill.md` |
 | **Ordered magnitude**, ≥5 rows | `big_color/column_gradient_fill.md` |
 | **Matrix / heatmap** (facets sharing one scale) | `big_color/column_gradient_fill.md` |
-| **Top-N** "winner" rows | `big_color/full_row_highlight.md` |
+| **Top-N** "winner" rows *highlighted within a larger table* | `big_color/full_row_highlight.md` |
 | **Binary / categorical status** | `big_color/status_cell_fill.md` |
 | A few **outlier cells** | `big_color/bold_colored_number.md` |
 | **One text column that IS the column** | `big_color/full_column_fill.md` |
+
+**"Top-N" above means highlighting a *small subset* of winner rows inside a table that
+also shows other, non-winning rows** — e.g. bolding the top 3 of a 50-row leaderboard so
+they jump out from the rest. It does NOT mean "the request already filtered the data down
+to only the top N" (`nlargest(10, ...)`, "show the 10 most expensive X") — once the
+displayed table's entire row set already IS the winners, there is no larger surrounding
+context left to stand out from, so every row would get the full-row fill (100% of rows,
+violating that file's own `≤30% of body rows` cap) and the ranking measure itself
+(`msrp`, `revenue`, whatever was ranked on) still needs its relative magnitude shown
+row-to-row. That's the **Ordered magnitude** row above, not this one — `nlargest`/`head`
+having already produced the row set is a strong signal you're there, regardless of the
+request's own "top N" phrasing. Exception: a table with **fewer than 5 rows total**
+(pre-filtered that far, or just small by nature) is also too few for
+`column_gradient_fill.md`'s own gradient to read as anything but random pastel — see
+`full_row_highlight.md`'s "When to use," which already covers this case: filling the
+whole (small) table there is correct, not a `≤30%`-cap violation.
 
 Which measures earn fill: one qualifying measure ⇒ it's the hero and gets colored.
 When several qualify, `big_color/column_gradient_fill.md`'s priority ladder picks

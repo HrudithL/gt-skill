@@ -6,8 +6,8 @@ Apply `data_color` to an ordered numeric column so each cell's background encode
 
 **IF an ordered numeric magnitude is present over ≥5 rows ⇒ it QUALIFIES as a colored
 measure** (the hero, if it is the only one that qualifies). Deterministic, not a judgment
-call. (Below 5 rows a gradient reads as random pastel — it does not qualify; use a
-targeted highlight instead, see the last rule.)
+call. (Below 5 rows a gradient reads as random pastel — it does not qualify; use
+`big_color/full_row_highlight.md` instead, see the last rule.)
 
 "Qualifies" is not the same as "earns a full heatmap fill." There is no numeric cap
 on colored measures — color what the request is actually about, with the correct
@@ -92,7 +92,7 @@ gt = (
 - **Do not gradient-fill the stub or identifier columns** — the gradient must apply to the measure only.
 - **Leave `truncate=False`** (default) — outliers keep the extreme color.
 - **Do not** also bold or color the text of the same cells — the fill alone carries the signal.
-- **≥5 rows** or skip — use a targeted highlight instead.
+- **≥5 rows** or skip — use `big_color/full_row_highlight.md` instead.
 
 ## Counts as
 
