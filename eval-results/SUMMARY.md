@@ -666,3 +666,65 @@ alone. Until that recompute lands, do not cite this round's `house` vs.
   denominators depending on which checks land N/A for that particular
   candidate. `prose`'s and `scripts`' repeats do use 88, and all three
   skills' baselines use 85.
+
+## `check_caption_not_generic` calibration correction (2026-08-13, PR #116 review round)
+
+PR #116 (which replaced the exact-keyword `check_caption_keywords` with the
+deterministic `check_caption_not_generic`) is not yet reflected in any
+`eval-results/**` numbers above or in the skill-level `SUMMARY.md`/
+`metrics.json` files — that recompute is, like the `normalize_id` fix
+above, **deliberately deferred to a separate follow-up**, so this section
+is disclosure of a measured before/after, not a claim that the stored
+scores already include it.
+
+PR #116's own description compared **raw pass-RATES** on a 54-candidate
+corpus (`house`/`prose`/`scripts` only, `creator` omitted): the old
+`check_caption_keywords` failed ~82-83% uniformly; the new check passed
+50/54 (92.6%). A follow-up review round found this framing **overstates
+the actual point-level impact by roughly 3x**, because the old check had
+*partial* credit (`_round_points_covered` — e.g. 2/3 keyword rules
+matched still earned points) while the new check is *binary* (3 or 0) —
+comparing pass-RATE deltas between a partial-credit check and a binary one
+isn't an apples-to-apples measure of how many points actually moved. The
+same review round also found the new check had its own real bugs (a
+`Source:`-prefix regex that zeroed genuine insight written after a
+citation, a vacuity floor that was effectively zero, and a handful of
+lexical-accident false verdicts) — fixed in this same PR, and the numbers
+below are POST-fix.
+
+**Recalibrated across all 72 real committed candidates (all 4 skills,
+`house`/`prose`/`scripts`/`creator`, 18 each — the original 54-candidate
+calibration omitted `creator` entirely, which is exactly where this check
+misbehaves most):**
+
+| Skill | Old (`check_caption_keywords`) mean pts/3 | New (`check_caption_not_generic`, post-fix) mean pts/3 | Mean points delta | Old pass-rate | New pass-rate |
+|---|---|---|---|---|---|
+| `house` | 1.889 | 2.333 | **+0.444** | 16.7% | 77.8% |
+| `prose` | 1.833 | 2.833 | **+1.000** | 16.7% | 94.4% |
+| `scripts` | 1.944 | 2.667 | **+0.722** | 16.7% | 88.9% |
+| `creator` | 1.778 | 0.333 | **-1.444** | 16.7% | 11.1% |
+| **All 72** | **1.861** | **2.042** | **+0.181** | 16.7% | 68.1% |
+
+The headline point-level effect across all 72 candidates is a modest
+**+0.181 mean points out of 3** (+6.0% of the check's point pool) — nowhere
+near the ~3-5x apparent swing the raw pass-rate framing would suggest for
+`house`/`prose`/`scripts`. **`creator` moves in the OPPOSITE direction**,
+and by a large margin: its mean score drops from 1.778 to 0.333 (a real,
+correctly-deserved penalty, not a bug — `creator`'s committed candidates
+overwhelmingly write bare, no-insight source notes like `"Source:
+gtcars.csv dataset"` or `"Source: islands.csv"`, which the new check
+correctly recognizes as attribution-only; the old check's occasional
+partial credit for these came from trivially-satisfiable `CAPTION_KEYWORDS`
+rules, e.g. `gtcars_top10_by_country`'s empty `caption_should_mention`
+list, not from any real caption substance). This is the accurate
+eval-integrity picture: three skills gain a small, real amount of credit
+for genuine captions the old exact-keyword mechanism couldn't recognize;
+`creator` loses credit it was never substantively earning in the first
+place.
+
+As with the `normalize_id` disclosure above, this is a scoped, non-committed
+recalibration script's output (reads each candidate's `table.py` via
+`convergence.parse_design_choices()` directly, not a full harness re-run) —
+directionally reliable, but the actual `eval-results/**` files (per-skill
+`metrics.json`/`SUMMARY.md`/plots) still reflect the PRE-#116
+`check_caption_keywords` scores until a full regenerate lands.
