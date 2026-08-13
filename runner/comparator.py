@@ -4884,22 +4884,36 @@ def check_force_sign(cand: dict, truth: dict, meta: dict) -> CheckResult:
 
 
 # A source note that opens with a data-provenance citation ("Source: ...",
-# "Data source: ...", "Dataset: ...", optionally markdown-bolded like
-# "**Source:**") carries no authored insight in the label+source-name part
-# -- that's attribution, not a caption. `_strip_citation_clause` strips just
-# that leading clause (through the first sentence-ending punctuation after
-# it) and keeps whatever substantive text follows, so a candidate that
-# writes real insight AFTER its mandatory citation (e.g. "Source: Statistics
-# Canada; density calculated as population divided by land area.") gets
-# credit for the insight instead of having the whole note zeroed just
-# because it happens to open with a citation (2026-08-13 review round: the
-# original version treated "starts with Source:" as an automatic zero of
-# the ENTIRE note, wrongly zeroing real methodology notes, and a bolded
-# "**Source:**" dodged the old `^`-anchored regex entirely since `**` broke
-# the anchor -- both fixed here by stripping the clause first and grading
-# what's left, bolded or not).
+# "Data source: ...", "Dataset: ...", "Data: ...", optionally markdown-
+# bolded like "**Source:**") carries no authored insight in the
+# label+source-name part -- that's attribution, not a caption.
+# `_strip_citation_clause` strips just that leading clause (through the
+# first sentence-ending punctuation after it) and keeps whatever
+# substantive text follows, so a candidate that writes real insight AFTER
+# its mandatory citation (e.g. "Source: Statistics Canada; density
+# calculated as population divided by land area.") gets credit for the
+# insight instead of having the whole note zeroed just because it happens
+# to open with a citation (2026-08-13 review round: the original version
+# treated "starts with Source:" as an automatic zero of the ENTIRE note,
+# wrongly zeroing real methodology notes, and a bolded "**Source:**" dodged
+# the old `^`-anchored regex entirely since `**` broke the anchor -- both
+# fixed here by stripping the clause first and grading what's left, bolded
+# or not).
+#
+# Bare "Data:" (round-5 review): a label consisting of JUST "data" (no
+# "source"/"dataset" word after it) used to fall through this regex
+# entirely -- "data\s+" only matched when followed by "source"/"dataset",
+# so "Data: S&P 500 daily prices and volumes, 2010-2015." was never
+# recognized as a citation clause at all and its label+content got graded
+# together as if "Data:" were part of the caption's own substance. The
+# trailing alternative below (bare "data", with no required "source"/
+# "dataset" suffix) fixes this; the immediately-following `[:\-]` still
+# requires the label be followed by a colon/hyphen (mod whitespace/bold
+# markers), so a genuine word starting with "data" ("Database:",
+# "Datapoint:") can't accidentally match -- the character right after
+# "data" has to be punctuation, not more letters.
 _CAPTION_LABELED_CITATION_RE = re.compile(
-    r"^\s*(?:\*{1,2}|_{1,2})?\s*(?:data\s+)?(?:source|dataset)s?"
+    r"^\s*(?:\*{1,2}|_{1,2})?\s*(?:(?:data\s+)?(?:source|dataset)|data)s?"
     r"\s*(?:\*{1,2}|_{1,2})?\s*[:\-]\s*(?:\*{1,2}|_{1,2})?",
     re.IGNORECASE,
 )
@@ -4934,10 +4948,18 @@ _CAPTION_BARE_CITATION_RE = re.compile(
 _CAPTION_SENTENCE_END_RE = re.compile(r"[.;—–](?=\s|$)")  # . ; — – (boundary-aware)
 
 
-def _strip_citation_clause(note: str) -> str:
+def _strip_citation_clause(note: str) -> tuple[str, bool]:
     """Strips a leading data-provenance citation clause and returns
-    whatever substantive text (if any) remains. Returns the note
-    (stripped) unchanged if it doesn't open with a citation at all.
+    `(remainder, was_citation)`: whatever substantive text (if any)
+    remains, and whether a citation clause was actually matched and
+    stripped. Returns `(note.strip(), False)` unchanged if it doesn't open
+    with a citation at all -- the caller uses `was_citation` to decide
+    whether the remainder needs the extra "did stripping the label leave
+    anything OTHER than more bare dataset-description behind" scrutiny
+    `_stripped_remainder_is_vacuous` applies (round-5 review; see Fix 2 in
+    that function's docstring) -- a note that was never citation-prefixed
+    in the first place gets the benefit of the doubt from the ordinary
+    floor+restatement checks alone, same as before.
 
     Two shapes, handled differently because a labeled citation is normally
     followed by a proper-noun source NAME before any real content starts
@@ -4951,13 +4973,13 @@ def _strip_citation_clause(note: str) -> str:
     if m:
         end_punct = _CAPTION_SENTENCE_END_RE.search(stripped, m.end())
         clause_end = end_punct.end() if end_punct else len(stripped)
-        return stripped[clause_end:].strip(" \t\n,;:.-—")
+        return stripped[clause_end:].strip(" \t\n,;:.-—"), True
 
     m = _CAPTION_BARE_CITATION_RE.match(stripped)
     if m:
-        return stripped[m.end():].strip(" \t\n,;:.-—")
+        return stripped[m.end():].strip(" \t\n,;:.-—"), True
 
-    return stripped
+    return stripped, False
 
 
 # A caption (or sentence within one) that opens with a bare "the/this
@@ -4980,7 +5002,7 @@ _CAPTION_GENERIC_OPENER_RE = re.compile(
 _CAPTION_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
-def _strip_generic_opener_sentences(texts: list[str]) -> list[str]:
+def _strip_generic_opener_sentences(texts: list[str], ts_words: frozenset[str] = frozenset()) -> list[str]:
     """Checks the generic-opener pattern against EACH individual source
     note, and against each sentence within a note -- not just position 0
     of the first note joined into one string (2026-08-13 review round: a
@@ -5004,13 +5026,30 @@ def _strip_generic_opener_sentences(texts: list[str]) -> list[str]:
     citation: for each sentence, if it matches the generic-opener pattern,
     strip only the MATCHED PREFIX (e.g. "The table shows") and keep
     whatever follows it in the same sentence, rather than discarding the
-    whole sentence -- let alone the whole caption. A sentence that reduces
-    to nothing after the prefix is stripped (e.g. "The table shows.")
-    contributes nothing, the same way a pure citation clause with no
-    trailing insight contributes nothing; a sentence that doesn't match at
-    all is kept unchanged. The caller then grades whatever text survives
-    across ALL sentences/notes combined -- a caption only fails on
-    "generic" grounds if NOTHING distinctive remains anywhere.
+    whole sentence -- let alone the whole caption. A sentence that doesn't
+    match the opener pattern at all is kept unchanged, no extra scrutiny
+    applied -- it's graded like any other naturally-written sentence.
+
+    2026-08-13 review round-5: fixing round-4's "keep whatever follows"
+    that way made the opener check itself trivially dodgeable -- ANY
+    generic template ("Data shows the area of islands across the world.")
+    survived stripping with a non-empty remainder, and that remainder then
+    only had to clear the (low) word-count floor to pass, which a generic
+    description of a table's own columns/subject always does (it names
+    3+ nouns). A remainder that reduces to nothing (e.g. "The table
+    shows.") already contributed nothing; now a remainder that reduces to
+    something but that something is ITSELF just naming/restating the
+    table's own structure -- either a near-verbatim restatement of the
+    title/subtitle, or a bare noun phrase with no discernible comparison/
+    relationship/computation language -- contributes nothing either, via
+    `_stripped_remainder_is_vacuous` (same overlap-based restatement test
+    the whole-caption check below uses, reused rather than reinvented,
+    plus a "no analytical signal" fallback for remainders that don't
+    happen to overlap the title/subtitle but are still just generic
+    filler). Only a remainder with SOME real insight -- a comparison, a
+    computation, a notable named entity, a genuine relationship -- survives.
+    A sentence that was never opener-matched in the first place skips this
+    scrutiny entirely (see the "kept unchanged" branch above).
 
     Returns the list of surviving fragments (opener-stripped where
     applicable, in order, across all texts) -- not a single offender.
@@ -5024,7 +5063,7 @@ def _strip_generic_opener_sentences(texts: list[str]) -> list[str]:
             m = _CAPTION_GENERIC_OPENER_RE.match(sentence)
             if m:
                 remainder = sentence[m.end():].strip(" \t\n,;:.-—–")
-                if remainder:
+                if remainder and not _stripped_remainder_is_vacuous(remainder, ts_words):
                     fragments.append(remainder)
             else:
                 fragments.append(sentence)
@@ -5034,14 +5073,12 @@ def _strip_generic_opener_sentences(texts: list[str]) -> list[str]:
 # Small stopword list for the restatement check below -- articles,
 # prepositions, and a few common linking verbs that would otherwise inflate
 # the caption/title-subtitle word overlap without carrying any content.
-# "data" is included deliberately (2026-08-13 review round): a bare "Data:"
-# label (distinct from the "Source:"/"Data source:"/"Dataset:" labels
-# `_strip_citation_clause` recognizes) isn't stripped as a citation, but the
-# word itself carries no content either -- without it, a caption like
-# "Data: S&P 500 daily prices and volumes, 2010-2015." (a real committed
-# candidate, creator/sp500_monthly_performance/repeat_1) hit exactly the
-# 4-word content floor on "data"/"daily"/"prices"/"volumes" and slipped
-# through despite being genuinely vacuous.
+# "data" is kept in this set even though a bare "Data:" label is now
+# recognized and stripped as a citation clause by `_CAPTION_LABELED_
+# CITATION_RE` (round-5 review -- it wasn't, when this set was first built;
+# see that regex's docstring): the word "data" still carries no content on
+# its own whenever it shows up mid-sentence rather than as a stripped
+# label (e.g. "raw data values"), so there's no reason to let it count.
 _CAPTION_STOPWORDS = frozenset({
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
     "of", "in", "on", "for", "with", "and", "or", "to", "from", "by", "at", "as",
@@ -5112,12 +5149,140 @@ def _caption_content_words(text: str) -> set[str]:
        singular stopword and leaked through as a counted content word. Stem
        first, then filter the stemmed form, so plurals of stopwords are
        correctly excluded too.
+
+    2026-08-13 round-5 review: fix (2) above introduced the opposite leak.
+    `_stem` unconditionally strips a trailing "s" from any word longer than
+    3 characters -- including stopwords that happen to end in "s" and
+    aren't plurals at all, like "across" (-> "acros") and "this" (->
+    "thi"). Stemming FIRST and only checking the stemmed form meant these
+    mangled forms no longer matched the (unstemmed) stopword set, so
+    "across"/"this"/similar stopwords leaked through as counted content
+    words. Fixed by checking the RAW word against the stopword set first
+    (catches "across"/"this" before stemming can mangle them) and ALSO
+    checking the stemmed form (still catches the round-4 case, a plural of
+    a singular stopword like "displays") -- either match excludes the word,
+    so both fixes hold at once.
     """
     if not text:
         return set()
     words = _CAPTION_TOKEN_RE.findall(text.lower())
-    stemmed = (_stem(w) for w in words)
-    return {w for w in stemmed if len(w) >= 2 and w not in _CAPTION_STOPWORDS}
+    result: set[str] = set()
+    for w in words:
+        if w in _CAPTION_STOPWORDS:
+            continue
+        stemmed = _stem(w)
+        if stemmed in _CAPTION_STOPWORDS:
+            continue
+        if len(stemmed) >= 2:
+            result.add(stemmed)
+    return result
+
+
+# Comparison/trend/relationship vocabulary a caption remainder can contain
+# to prove it's making an actual analytical claim, not just naming/listing
+# what the table's columns are (2026-08-13 round-5 review, Fix 1 -- see
+# `_stripped_remainder_is_vacuous`). Deliberately a curated word list, not
+# a general NLP classifier, matching this file's existing style for the
+# generic-opener verb list and the stopword list above.
+_CAPTION_ANALYTICAL_SIGNAL_WORDS = frozenset({
+    "more", "less", "fewer", "greater", "higher", "lower", "larger", "smaller",
+    "faster", "slower", "older", "younger", "best", "worst", "top", "bottom",
+    "most", "least", "highest", "lowest", "largest", "smallest", "fastest",
+    "slowest", "than", "versus", "vs", "unlike", "compared", "comparison",
+    "despite", "whereas", "exceed", "exceeds", "exceeded", "surpass",
+    "surpasses", "surpassed", "outpace", "outpaces", "outpaced", "outperform",
+    "outperforms", "outperformed", "outgun", "outguns", "outgunned",
+    "correlate", "correlates", "correlated", "correlation", "relationship",
+    "trend", "trends", "gap", "outlier", "outliers", "anomaly", "anomalies",
+    "notable", "notably", "significant", "significantly", "dominant",
+    "dominate", "dominates", "leading", "leads", "together", "apart",
+})
+
+
+def _has_analytical_signal(text: str) -> bool:
+    """True if `text` contains a deterministic signal that it's making an
+    analytical claim rather than just naming/listing what a table/dataset
+    contains: an explicit comparison/trend/relationship word (from
+    `_CAPTION_ANALYTICAL_SIGNAL_WORDS`), or a crude past-tense/gerund verb
+    (a word >= 5 characters ending in "ed"/"ing") suggesting an action or
+    computation was performed or is happening, rather than a bare noun
+    phrase. Not real NLP (no dependency, no POS tagging) -- just enough to
+    tell "density calculated as population divided by land area" (has
+    "calculated") or "highlighting a winter smog spike" (has "highlighting")
+    apart from "the area of islands across the world" or "S&P 500 daily
+    prices and volumes, 2010-2015" (neither has anything of the sort).
+    """
+    words = _CAPTION_TOKEN_RE.findall(text.lower())
+    for w in words:
+        if w in _CAPTION_ANALYTICAL_SIGNAL_WORDS:
+            return True
+        if len(w) >= 5 and (w.endswith("ed") or w.endswith("ing")):
+            return True
+    return False
+
+
+def _restatement_overlap(cap_words: set[str], ts_words: set[str]) -> tuple[bool, float, set[str]]:
+    """Shared overlap-fraction/new-word-count restatement test: a word set
+    whose content overlaps the title/subtitle word set almost entirely
+    (>=80%) AND that contributes at most 1 word not already in the title/
+    subtitle is adding nothing -- it's the same sentence reworded, not a
+    new observation. Extracted (2026-08-13 round-5 review) out of
+    `check_caption_not_generic`'s own whole-caption restatement check so
+    `_stripped_remainder_is_vacuous` can reuse the exact same mechanism to
+    judge a single opener-/citation-stripped remainder, rather than
+    duplicating (or inventing a different version of) this logic.
+
+    Returns `(is_restatement, overlap_frac, new_words)`; the latter two are
+    only for detail-message formatting by callers, not used in the
+    boolean decision itself beyond what's already folded into it.
+    """
+    if not cap_words:
+        return False, 0.0, set()
+    overlap = cap_words & ts_words
+    overlap_frac = len(overlap) / len(cap_words)
+    new_words = cap_words - ts_words
+    return overlap_frac >= 0.8 and len(new_words) <= 1, overlap_frac, new_words
+
+
+def _stripped_remainder_is_vacuous(remainder: str, ts_words: frozenset[str]) -> bool:
+    """True if `remainder` -- text that survived having a citation-label or
+    generic-opener PREFIX stripped off the front of it -- doesn't carry any
+    real information beyond that stripped prefix, i.e. stripping the
+    prefix didn't actually uncover a real caption underneath.
+
+    Two independent ways a remainder can fail to clear this bar (2026-08-13
+    round-5 review, Fix 1 + Fix 2 -- the generic-opener strip-and-grade fix
+    from the prior round left the ONLY remaining defense as the word-count
+    floor, which any generic table description clears trivially just by
+    naming 3+ of the table's own nouns):
+
+    1. It's substantively just a restatement of the title/subtitle -- the
+       SAME overlap-based test `check_caption_not_generic` applies to the
+       whole caption (via `_restatement_overlap`), just applied to this
+       one remainder alone (e.g. a stripped "all 47 models" against a
+       subtitle that already says "All 47 makes and models").
+    2. It has no discernible analytical content at all (`_has_
+       analytical_signal` finds nothing) -- i.e. it's a bare noun phrase
+       naming what the table/dataset is about or contains ("the area of
+       islands across the world", "S&P 500 daily prices and volumes,
+       2010-2015") with no comparison, relationship, computation, or
+       notable claim attached. A caption's NATURALLY-written sentences
+       (never prefixed by an opener/citation label) don't get this second
+       scrutiny -- only a remainder that already announced itself as
+       generic template/bare attribution has to clear this extra bar.
+
+    Either condition alone is enough to call the remainder vacuous -- a
+    remainder only survives if it has real overlap-independent content AND
+    an analytical signal, or (trivially) if it has genuinely new,
+    non-generic substance that satisfies neither failure condition.
+    """
+    r_words = _caption_content_words(remainder)
+    if not r_words:
+        return True
+    is_restatement, _, _ = _restatement_overlap(r_words, ts_words)
+    if is_restatement:
+        return True
+    return not _has_analytical_signal(remainder)
 
 
 def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -5140,33 +5305,48 @@ def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResul
     nowhere near as sharp as the ground truth's -- passes. Mechanical
     signals only, no judge call:
 
-    1. Citation stripping: a leading "Source:"/"Data source:"/"Dataset:"
-       (bolded or not) or bare "From X dataset"/"Source X dataset" clause
-       is stripped before anything else is judged -- only the text (if
-       any) that remains after it is graded as the caption.
+    1. Citation stripping: a leading "Source:"/"Data source:"/"Dataset:"/
+       "Data:" (bolded or not) or bare "From X dataset"/"Source X dataset"
+       clause is stripped before anything else is judged. Only the text
+       (if any) that remains after it is graded as the caption -- and (as
+       of round-5) that remainder itself has to clear
+       `_stripped_remainder_is_vacuous` too: a citation-stripped remainder
+       that's ITSELF just a bare restatement of the dataset's contents,
+       with nothing analytical about it (e.g. "S&P 500 daily prices and
+       volumes, 2010-2015" after stripping "Data:"), fails the same way an
+       attribution-only citation with nothing after it does -- stripping
+       the label shouldn't be enough on its own if what's left is still
+       just more provenance-flavored description. A remainder that DOES
+       say something real (a computation, a comparison, a named claim)
+       keeps that credit exactly as before.
     2. Generic template: any individual source note, or any sentence
        within one, opening with a bare "the/this table/chart/data shows/
        displays/..." pattern has that opening PREFIX stripped (same
        strip-and-grade-the-remainder treatment as the citation clause in
-       (1)) -- only a caption with NOTHING distinctive left anywhere,
-       across every note and sentence, fails on generic-template grounds.
-       A generic-sounding sentence sitting alongside other, substantive
-       sentences no longer vetoes the whole caption (round-4 review fix;
-       see `_strip_generic_opener_sentences`'s docstring for the two
-       concrete false failures this replaces).
+       (1), including the same `_stripped_remainder_is_vacuous` scrutiny
+       on what's left) -- only a caption with NOTHING distinctive left
+       anywhere, across every note and sentence, fails on generic-template
+       grounds. A generic-sounding sentence sitting alongside other,
+       substantive sentences no longer vetoes the whole caption (round-4
+       review fix; see `_strip_generic_opener_sentences`'s docstring for
+       the concrete false failures this replaced, and for round-5's fix to
+       the round-4 fix -- a non-empty remainder is no longer automatically
+       "distinctive" just for being non-empty).
     3. Vacuity floor: fewer than `_CAPTION_MIN_CONTENT_WORDS` distinct
        content words after stripping (1) and (2) can't carry real
        information regardless of what the overlap check below would say.
     4. Restatement: caption content words (suffix-normalized) are compared
-       against the title+subtitle content-word set. A caption whose words
-       overlap that set almost entirely (>=80%) AND that contributes at
-       most 1 word not already in the title/subtitle is adding nothing --
-       it's the same sentence reworded, not a new observation.
+       against the title+subtitle content-word set via `_restatement_
+       overlap`. A caption whose words overlap that set almost entirely
+       (>=80%) AND that contributes at most 1 word not already in the
+       title/subtitle is adding nothing -- it's the same sentence
+       reworded, not a new observation.
 
     A candidate that skips the caption/source-note entirely, or whose only
     source note reduces to nothing after citation- and generic-opener-
-    stripping, fails the same way as an explicit restatement -- it hasn't
-    written a real caption either way.
+    stripping (including the vacuity scrutiny in (1)/(2) above), fails the
+    same way as an explicit restatement -- it hasn't written a real caption
+    either way.
 
     Recalibrated 2026-08-13 (review round; see the PR description for the
     full before/after numbers) against all 72 real committed candidates
@@ -5175,6 +5355,12 @@ def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResul
     round-4 (structural strip-and-grade fix for citation/generic-opener
     handling, boundary-aware citation-clause termination, and the word-
     filter/floor fixes in `_caption_content_words`/`_CAPTION_MIN_CONTENT_WORDS`).
+    Recalibrated again 2026-08-13 round-5 (this docstring's current
+    version): round-4's strip-and-grade fix left the generic-opener/
+    citation gates effectively unreachable (any non-empty remainder
+    cleared the floor trivially); a bare "Data:" citation label regressed
+    back to ungraded; and a stemming/stopword-ordering bug let stopwords
+    ending in "s" ("across", "this") leak through as counted content words.
     """
     name = "Caption is substantive"
     # Pure source-text extraction (title/subtitle/source_note are literal
@@ -5193,15 +5379,28 @@ def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResul
     if not cand_notes:
         return CheckResult(name, 3, 0, False, "candidate has no caption")
 
-    remainders = [_strip_citation_clause(t) for t in cand_notes]
-    substantive_texts = [r for r in remainders if r]
+    # Computed up front (not just before the final restatement check, as in
+    # prior rounds) because `_stripped_remainder_is_vacuous` -- applied to
+    # both citation- and generic-opener-stripped remainders below -- needs
+    # it too.
+    title_subtitle_text = f"{cand['tier1'].get('title_text') or ''} {cand['tier1'].get('subtitle_text') or ''}"
+    ts_words = frozenset(_caption_content_words(title_subtitle_text))
+
+    citation_results = [_strip_citation_clause(t) for t in cand_notes]
+    substantive_texts = []
+    for remainder, was_citation in citation_results:
+        if not remainder:
+            continue
+        if was_citation and _stripped_remainder_is_vacuous(remainder, ts_words):
+            continue
+        substantive_texts.append(remainder)
     if not substantive_texts:
         return CheckResult(
             name, 3, 0, False,
             "candidate's only source note is a data-source citation, with no accompanying insight sentence",
         )
 
-    fragments = _strip_generic_opener_sentences(substantive_texts)
+    fragments = _strip_generic_opener_sentences(substantive_texts, ts_words)
     if not fragments:
         return CheckResult(
             name, 3, 0, False,
@@ -5221,13 +5420,9 @@ def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResul
             f"({len(cap_words)} content word(s) -- {sorted(cap_words)}): {caption_text!r}",
         )
 
-    title_subtitle_text = f"{cand['tier1'].get('title_text') or ''} {cand['tier1'].get('subtitle_text') or ''}"
-    ts_words = _caption_content_words(title_subtitle_text)
-
-    overlap = cap_words & ts_words
-    overlap_frac = len(overlap) / len(cap_words)
-    new_words = cap_words - ts_words
-    if overlap_frac >= 0.8 and len(new_words) <= 1:
+    is_restatement, overlap_frac, new_words = _restatement_overlap(cap_words, ts_words)
+    if is_restatement:
+        overlap = cap_words & ts_words
         detail = (
             f"caption is a near-verbatim restatement of the title/subtitle "
             f"({len(overlap)}/{len(cap_words)} words already there, only {sorted(new_words)} new): {caption_text!r}"
