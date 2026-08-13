@@ -581,33 +581,87 @@ towny's spanner/ranking-metric ambiguity), this round's remaining spread has
 no fixable mechanical cause left that this effort's deep-dive could find.
 
 **CAVEAT (2026-08-13, added after this round's numbers above were
-committed):** the "sp500's ground-truth month-label ambiguity" item cited
-above as an unfixable source of spread was, in fact, a real comparator bug
-in row/date-identity matching — `normalize_id()` in `runner/execution_tier.py`
-compared date-like row/stub labels as plain strings, so semantically
-identical months rendered in different (equally legitimate) formats, e.g.
-ground truth's `"Jan 2010"` vs. a candidate's `"2010-01"` or
-`.dt.to_period("M")` output, scored as a complete row-set mismatch. This
-has been found and fixed (`fix/comparator-date-aware-row-matching`, PR
-#108). As a direct, measured consequence, `sp500_monthly_performance`
-scores in this file are **understated** for `prose` and `scripts`: their
-sweep candidates commonly used the `"2010-01"`-style format, while `house`'s
-candidates already happened to match the ground truth's `"%b %Y"` format,
-so `house` is unaffected. Directly measured impact on the "Row/entity
-selection identity" mechanical check alone (re-executing the actual
-committed candidate scripts with the old vs. new `normalize_id`): `prose`
-repeat_1 and repeat_3 flip from 0/10 (FAIL, complete row-set mismatch) to
-10/10 (PASS); all 3 `scripts` repeats flip from 0/10 to 10/10; `prose`
-repeat_2 and all 3 `house` repeats were already 10/10 and are unchanged.
-Since the mean-score margin between `house` (82.4%) and `prose` (81.7%)
-above is well under 1 percentage point, and this fix moves multiple
-`sp500_monthly_performance` repeats for `prose`/`scripts` up by a full
-mechanical-check's worth of points (with a likely further, unquantified
-uplift on the row-alignment-gated "Computed/derived value correctness"
-check for the same repeats), **the `house`-over-`prose` ranking call in
-this round should be treated as stale pending a fresh recompute.** That
-recompute (a full `eval-results/**` regenerate reflecting the fixed
-`normalize_id`) is deliberately deferred to a separate, small follow-up PR
-— not done as part of #108, to keep that PR's diff focused on the
-comparator code fix alone. Until that recompute lands, do not cite this
-round's `house`-vs-`prose` ranking as settled.
+committed; WIDENED 2026-08-13 after a second review round's independent
+recompute — see below):** the "sp500's ground-truth month-label ambiguity"
+item cited above as an unfixable source of spread was, in fact, a real
+comparator bug in row/date-identity matching — `normalize_id()` in
+`runner/execution_tier.py` compared date-like row/stub labels as plain
+strings, so semantically identical months rendered in different (equally
+legitimate) formats, e.g. ground truth's `"Jan 2010"` vs. a candidate's
+`"2010-01"` or `.dt.to_period("M")` output, scored as a complete row-set
+mismatch. This has been found and fixed
+(`fix/comparator-date-aware-row-matching`, PR #108). As a direct, measured
+consequence, `sp500_monthly_performance` scores in this file are
+**understated** for `prose` and `scripts`: their sweep candidates commonly
+used the `"2010-01"`-style format, while `house`'s candidates already
+happened to match the ground truth's `"%b %Y"` format, so `house` is
+unaffected.
+
+**Independently re-verified, not just the original disclosure's numbers:**
+re-executing the actual committed candidate scripts (from each skill's
+original sweep dir) against the ground truth with the now-fixed
+`normalize_id`, and recomputing both `normalize_id`-dependent mechanical
+checks ("Row/entity selection identity" and "Computed/derived value
+correctness") for every `sp500_monthly_performance` invocation:
+
+- **Row identity**: `prose` repeat_1 and repeat_3 flip from 0/10 (FAIL,
+  complete row-set mismatch) to 10/10 (PASS); all 3 `scripts` repeats flip
+  from 0/10 to 10/10; `prose` repeat_2 and all 3 `house` repeats were
+  already 10/10 and are unchanged. Baselines for all three skills stay
+  0/10 either way (no stub column in the rendered output — see the
+  baseline-reason correction below).
+- **Computed/derived value correctness (the "likely further, unquantified
+  uplift" the original disclosure flagged but did not check): confirmed
+  for `scripts`, only partial for `prose` — not a blanket effect.** For
+  `scripts`, all 3 repeats gain additional points once row identity is
+  fixed (repeat_1 0/10→3/10, repeat_2 0/10→5/10, repeat_3 0/10→5/10). For
+  `prose`, only repeat_1 gains (0/10→5/10); repeat_3's value check stays
+  0/10 even though its row identity flips to 10/10 (still 0/6 canonical
+  measures value-matched — a real, unrelated computation gap in that
+  candidate, not a row-alignment artifact); and `prose/repeat_2` is the
+  clean control case — its row identity was **already** 10/10 before this
+  fix, and its value-correctness check is **still** 0/10 after it (0/6
+  measures matched, same failure both before and after) — proof this
+  fix's benefit doesn't propagate automatically and must be checked per
+  repeat, not assumed.
+- **Net per-skill mean-score impact**, applying only these two checks'
+  deltas and leaving every other stored check value as-is: `house`
+  unchanged at 82.4% (its candidates already used the matching format, so
+  this fix touches nothing for it); `prose` rises from 81.7% to
+  **~83.3%** (+1.6pp over the full 18-invocation mean); `scripts` rises
+  from 81.5% to **~84.2%** (+2.7pp) — **the largest gainer, and the new
+  likely top scorer, overtaking both `prose` and `house`.** All three
+  numbers are estimates from a scoped, non-committed recompute (only the
+  two `normalize_id`-dependent checks substituted; not a full
+  `eval-results/**` regenerate), so treat the ranking as directionally
+  reliable but not final.
+
+Since this fix changes the likely ranking among all three skills — not
+just `house` vs. `prose` — **the round-4 "`house` edges out `prose` and
+`scripts`" framing above should be treated as stale pending a fresh,
+full recompute, and `scripts` (not `house` or `prose`) is the current
+best guess for the new top scorer.** That recompute (a full
+`eval-results/**` regenerate reflecting the fixed `normalize_id`) is
+deliberately deferred to a separate, small follow-up PR — not done as
+part of #108, to keep that PR's diff focused on the comparator code fix
+alone. Until that recompute lands, do not cite this round's `house` vs.
+`prose` vs. `scripts` ranking as settled.
+
+**Two description corrections (round-5 review):**
+- The baselines are **not** all "no stub column for the same reason."
+  `prose`'s and `scripts`' sp500 baselines actually execute successfully
+  (they render a real table, just without a `rowname_col=` stub) — e.g.
+  `prose`'s baseline report shows `[PASS] Render mechanics` and a
+  populated column set, just `Stub existence: 0/2`. `house`'s sp500
+  baseline, by contrast, **fails to execute at all** ("candidate failed
+  to execute: no top-level `gt` GT instance in table.py") — a strictly
+  more severe, different failure mode that only incidentally also shows up
+  as "no stub column; row selection unverifiable" on the row-identity
+  check line, because that check's message doesn't distinguish "ran fine,
+  omitted the stub" from "never produced a `GT` object at all."
+- sp500_monthly_performance's total point denominator is **not** a fixed
+  88. Per `eval-results/house/metrics.json`, `house`'s repeats score out
+  of 89 (repeat_1) or 90 (repeat_2, repeat_3), not 88 — variable
+  denominators depending on which checks land N/A for that particular
+  candidate. `prose`'s and `scripts`' repeats do use 88, and all three
+  skills' baselines use 85.

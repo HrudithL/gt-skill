@@ -32,6 +32,7 @@ sys.path.insert(0, str(ROOT))
 from runner.execution_tier import (  # noqa: E402
     _DATE_YM_PREFIX,
     _DATE_YMD_PREFIX,
+    _DATE_YMDHMS_PREFIX,
     _MISSING_ID,
     normalize_id,
 )
@@ -126,14 +127,84 @@ def test_missing_id_sentinel_does_not_collide_with_literal_none_text():
 # ---------------------------------------------------------------------------
 
 
-def test_pandas_timestamp_default_str_form_matches_equivalent_date():
+def test_pandas_timestamp_default_str_form_is_parsed_as_a_date():
     # `str(pd.Timestamp("2010-01-15"))` / `str(datetime.datetime(2010, 1, 15))`
     # both render as "2010-01-15 00:00:00" -- the single most common way a
     # plain (non-Period) pandas datetime column stringifies. Avoid a hard
     # pandas dependency in this test file; the stub string is what actually
-    # reaches `normalize_id` regardless of which object produced it.
-    assert normalize_id("2010-01-15 00:00:00") == normalize_id("2010-01-15")
-    assert normalize_id(str(datetime(2010, 1, 15))) == normalize_id("2010-01-15")
+    # reaches `normalize_id` regardless of which object produced it. This
+    # must still be recognized as a date at all (not fall back to plain
+    # casefold) -- see the granularity tests below for whether it collides
+    # with a bare "2010-01-15" (round-5 review finding: it must NOT).
+    assert normalize_id(str(datetime(2010, 1, 15))) == normalize_id("2010-01-15 00:00:00")
+    assert normalize_id("2010-01-15 00:00:00").startswith(_DATE_YMDHMS_PREFIX)
+
+
+# ---------------------------------------------------------------------------
+# Timestamp-vs-date granularity separation (round-5 review finding #2): a
+# full "%Y-%m-%d %H:%M:%S" timestamp must NOT collapse into the same identity
+# as a bare "%Y-%m-%d" date, nor may two different timestamps on the same
+# calendar day collapse into each other. The previous round normalized both
+# to the same `_DATE_YMD_PREFIX` key, discarding time-of-day entirely --
+# contradicting this same function's own month-vs-day granularity
+# separation just above.
+# ---------------------------------------------------------------------------
+
+
+def test_timestamp_does_not_collide_with_bare_date_same_day():
+    assert normalize_id("2010-01-15") != normalize_id("2010-01-15 13:45:00")
+
+
+def test_midnight_timestamp_does_not_collide_with_bare_date():
+    # Even midnight (the "no time information lost" case at first glance)
+    # must stay distinct from the bare date -- the two formats represent
+    # different claims (a specific instant vs. the whole day) even when the
+    # instant happens to be midnight.
+    assert normalize_id("2010-01-15") != normalize_id("2010-01-15 00:00:00")
+
+
+def test_different_timestamps_same_day_do_not_collide():
+    assert normalize_id("2010-01-15 00:00:00") != normalize_id("2010-01-15 13:45:00")
+
+
+def test_timestamp_and_day_granularity_keys_have_visibly_different_shapes():
+    day_key = normalize_id("2010-01-15")
+    ts_key = normalize_id("2010-01-15 13:45:00")
+    assert day_key != ts_key
+    assert day_key.startswith(_DATE_YMD_PREFIX)
+    assert not day_key.startswith(_DATE_YMDHMS_PREFIX)
+    assert ts_key.startswith(_DATE_YMDHMS_PREFIX)
+
+
+# ---------------------------------------------------------------------------
+# Case-insensitive round-trip guard (round-5 review finding #1, regression):
+# `strptime`'s `%b`/`%B` accept month names case-insensitively, but
+# `strftime` always re-renders its own canonical capitalization, so a
+# byte-exact round-trip comparison wrongly rejected case variants -- a
+# strict regression versus the pre-round-4 plain-casefold behavior, in
+# exactly the domain this PR targets.
+# ---------------------------------------------------------------------------
+
+
+def test_month_name_case_variants_still_match_after_roundtrip_guard():
+    assert normalize_id("Jan 2010") == normalize_id("JAN 2010")
+    assert normalize_id("Jan 2010") == normalize_id("jan 2010")
+    assert normalize_id("January 2010") == normalize_id("JANUARY 2010")
+
+
+def test_month_name_case_variants_match_in_day_granularity_formats_too():
+    assert normalize_id("Jan 15, 2010") == normalize_id("JAN 15, 2010")
+    assert normalize_id("January 15, 2010") == normalize_id("january 15, 2010")
+
+
+def test_case_insensitive_roundtrip_guard_still_rejects_zero_padding_gaps():
+    # The casefold fix must not loosen the round-trip guard's actual job:
+    # non-zero-padded numeric components must still fail to round-trip and
+    # fall back to plain casefold instead of merging with the zero-padded
+    # form.
+    assert normalize_id("2010-1") != normalize_id("2010-01")
+    assert normalize_id("1/2/2010") != normalize_id("01/02/2010")
+    assert normalize_id("2010-01-1") != normalize_id("2010-01-01")
 
 
 # ---------------------------------------------------------------------------
