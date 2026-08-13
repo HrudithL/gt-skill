@@ -49,6 +49,11 @@ as a plain value column. A `tab_stubhead(label=…)` **requires** that the stub 
 exist — **no orphan label** (setting a stubhead when there is no `rowname_col` is
 wrong, PP-25).
 
+Never `df.set_index('col')` before `GT(...)` to fake a stub — `great_tables`'
+stub is a real column selected via `rowname_col=`, not the DataFrame's pandas
+index; `.set_index()` leaves `GT(...)` with no stub at all. Pass the identifier
+as `GT(df, rowname_col='col')` on the un-indexed frame.
+
 ### Grouping — a computable trigger (PP-1)
 
 **IF the user's prompt names a grouping dimension** ("grouped by X", "by country",
