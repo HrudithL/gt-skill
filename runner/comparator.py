@@ -508,13 +508,48 @@ def _module_level_functions(tree: ast.Module) -> dict[str, ast.FunctionDef]:
     A required positional/keyword-only parameter with no default excludes
     a `def` here the same way `async` does; `*args`/`**kwargs`/defaulted
     parameters don't (calling with zero arguments is still valid then).
+
+    Also excludes a DECORATED `def`, and any name later REBOUND by a
+    `class`/assignment/import (2026-08-13 review finding, round 5): a
+    decorator can replace the function entirely (`@tag def build_table():
+    ...` where `tag` returns something else, or a wrapper requiring an
+    argument) -- calling it bare then raises or does something other than
+    run the plain body, so crediting the undecorated body is the same
+    fabricated-execution bug the checks above exist to prevent. Likewise a
+    LATER `class build_table: ...` or `build_table = None` shadows an
+    earlier plain `def` at real runtime exactly like a later same-name
+    `def` already does -- generalizes that same-name resolution to every
+    kind of rebinding, not just def-vs-def.
     """
-    defs = {
-        node.name: node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef)
-    }
+    resolved: dict[str, ast.FunctionDef | None] = {}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and not node.decorator_list:
+            resolved[node.name] = node
+            continue
+        for name in _rebound_names(node):
+            resolved[name] = None
+    defs = {name: node for name, node in resolved.items() if node is not None}
     return {name: node for name, node in defs.items() if _is_zero_arg_callable(node)}
+
+
+def _rebound_names(node: ast.stmt) -> list[str]:
+    """Every module-level NAME `node` rebinds, for `_module_level_functions`'
+    poisoning pass above. Only plain `Name` targets count for `Assign`/
+    `AnnAssign` -- a tuple/attribute/subscript target isn't a simple
+    rebinding of one name, so it's ignored (conservative: can only
+    under-poison, matching this fix's existing safe-default philosophy).
+    A DECORATED `def`/`async def` reaching here (an undecorated plain
+    `def` is handled by the caller's own branch before this is ever
+    called) poisons its own name the same way a `class` does."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return [node.name]
+    if isinstance(node, ast.Assign):
+        return [t.id for t in node.targets if isinstance(t, ast.Name)]
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        return [node.target.id]
+    if isinstance(node, (ast.Import, ast.ImportFrom)):
+        return [a.asname or a.name.split(".")[0] for a in node.names]
+    return []
 
 
 def _is_zero_arg_callable(func_def: ast.FunctionDef) -> bool:
