@@ -498,12 +498,32 @@ def _module_level_functions(tree: ast.Module) -> dict[str, ast.FunctionDef]:
     if its whole body executed. An `async def` target now simply fails to
     resolve (falls back to the unrestricted walk), the same safe default
     used whenever the guard's target can't be resolved at all.
+
+    Also requires the `def` be callable with ZERO arguments (2026-08-13
+    review finding): `_main_guard_call_target` only checks the CALL SITE
+    is zero-argument, not that the resolved `def` can actually accept
+    that -- `def build_table(df): ...` called as `build_table()` raises
+    `TypeError` and renders nothing, the same "scored as if it ran, but
+    it didn't" bug class as the `async def`/guard-ordering cases above.
+    A required positional/keyword-only parameter with no default excludes
+    a `def` here the same way `async` does; `*args`/`**kwargs`/defaulted
+    parameters don't (calling with zero arguments is still valid then).
     """
-    return {
+    defs = {
         node.name: node
         for node in tree.body
         if isinstance(node, ast.FunctionDef)
     }
+    return {name: node for name, node in defs.items() if _is_zero_arg_callable(node)}
+
+
+def _is_zero_arg_callable(func_def: ast.FunctionDef) -> bool:
+    """True if `func_def` can be called with NO arguments at all."""
+    a = func_def.args
+    required_positional = len(a.posonlyargs) + len(a.args) - len(a.defaults)
+    if required_positional > 0:
+        return False
+    return all(default is not None for default in a.kw_defaults)
 
 
 def _main_guard_call_target(node: ast.stmt) -> str | None:
