@@ -1,0 +1,4 @@
+{
+  "prompt": "Show population trajectories decade-by-decade for the 10 most populous countries in 2020, from 1970 through 2020, with the growth percentage over each decade.",
+  "data": "data/countrypops.csv"
+}

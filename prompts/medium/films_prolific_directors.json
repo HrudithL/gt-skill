@@ -1,0 +1,4 @@
+{
+  "prompt": "Show me the 10 most prolific directors in the films dataset — for each, their total number of films, average runtime, and the years spanning their earliest and latest film.",
+  "data": "data/films.csv"
+}

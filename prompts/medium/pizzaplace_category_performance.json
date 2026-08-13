@@ -1,0 +1,4 @@
+{
+  "prompt": "Compare pizza sales performance across pizza categories for 2015 — for each category, show total revenue, order count, and average pizza price.",
+  "data": "data/pizzaplace.csv"
+}

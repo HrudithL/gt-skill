@@ -1,0 +1,4 @@
+{
+  "prompt": "Compare New York summer air quality across three wind regimes — for calm, moderate, and windy days, show the average ozone level, average temperature, average solar radiation, and how many days fall into each regime.",
+  "data": "data/airquality.csv"
+}

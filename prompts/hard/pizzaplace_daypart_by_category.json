@@ -1,0 +1,4 @@
+{
+  "prompt": "Analyze pizzaplace demand patterns by day-part and pizza category — for each combination of day-part (morning, lunch, afternoon, dinner) and pizza category, show total revenue, order count, and average order value.",
+  "data": "data/pizzaplace.csv"
+}

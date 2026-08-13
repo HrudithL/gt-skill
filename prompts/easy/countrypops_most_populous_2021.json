@@ -1,0 +1,4 @@
+{
+  "prompt": "Show me the 15 most populous countries in 2021 with their populations.",
+  "data": "data/countrypops.csv"
+}

@@ -1,0 +1,4 @@
+{
+  "prompt": "Compare population growth from 2000 to 2020 for the 15 fastest-growing countries in the world (of countries with at least one million residents in 2000).",
+  "data": "data/countrypops.csv"
+}

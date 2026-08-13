@@ -1,0 +1,4 @@
+{
+  "prompt": "Show me the 10 longest films in the dataset along with their director and country of origin.",
+  "data": "data/films.csv"
+}
