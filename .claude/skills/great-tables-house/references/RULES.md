@@ -66,6 +66,62 @@ no striping and no stub tint isn't "keeping it simple," it's skipping two
 items whose gate condition was clearly met — striping is the DEFAULT now,
 not something reserved for long tables.
 
+## Spanners (column groups)
+
+Whenever ANY `tab_spanner(label=..., columns=[...])` or
+`tab_spanner_delim(...)` call is present — even a single spanner, not
+only "2+ spanners side by side" — add a vertical divider at every real
+spanner boundary: a
+`tab_style(style.borders(sides="right", color=PALETTE["neutral"]["vertical_divider"], weight="1px"), locations=loc.body(columns=<col>))`
+call PLUS the matching `loc.column_labels(columns=<same column>)` call
+(where `<col>` is the last column before the boundary), so each divider
+runs the full height of the table, header included.
+`PALETTE["neutral"]["vertical_divider"]` resolves to `#D0D0D0` at 1px —
+the house convention for these seams (that's the exact `PALETTE` entry
+`house_table.py` itself uses, and the same value — `"#D0D0D0"` — appears
+literally in `towny_growth_trends.py`'s and `sp500_monthly_performance`'s
+ground truths). Leaving the color/weight off the `style.borders(...)`
+call falls back to `great_tables`' black/1px default, which is NOT the
+house look.
+
+There are exactly two boundary types that need a divider — both are
+places where a spanned group meets something else on its way IN:
+
+- **Leading boundary** — before the first spanned group begins, when
+  plain columns precede it. `sp500_monthly_performance`'s ground truth
+  is the concrete single-spanner illustration: it has exactly ONE
+  `tab_spanner` (over `[best_day_gain, worst_day_loss]`, the last two
+  columns) and exactly ONE divider, on `avg_volume` — the column right
+  before the spanned group starts — applied to both `loc.body` and
+  `loc.column_labels`.
+- **Between-groups boundary** — where one spanned group ends and
+  another spanned group begins immediately after. See the
+  `tab_spanner`/divider `tab_style` pair in `house_table.py` (~lines
+  722-734, dividing "Volume & Revenue" from "Trend" on the `revenue`
+  column); see `towny_growth_trends.py`'s ground truth (~lines 253-256)
+  for a table with BOTH boundary types — a leading divider on
+  `total_growth_pct` (before its first spanner block begins) plus a
+  between-groups divider on `density_2021` (between its two spanner
+  groups).
+
+A boundary where a spanned group ends and is followed by a TRAILING
+PLAIN column — one that isn't part of another spanner — does NOT need a
+divider. `house_table.py`'s own column layout (`product`, `region`,
+`units_sold`, `revenue`, `yoy_change`, `status`, `rank`, with spanners
+over `[units_sold, revenue]` and `[yoy_change, status]`) is the concrete
+example: the "Trend" spanner ends at `status`, and the next column,
+`rank`, is a trailing plain column — there is no divider between
+`status` and `rank`, and none is expected. The comparator's
+`dividers_expected` check is a single boolean gated on whether ANY
+spanner exists, not a per-boundary enumeration requiring a divider at
+every possible seam, so this trailing-plain-column boundary is never
+graded as missing a divider.
+
+The divider is part of adding the spanner, not a separate polish step,
+and skipping it at a real (leading or between-groups) boundary — even
+for a single spanner — is what the comparator's gated `dividers` check
+catches.
+
 ## Ambiguous measures / selection criteria — pick ONE definition, STATE it
 
 A request like "Create a table showing **population growth trends** for
@@ -101,11 +157,12 @@ result in the analytical caption note — the FIRST of the two
    ranking criterion, even though it sits right next to "fastest-growing."
    An explicitly named metric ("top 15 by revenue") always wins outright,
    full stop, no further judgment needed. **If the topic measure and the
-   named display columns are different things** (population to rank by,
+   named display columns are different things** (population growth RATE
+   to rank by and display as its own column — not raw population counts;
    density to display), show BOTH as columns, not just the display one —
    a table titled "population growth trends" that contains zero
-   population data reads as incomplete regardless of how well it answers
-   the density question.
+   population-growth data reads as incomplete regardless of how well it
+   answers the density question.
 2. **Entity/category scope: ALWAYS match the request's term to every data
    row it plausibly covers — never the narrower literal subset.**
    "Ontario towns" in ordinary usage means "Ontario municipalities"
@@ -362,6 +419,35 @@ what the request is about renders fully plain: no fill, no bold, no
 text-color treatment of any kind. This applies regardless of how many
 other measures already carry a color fill — a table with 2, 3, or more
 colored measures still leaves every remaining measure completely plain.
+
+**Restrained is not the same as optional.** When a request names
+essentially ONE measure as its subject/ranking criterion and that measure
+is the table's ONLY candidate for color — nothing else in the data is
+plausibly what the request is "about" — that measure must still receive
+a real `heatmap()`/`data_color()` call. Leaving the table's sole
+colorable measure completely plain is exactly as wrong as over-coloring
+everything else: `gtcars_top10_by_country`'s ground truth names `msrp` as
+its ONLY canonical colored measure (`hero_uncolored` is empty there), and
+`msrp` is also the `nlargest(10, "msrp")` selection criterion — a
+candidate that imports `heatmap` for other columns and never calls it on
+`msrp` has left the entire point of that table uncolored.
+
+This is NOT a blanket rule that a ranking/sort key always needs color —
+check what the ground truth's own measure list actually designates as
+colored vs. plain before assuming the sort key needs a fill. Some
+prompts deliberately keep a ranking/ordering column plain BY DESIGN
+while coloring a separate, different measure instead — see the
+`towny_growth_trends.py` note a few lines below: it ranks and selects
+its top 15 rows by `total_growth_pct` (`nlargest(15, "total_growth_pct")`) and
+keeps both `rank` and `total_growth_pct` plain on purpose
+(`hero_uncolored` in its `CANONICAL_MEASURES`), because density and
+inter-census change are the measures that ground truth's own design
+calls out as colored. The distinguishing question is not "was this
+measure used to rank/select rows" but "is this measure the table's only
+candidate for color" — when there's nothing else to color, leaving the
+ranking measure plain is a total miss; when other measures are the
+designated color story and the ground truth marks the ranking measure
+`hero_uncolored`, plain is correct and expected.
 
 A still-earlier version of this rule tried to soften "plain" into "bold
 text/text-color instead of a fill" for a measure that had lost a
