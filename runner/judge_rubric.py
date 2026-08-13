@@ -236,7 +236,7 @@ rationales.
 
 You will be given: the original user prompt, and grounding metadata read \
 from the ground truth's own answer key (LABEL_SYNONYMS, \
-REQUIRED_INSTRUCTIONS, CAPTION_KEYWORDS, CANONICAL_MEASURES, \
+REQUIRED_INSTRUCTIONS, CANONICAL_MEASURES, \
 SEMANTIC_TYPES). Except for the REQUIRED_INSTRUCTIONS `"grouping"` rule \
 above, treat this metadata as OPTIONAL grounding context, never a hard \
 gate -- a reasonable choice the metadata doesn't happen to mention can \

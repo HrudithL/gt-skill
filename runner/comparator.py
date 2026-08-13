@@ -4883,49 +4883,162 @@ def check_force_sign(cand: dict, truth: dict, meta: dict) -> CheckResult:
     return CheckResult(name, 2, pts, ok_count == total, detail)
 
 
-# A source note that's purely a data-provenance citation ("Source: ...",
-# "Data source: ...") carries no authored insight -- it's attribution, not
-# a caption. Stripped out before judging substance so a candidate that only
-# ever writes the mandatory source line doesn't get credit for "having a
-# caption" any more than a candidate with no source note at all.
-_CAPTION_ATTRIBUTION_RE = re.compile(r"^\s*(source|data source)s?\s*[:\-]", re.IGNORECASE)
-
-# A caption that opens with a bare "the/this table/chart/data shows/
-# displays/..." template, with nothing distinctive anchoring it, is exactly
-# the "just says what the table is about" case this check exists to catch
-# -- deliberately a short, specific list of common openers, not a general
-# NLP classifier.
-_CAPTION_GENERIC_OPENER_RE = re.compile(
-    r"^\s*(this|the)?\s*(table|chart|figure|plot|dataset|data)\s+"
-    r"(shows?|displays?|presents?|contains?|summarizes?|illustrates?)\b",
+# A source note that opens with a data-provenance citation ("Source: ...",
+# "Data source: ...", "Dataset: ...", optionally markdown-bolded like
+# "**Source:**") carries no authored insight in the label+source-name part
+# -- that's attribution, not a caption. `_strip_citation_clause` strips just
+# that leading clause (through the first sentence-ending punctuation after
+# it) and keeps whatever substantive text follows, so a candidate that
+# writes real insight AFTER its mandatory citation (e.g. "Source: Statistics
+# Canada; density calculated as population divided by land area.") gets
+# credit for the insight instead of having the whole note zeroed just
+# because it happens to open with a citation (2026-08-13 review round: the
+# original version treated "starts with Source:" as an automatic zero of
+# the ENTIRE note, wrongly zeroing real methodology notes, and a bolded
+# "**Source:**" dodged the old `^`-anchored regex entirely since `**` broke
+# the anchor -- both fixed here by stripping the clause first and grading
+# what's left, bolded or not).
+_CAPTION_LABELED_CITATION_RE = re.compile(
+    r"^\s*(?:\*{1,2}|_{1,2})?\s*(?:data\s+)?(?:source|dataset)s?"
+    r"\s*(?:\*{1,2}|_{1,2})?\s*[:\-]\s*(?:\*{1,2}|_{1,2})?",
     re.IGNORECASE,
 )
+
+# A bare, colon-less citation ("From R islands dataset", "Source R islands
+# dataset") dodges the labeled regex above entirely (no ":"/"-"). Requires
+# the word "dataset(s)" within a few words of the "source"/"from" opener so
+# a genuine sentence that happens to start with "Source of ..." or "From
+# this analysis ..." isn't misfired on.
+_CAPTION_BARE_CITATION_RE = re.compile(
+    r"^\s*(?:\*{1,2}|_{1,2})?\s*(?:(?:data\s+)?sources?|from)"
+    r"\s+(?:[a-z0-9']+\s+){0,6}datasets?\b",
+    re.IGNORECASE,
+)
+
+_CAPTION_SENTENCE_END_RE = re.compile(r"[.;—]")  # . ; —
+
+
+def _strip_citation_clause(note: str) -> str:
+    """Strips a leading data-provenance citation clause and returns
+    whatever substantive text (if any) remains. Returns the note
+    (stripped) unchanged if it doesn't open with a citation at all.
+
+    Two shapes, handled differently because a labeled citation is normally
+    followed by a proper-noun source NAME before any real content starts
+    (so the clause extends through the first sentence-ending punctuation
+    after the label), while a bare citation's "name" is already inside the
+    matched span itself (so the clause ends exactly where the match ends).
+    """
+    stripped = note.strip()
+
+    m = _CAPTION_LABELED_CITATION_RE.match(stripped)
+    if m:
+        end_punct = _CAPTION_SENTENCE_END_RE.search(stripped, m.end())
+        clause_end = end_punct.end() if end_punct else len(stripped)
+        return stripped[clause_end:].strip(" \t\n,;:.-—")
+
+    m = _CAPTION_BARE_CITATION_RE.match(stripped)
+    if m:
+        return stripped[m.end():].strip(" \t\n,;:.-—")
+
+    return stripped
+
+
+# A caption (or sentence within one) that opens with a bare "the/this
+# table/chart/data shows/displays/..." template, with nothing distinctive
+# anchoring it, is exactly the "just says what the table is about" case
+# this check exists to catch -- deliberately a short, specific list of
+# common openers, not a general NLP classifier. Tolerates one filler word
+# ("above"/"below"/"here"/"again") between the noun and the verb so "the
+# table above shows ..." (a common real phrasing) is still caught. Verb
+# list expanded 2026-08-13 review round: `represents`, `lists`, `provides`
+# were found to dodge the original alternation.
+_CAPTION_GENERIC_OPENER_RE = re.compile(
+    r"^\s*(this|the)?\s*(table|chart|figure|plot|dataset|data)\s+"
+    r"(?:(?:above|below|here|again)\s+)?"
+    r"(shows?|displays?|presents?|contains?|summarizes?|illustrates?|"
+    r"represents?|lists?|provides?)\b",
+    re.IGNORECASE,
+)
+
+_CAPTION_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+
+def _caption_generic_opener_sentence(texts: list[str]) -> str | None:
+    """Checks the generic-opener pattern against EACH individual source
+    note, and against each sentence within a note -- not just position 0
+    of the first note joined into one string. (2026-08-13 review round: a
+    leading filler note/phrase, or being the 2nd+ source note, both used to
+    defeat the old single `^`-anchored-on-the-joined-string check.) Returns
+    the offending sentence, or None.
+    """
+    for text in texts:
+        for sentence in _CAPTION_SENTENCE_SPLIT_RE.split(text.strip()):
+            sentence = sentence.strip()
+            if sentence and _CAPTION_GENERIC_OPENER_RE.match(sentence):
+                return sentence
+    return None
+
 
 # Small stopword list for the restatement check below -- articles,
 # prepositions, and a few common linking verbs that would otherwise inflate
 # the caption/title-subtitle word overlap without carrying any content.
+# "data" is included deliberately (2026-08-13 review round): a bare "Data:"
+# label (distinct from the "Source:"/"Data source:"/"Dataset:" labels
+# `_strip_citation_clause` recognizes) isn't stripped as a citation, but the
+# word itself carries no content either -- without it, a caption like
+# "Data: S&P 500 daily prices and volumes, 2010-2015." (a real committed
+# candidate, creator/sp500_monthly_performance/repeat_1) hit exactly the
+# 4-word content floor on "data"/"daily"/"prices"/"volumes" and slipped
+# through despite being genuinely vacuous.
 _CAPTION_STOPWORDS = frozenset({
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
     "of", "in", "on", "for", "with", "and", "or", "to", "from", "by", "at", "as",
     "this", "that", "these", "those", "it", "its", "their", "they", "them",
     "each", "per", "across", "within", "between", "over", "under", "into",
     "than", "then", "also", "not", "no", "but", "so", "such", "both", "all",
-    "shown", "show", "shows", "showing", "displayed", "display",
+    "shown", "show", "shows", "showing", "displayed", "display", "data",
 })
 
 _CAPTION_TOKEN_RE = re.compile(r"[a-zA-Z']+")
 
+# Below this many distinct content words, a caption can't carry enough real
+# information to count as substantive regardless of overlap/opener results
+# -- catches one- and two-word non-answers ("Whatever.", "Bentley
+# outliers.") and short provenance-flavored fragments that dodge both the
+# citation regexes and the generic-opener pattern (2026-08-13 review round:
+# these previously scored full marks because the only two gates were
+# restatement-overlap and generic-opener, neither of which a near-empty
+# caption necessarily trips).
+_CAPTION_MIN_CONTENT_WORDS = 4
+
+
+def _stem(word: str) -> str:
+    """Crude, deterministic suffix-normalization -- strips a trailing "s"
+    from words longer than 3 characters so simple plurals ("Size"/"Sizes")
+    compare equal in the overlap check below. Not real stemming (no NLP
+    dependency), just enough to stop the common plural case from causing
+    spurious overlap-fraction mismatches between near-identical captions
+    (2026-08-13 review round: `house/islands_sizes/repeat_1` vs. `repeat_2`
+    -- two semantically equivalent captions got opposite pass/fail verdicts
+    purely because "Size" != "Sizes").
+    """
+    if len(word) > 3 and word.endswith("s"):
+        return word[:-1]
+    return word
+
 
 def _caption_content_words(text: str) -> set[str]:
-    """Lowercased, stopword- and short-token-filtered word set for the
-    restatement-overlap comparison -- content words only, so shared
-    function words (e.g. "in", "the") never count as "the caption is just
-    repeating the subtitle."
+    """Lowercased, stopword- and short-token-filtered, suffix-normalized
+    word set for the restatement-overlap comparison -- content words only,
+    so shared function words (e.g. "in", "the") never count as "the caption
+    is just repeating the subtitle," and simple plurals don't count as new
+    words.
     """
     if not text:
         return set()
     words = _CAPTION_TOKEN_RE.findall(text.lower())
-    return {w for w in words if len(w) > 2 and w not in _CAPTION_STOPWORDS}
+    return {_stem(w) for w in words if len(w) > 2 and w not in _CAPTION_STOPWORDS}
 
 
 def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -4941,35 +5054,39 @@ def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResul
     just too strict in a different way.
 
     New bar, deliberately much lower: a caption only FAILS if it's a
-    trivial restatement of the title/subtitle, or a generic non-committal
-    "here's what this table is about" template with no real insight.
-    Anything else -- even a caption nowhere near as sharp as the ground
-    truth's -- passes. Two purely mechanical signals, no judge call:
+    trivial restatement of the title/subtitle, a generic non-committal
+    "here's what this table is about" template with no real insight, an
+    attribution-only citation with nothing else, or too short/vacuous to
+    carry any real information at all. Anything else -- even a caption
+    nowhere near as sharp as the ground truth's -- passes. Mechanical
+    signals only, no judge call:
 
-    1. Restatement: caption content words are compared against the
-       title+subtitle content-word set. A caption whose words overlap that
-       set almost entirely (>=80%) AND that contributes at most 1 word not
-       already in the title/subtitle is adding nothing -- it's the same
-       sentence reworded, not a new observation.
-    2. Generic template: a caption opening with a bare "the/this table/
-       chart/data shows/displays/..." pattern with nothing distinctive
-       following is exactly a non-committal description, regardless of
+    1. Citation stripping: a leading "Source:"/"Data source:"/"Dataset:"
+       (bolded or not) or bare "From X dataset"/"Source X dataset" clause
+       is stripped before anything else is judged -- only the text (if
+       any) that remains after it is graded as the caption.
+    2. Generic template: any individual source note, or any sentence
+       within one, opening with a bare "the/this table/chart/data shows/
+       displays/..." pattern is a non-committal description, regardless of
        overlap.
+    3. Vacuity floor: fewer than 4 distinct content words after stripping
+       (1) and (2) can't carry real information regardless of what the
+       overlap check below would say.
+    4. Restatement: caption content words (suffix-normalized) are compared
+       against the title+subtitle content-word set. A caption whose words
+       overlap that set almost entirely (>=80%) AND that contributes at
+       most 1 word not already in the title/subtitle is adding nothing --
+       it's the same sentence reworded, not a new observation.
 
-    A candidate that skips the caption/source-note entirely, or writes only
-    a data-provenance line ("Source: ..." with no accompanying insight
-    sentence), fails the same way as an explicit restatement -- it hasn't
-    written a real caption either way.
+    A candidate that skips the caption/source-note entirely, or whose only
+    source note reduces to nothing after citation-stripping, fails the same
+    way as an explicit restatement -- it hasn't written a real caption
+    either way.
 
-    Calibrated 2026-08-13 (one-off script, not committed) against the 6
-    ground truths' own captions (all 6 pass -- these are the reference for
-    "what a real caption looks like") and the ~54 non-baseline candidates
-    already committed under `eval-results/{house,prose,scripts}/samples/
-    */*/table.py`: the old keyword check passed ~17-18% of real
-    candidates; this one passes ~93% (50/54), reserving failures for
-    captions that are genuinely just a reworded subtitle, a bare template
-    opener, an attribution-only source note, or a missing caption outright
-    -- see the PR description for the 4 real failing examples.
+    Recalibrated 2026-08-13 (review round; see the PR description for the
+    full before/after numbers) against all 72 real committed candidates
+    across all 4 skills (`house`/`prose`/`scripts`/`creator`, 18 each) plus
+    the 6 ground truths' own captions.
     """
     name = "Caption is substantive"
     # Pure source-text extraction (title/subtitle/source_note are literal
@@ -4985,25 +5102,38 @@ def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResul
         return _na(name, "ground truth has no caption/source-note text to require")
 
     cand_notes = [t for t in (cand["tier1"].get("source_note_texts") or []) if t]
-    substantive_notes = [t for t in cand_notes if not _CAPTION_ATTRIBUTION_RE.match(t.strip())]
-    caption_text = " ".join(substantive_notes)
-    if not caption_text.strip():
-        detail = "candidate has no caption" if not cand_notes else (
-            "candidate's only source note is a data-source citation, with no accompanying insight sentence"
-        )
-        return CheckResult(name, 3, 0, False, detail)
+    if not cand_notes:
+        return CheckResult(name, 3, 0, False, "candidate has no caption")
 
-    if _CAPTION_GENERIC_OPENER_RE.search(caption_text):
+    remainders = [_strip_citation_clause(t) for t in cand_notes]
+    substantive_texts = [r for r in remainders if r]
+    if not substantive_texts:
         return CheckResult(
             name, 3, 0, False,
-            f"caption is a generic non-committal template ('what this table is about'): {caption_text!r}",
+            "candidate's only source note is a data-source citation, with no accompanying insight sentence",
         )
 
+    offender = _caption_generic_opener_sentence(substantive_texts)
+    if offender:
+        return CheckResult(
+            name, 3, 0, False,
+            f"caption is a generic non-committal template ('what this table is about'): {offender!r}",
+        )
+
+    caption_text = " ".join(substantive_texts)
     cap_words = _caption_content_words(caption_text)
-    title_subtitle_text = f"{cand['tier1'].get('title_text') or ''} {cand['tier1'].get('subtitle_text') or ''}"
-    ts_words = _caption_content_words(title_subtitle_text)
     if not cap_words:
         return CheckResult(name, 3, 0, False, f"caption has no real content words: {caption_text!r}")
+
+    if len(cap_words) < _CAPTION_MIN_CONTENT_WORDS:
+        return CheckResult(
+            name, 3, 0, False,
+            f"caption is too short/vacuous to carry real information "
+            f"({len(cap_words)} content word(s) -- {sorted(cap_words)}): {caption_text!r}",
+        )
+
+    title_subtitle_text = f"{cand['tier1'].get('title_text') or ''} {cand['tier1'].get('subtitle_text') or ''}"
+    ts_words = _caption_content_words(title_subtitle_text)
 
     overlap = cap_words & ts_words
     overlap_frac = len(overlap) / len(cap_words)
