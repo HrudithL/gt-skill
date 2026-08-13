@@ -162,10 +162,18 @@ result in the analytical caption note — the FIRST of the two
    (-10)` = `-1.5`, i.e. "-150%" — a plausible-looking number that passes
    right through `sub_missing` uncaught). Mask on the condition, not the
    symptom: compute with `np.where(start > 0, (end - start) / start,
-   None)` so both the zero-baseline (`inf`) and negative-baseline
-   (finite-but-meaningless) cases become `None` up front — confirmed by
+   np.nan)` so both the zero-baseline (`inf`) and negative-baseline
+   (finite-but-meaningless) cases become `np.nan` up front — confirmed by
    direct test to render `"—"` for both — THEN call `sub_missing`, without
-   discarding the rest of that row.
+   discarding the rest of that row. **Use `np.nan`, not `None`, as the
+   `np.where` fallback** — `sub_missing` catches both identically, but
+   `None` forces the whole column to `object` dtype (NumPy has no `None`
+   scalar for a float array), while `np.nan` keeps it `float64`. The
+   masked column is exactly the one this section tells you to rank/sort by
+   next (step 3's "exclude only the rows with a non-positive baseline from
+   the ranking") — an `object`-dtype column breaks `.nlargest()`/
+   `.sort_values()` with a `TypeError`, so this isn't a cosmetic
+   preference, it's what makes the very next step work.
 
 This narrows the ambiguity considerably but — being a precedence over
 natural-language phrasing, not a closed-form algorithm — does not
