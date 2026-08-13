@@ -7,6 +7,15 @@ first, because `great_tables` **formats numbers — it does not parse strings**,
 `data_color` needs real numerics. A currency string or an `object`-dtype column
 silently breaks `fmt_*` / `data_color` downstream.
 
+**Anti-pattern: don't cast a numeric identifier column to string to suppress
+thousands-separators.** A column like `Year` or an ID renders `1,996` instead of
+`1996` and it's tempting to fix that with `df["Year"] = df["Year"].astype(str)` —
+don't. That silently converts the column to `object` dtype, and any later
+formatter or `data_color`/heatmap pass that touches that column crashes
+(`TypeError: '<' not supported between instances of 'str' and 'int'`) or silently
+mis-sorts it. The column stays numeric; suppress the separators at format time
+instead: `gt.fmt_integer(columns="Year", use_seps=False)`.
+
 ## The checklist — run it before you organize columns
 
 1. **Strip number-like strings to real numbers.** Values imported as strings because of
@@ -112,7 +121,17 @@ grain, not just present.
     A column can pass the uniqueness test below and still be worth combining for
     this reason alone.
 
-  A hypothetical product-catalog dataset illustrates the readability case: suppose
+  A concrete uniqueness case: `mfr` + `model` in a car dataset — `"Toyota"` alone
+  isn't a row identity (many rows share it), but `"Toyota Camry"` is. Build the
+  stub column yourself before stubbing:
+  ```python
+  df["car"] = df["mfr"] + " " + df["model"]
+  ```
+  then `rowname_col="car"`. Do this whenever the request's own language refers to
+  rows by the combination ("the Bentley Continental GT," not "the Bentley") — a
+  bare `mfr` or a bare `model` column is not a valid stub on its own.
+
+  A hypothetical product-catalog dataset illustrates the readability case instead: suppose
   `sku_name` (e.g. "Trail Runner 3") is already unique across every row on its own
   (verified directly against the data), so uniqueness alone would not require a
   composite. A stub can still combine `brand + " " + sku_name` into one label
