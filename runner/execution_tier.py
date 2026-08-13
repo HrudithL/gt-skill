@@ -26,6 +26,7 @@ import json
 import math
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -460,6 +461,20 @@ def values_close(a: Any, b: Any, *, rel_tol: float = _REL_TOL, abs_tol: float = 
 _MISSING_ID = "\x00__MISSING__\x00"
 
 
+# Strict, explicit whitelist of `datetime.strptime` formats tried (in
+# order) when normalizing a row/group identifier. Deliberately NOT a
+# fuzzy/liberal parser (e.g. `dateutil.parser.parse`) -- fuzzy inference
+# would misparse ordinary non-date identifiers (car names, town names,
+# product codes) as dates. Each format is matched against the WHOLE
+# trimmed string, so a partial/substring date inside a longer label never
+# triggers. Formats with no day component are month-granularity; the rest
+# are day-granularity -- the two granularities normalize to differently
+# prefixed sentinel keys (see below) so a month-only match never collides
+# with a same-month full-date match.
+_MONTH_ID_FORMATS = ("%b %Y", "%B %Y", "%Y-%m", "%m/%Y")
+_DAY_ID_FORMATS = ("%Y-%m-%d", "%m/%d/%Y", "%b %d, %Y", "%B %d, %Y")
+
+
 def normalize_id(x: Any) -> str:
     """Canonical form of a row/entity identifier for set comparison.
 
@@ -467,10 +482,41 @@ def normalize_id(x: Any) -> str:
     `_MISSING_ID` sentinel, kept distinct from the literal text "None" --
     without this, a candidate row with a missing stub value and a truth
     row whose stub literally reads "None" would incorrectly compare equal.
+
+    Date-like identifiers are additionally format-normalized: ground truth
+    and candidate scripts routinely render the same calendar month/day in
+    different (equally reasonable) string formats -- e.g. "Jan 2010" vs
+    "2010-01" vs "January 2010" -- and a prompt rarely pins one down. Naive
+    string comparison would treat these as unrelated identities, zeroing
+    out row matching and cascading into spurious per-row value failures
+    even when a candidate's numbers are correct. Each trimmed string is
+    tried, in order, against a strict whitelist of `datetime.strptime`
+    formats (`_MONTH_ID_FORMATS` then `_DAY_ID_FORMATS`); the first format
+    that parses the ENTIRE string wins. A month-granularity match
+    normalizes to `"__date_ym__YYYY-MM"`; a day-granularity match
+    normalizes to `"__date_ymd__YYYY-MM-DD"` -- the distinct prefixes (and
+    lengths) keep the two granularities from ever comparing equal to each
+    other, even for the same calendar month, since a stub author who wrote
+    a bare month presumably meant the whole month, not one specific day of
+    it. Strings that don't match any whitelisted format fall back,
+    unchanged, to the original `str(x).strip().casefold()` behavior.
     """
     if x is None:
         return _MISSING_ID
-    return str(x).strip().casefold()
+    text = str(x).strip()
+    for fmt in _MONTH_ID_FORMATS:
+        try:
+            dt = datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        return f"__date_ym__{dt.year:04d}-{dt.month:02d}"
+    for fmt in _DAY_ID_FORMATS:
+        try:
+            dt = datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        return f"__date_ymd__{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
+    return text.casefold()
 
 
 def row_set_identity(
