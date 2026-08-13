@@ -70,26 +70,57 @@ not something reserved for long tables.
 
 Whenever ANY `tab_spanner(label=..., columns=[...])` or
 `tab_spanner_delim(...)` call is present — even a single spanner, not
-only "2+ spanners side by side" — add a vertical divider at every spanner
-boundary: a
-`tab_style(style.borders(sides="right", ...), locations=loc.body(columns=<col>))`
+only "2+ spanners side by side" — add a vertical divider at every real
+spanner boundary: a
+`tab_style(style.borders(sides="right", color=PALETTE["neutral"]["vertical_divider"], weight="1px"), locations=loc.body(columns=<col>))`
 call PLUS the matching `loc.column_labels(columns=<same column>)` call
 (where `<col>` is the last column before the boundary), so each divider
-runs the full height of the table, header included. A
-boundary exists everywhere a spanned block starts, including the
-LEADING boundary before the first spanned block if plain columns precede
-it, and everywhere one spanned group ends and the next column (spanned
-or not) begins — not just "between two spanner groups." See the
-`tab_spanner`/divider `tab_style` pair in `house_table.py` (~lines
-722-734, dividing "Volume & Revenue" from "Trend" on the `revenue`
-column) for the single-boundary case, where the first spanner starts at
-the very first value column so there's no leading boundary to draw; see
-`towny_growth_trends.py`'s ground truth (~lines 253-256) for the
-two-boundary case — a leading divider on `total_growth_pct` (before its
-first spanner block begins) plus a second divider on `density_2021`
-(between its two spanner groups). The divider is part of adding the
-spanner, not a separate polish step, and skipping it — even for a single
-spanner — is what the comparator's gated `dividers` check catches.
+runs the full height of the table, header included.
+`PALETTE["neutral"]["vertical_divider"]` resolves to `#D0D0D0` at 1px —
+the house convention for these seams (that's the exact `PALETTE` entry
+`house_table.py` itself uses, and the same value — `"#D0D0D0"` — appears
+literally in `towny_growth_trends.py`'s and `sp500_monthly_performance`'s
+ground truths). Leaving the color/weight off the `style.borders(...)`
+call falls back to `great_tables`' black/1px default, which is NOT the
+house look.
+
+There are exactly two boundary types that need a divider — both are
+places where a spanned group meets something else on its way IN:
+
+- **Leading boundary** — before the first spanned group begins, when
+  plain columns precede it. `sp500_monthly_performance`'s ground truth
+  is the concrete single-spanner illustration: it has exactly ONE
+  `tab_spanner` (over `[best_day_gain, worst_day_loss]`, the last two
+  columns) and exactly ONE divider, on `avg_volume` — the column right
+  before the spanned group starts — applied to both `loc.body` and
+  `loc.column_labels`.
+- **Between-groups boundary** — where one spanned group ends and
+  another spanned group begins immediately after. See the
+  `tab_spanner`/divider `tab_style` pair in `house_table.py` (~lines
+  722-734, dividing "Volume & Revenue" from "Trend" on the `revenue`
+  column); see `towny_growth_trends.py`'s ground truth (~lines 253-256)
+  for a table with BOTH boundary types — a leading divider on
+  `total_growth_pct` (before its first spanner block begins) plus a
+  between-groups divider on `density_2021` (between its two spanner
+  groups).
+
+A boundary where a spanned group ends and is followed by a TRAILING
+PLAIN column — one that isn't part of another spanner — does NOT need a
+divider. `house_table.py`'s own column layout (`product`, `region`,
+`units_sold`, `revenue`, `yoy_change`, `status`, `rank`, with spanners
+over `[units_sold, revenue]` and `[yoy_change, status]`) is the concrete
+example: the "Trend" spanner ends at `status`, and the next column,
+`rank`, is a trailing plain column — there is no divider between
+`status` and `rank`, and none is expected. The comparator's
+`dividers_expected` check is a single boolean gated on whether ANY
+spanner exists, not a per-boundary enumeration requiring a divider at
+every possible seam, so this trailing-plain-column boundary is never
+graded as missing a divider.
+
+The divider is part of adding the spanner, not a separate polish step,
+and skipping it at a real (leading or between-groups) boundary — even
+for a single spanner — is what the comparator's gated `dividers` check
+catches.
 
 ## Ambiguous measures / selection criteria — pick ONE definition, STATE it
 

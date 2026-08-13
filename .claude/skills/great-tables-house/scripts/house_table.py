@@ -723,7 +723,8 @@ def build_house_table():
         .tab_spanner(label="Trend", columns=["yoy_change", "status"])
         # spanner-seam vertical divider — right edge of the LAST column in the
         # first group, applied to both the body and the column-labels row so
-        # the seam runs the full height of the table (small_color.md (b)).
+        # the seam runs the full height of the table (see RULES.md's
+        # "Spanners (column groups)" section).
         .tab_style(
             style=style.borders(sides="right", color=PALETTE["neutral"]["vertical_divider"], weight="1px"),
             locations=loc.body(columns="revenue"),
