@@ -66,6 +66,19 @@ no striping and no stub tint isn't "keeping it simple," it's skipping two
 items whose gate condition was clearly met — striping is the DEFAULT now,
 not something reserved for long tables.
 
+## Spanners (column groups)
+
+Whenever `tab_spanner(label=..., columns=[...])` is used to group 2+
+spanners side by side, also add a vertical divider at the seam between
+them — a `tab_style(style.borders(sides="right", ...), locations=
+loc.body(columns=<last col of the first group>))` call PLUS the matching
+`loc.column_labels(columns=<same column>)` call, so the divider runs the
+full height of the table, header included. See the `tab_spanner`/divider
+`tab_style` pair in `house_table.py` (~lines 722-734, dividing "Volume &
+Revenue" from "Trend" on the `revenue` column) for the exact recipe — the
+divider is part of adding the spanner, not a separate polish step, and
+skipping it is what the comparator's gated `dividers` check catches.
+
 ## Ambiguous measures / selection criteria — pick ONE definition, STATE it
 
 A request like "Create a table showing **population growth trends** for
@@ -101,7 +114,8 @@ result in the analytical caption note — the FIRST of the two
    ranking criterion, even though it sits right next to "fastest-growing."
    An explicitly named metric ("top 15 by revenue") always wins outright,
    full stop, no further judgment needed. **If the topic measure and the
-   named display columns are different things** (population to rank by,
+   named display columns are different things** (population growth RATE
+   to rank by and display as its own column — not raw population counts;
    density to display), show BOTH as columns, not just the display one —
    a table titled "population growth trends" that contains zero
    population data reads as incomplete regardless of how well it answers
@@ -362,6 +376,18 @@ what the request is about renders fully plain: no fill, no bold, no
 text-color treatment of any kind. This applies regardless of how many
 other measures already carry a color fill — a table with 2, 3, or more
 colored measures still leaves every remaining measure completely plain.
+
+**Restrained is not the same as optional.** A table where the request's
+own subject/ranking measure never receives a `heatmap()`/`data_color()`
+call is exactly as wrong as one that colors every column — under-coloring
+the named measure and over-coloring everything else are the same failure
+at opposite ends, not opposite problems. If a measure is used to select or
+sort the rows (`nlargest`, "top N by X"), it must also be the measure that
+gets colored, unless a documented tie-break rule (`data.md`'s tie-break
+section) explicitly assigns color elsewhere instead. Importing `heatmap`
+for other columns and never calling it on the measure the request's own
+ranking/selection is built on is not restraint — it's leaving the point of
+the table uncolored.
 
 A still-earlier version of this rule tried to soften "plain" into "bold
 text/text-color instead of a fill" for a measure that had lost a
