@@ -113,22 +113,6 @@ REQUIRED_INSTRUCTIONS = {
     "sort": ("msrp", "desc", "within_group"),
 }
 
-# Keyword-presence check for the caption/subtitle overlap rule (see §9).
-# `caption_should_mention` is an ALL-of-these match (see comparator.py's
-# check_caption_not_restating_subtitle) -- unlike towny's genuinely
-# ambiguous "which growth definition" question (where all 3 keywords
-# jointly make up one unavoidable disambiguation the caption MUST state),
-# "most expensive" here has only one real candidate metric (msrp): there
-# is no genuine definitional ambiguity to force a caption to restate.
-# Left empty rather than picking phrases a good, distinctive, non-
-# duplicative caption might reasonably NOT use (e.g. one about country
-# mix or a standout car) -- an empty list is vacuously satisfied, leaving
-# only the (still-enforced) "doesn't just restate the subtitle" check.
-CAPTION_KEYWORDS = {
-    "caption_should_mention": [],
-    "subtitle_should_not_duplicate": ["ordered by their priciest car", "sorted by price"],
-}
-
 # Underlying SOURCE CSV column(s) that are the canonical colored measure(s),
 # used for value-based matching -- NOT the rendered column name/label.
 # drivetrain/trsmn are plain categorical display columns, not numeric

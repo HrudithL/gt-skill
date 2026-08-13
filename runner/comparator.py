@@ -29,16 +29,26 @@ point value, and why (§7).
 formerly per-table/discretionary decisions as flat, universal house rules
 (deep-navy header/stub branding regardless of a table's own heatmap hue,
 row striping by default, hero-uncolored measures never bold, force_sign
-on signed percent measures, and a revived CAPTION_KEYWORDS check now that
+on signed percent measures, and a revived caption check now that
 captions are one short sentence each) -- see `check_header_branding`,
 `check_stub_tint`, `check_stripe_color`, `check_hero_not_bold`,
-`check_force_sign`, `check_caption_keywords` (new, +16 Formatting-
+`check_force_sign`, `check_caption_not_generic` (new, +16 Formatting-
 compliance points total) and the rewritten `check_striping_gate` (same
 5 points, new formula). `check_band_hue_harmonization` is retired (now a
 permanent 0/0 N/A stub, kept for its docstring's explanation rather than
 silently vanishing) -- its old "light band when colored, dark band
 matched to that measure's hue when not" formula is exactly backwards
 against every current ground truth.
+
+2026-08-13: `check_caption_not_generic` replaces the exact-keyword version
+of the caption check (`check_caption_keywords`, revived only the day
+before) -- the keyword mechanism failed a uniform ~82-83% of candidates
+across every skill, never discriminating skill quality, because it graded
+"used our exact words" rather than "wrote a real caption." The new check
+is still fully mechanical (no judge call): it only fails a caption that's
+a near-verbatim restatement of the title/subtitle or a generic "this
+table shows..." template, a much lower bar. The ground truths' own
+`CAPTION_KEYWORDS` metadata block is gone along with it.
 
 Per ``.planning/12-consensus-tuning.md``: 6 Formatting-compliance checks
 were removed entirely across two passes, all for the same reason -- field
@@ -4873,48 +4883,140 @@ def check_force_sign(cand: dict, truth: dict, meta: dict) -> CheckResult:
     return CheckResult(name, 2, pts, ok_count == total, detail)
 
 
-def check_caption_keywords(cand: dict, truth: dict, meta: dict) -> CheckResult:
-    """`CAPTION_KEYWORDS` mechanical substring check, revived 2026-08-12
-    now that ground-truth captions are a single short sentence each (a
-    long, multi-sentence caption made a keyword-presence check either
-    trivially satisfiable or unfairly brittle; a one-sentence caption
-    makes it a real, cheap signal). `caption_should_mention`: every
-    keyword must appear (case-insensitive substring) somewhere across the
-    candidate's own source-note text. `subtitle_should_not_duplicate`:
-    none of those keywords may appear in the candidate's subtitle -- the
-    insight belongs to the caption, not a restated subtitle.
+# A source note that's purely a data-provenance citation ("Source: ...",
+# "Data source: ...") carries no authored insight -- it's attribution, not
+# a caption. Stripped out before judging substance so a candidate that only
+# ever writes the mandatory source line doesn't get credit for "having a
+# caption" any more than a candidate with no source note at all.
+_CAPTION_ATTRIBUTION_RE = re.compile(r"^\s*(source|data source)s?\s*[:\-]", re.IGNORECASE)
+
+# A caption that opens with a bare "the/this table/chart/data shows/
+# displays/..." template, with nothing distinctive anchoring it, is exactly
+# the "just says what the table is about" case this check exists to catch
+# -- deliberately a short, specific list of common openers, not a general
+# NLP classifier.
+_CAPTION_GENERIC_OPENER_RE = re.compile(
+    r"^\s*(this|the)?\s*(table|chart|figure|plot|dataset|data)\s+"
+    r"(shows?|displays?|presents?|contains?|summarizes?|illustrates?)\b",
+    re.IGNORECASE,
+)
+
+# Small stopword list for the restatement check below -- articles,
+# prepositions, and a few common linking verbs that would otherwise inflate
+# the caption/title-subtitle word overlap without carrying any content.
+_CAPTION_STOPWORDS = frozenset({
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "of", "in", "on", "for", "with", "and", "or", "to", "from", "by", "at", "as",
+    "this", "that", "these", "those", "it", "its", "their", "they", "them",
+    "each", "per", "across", "within", "between", "over", "under", "into",
+    "than", "then", "also", "not", "no", "but", "so", "such", "both", "all",
+    "shown", "show", "shows", "showing", "displayed", "display",
+})
+
+_CAPTION_TOKEN_RE = re.compile(r"[a-zA-Z']+")
+
+
+def _caption_content_words(text: str) -> set[str]:
+    """Lowercased, stopword- and short-token-filtered word set for the
+    restatement-overlap comparison -- content words only, so shared
+    function words (e.g. "in", "the") never count as "the caption is just
+    repeating the subtitle."
     """
-    name = "Caption keyword coverage"
-    kw = meta.get("CAPTION_KEYWORDS") or {}
-    should_mention = kw.get("caption_should_mention") or []
-    should_not_duplicate = kw.get("subtitle_should_not_duplicate") or []
-    if not should_mention and not should_not_duplicate:
-        return _na(name, "ground truth declares no CAPTION_KEYWORDS")
+    if not text:
+        return set()
+    words = _CAPTION_TOKEN_RE.findall(text.lower())
+    return {w for w in words if len(w) > 2 and w not in _CAPTION_STOPWORDS}
+
+
+def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResult:
+    """Replaces the old `CAPTION_KEYWORDS` exact-substring check (2026-08-13):
+    that mechanism required a candidate's caption to contain the ground
+    truth's OWN authored keywords verbatim (e.g. "bentley", "corvette",
+    "don't move together" for `gtcars_hp_price`) and failed at a uniform
+    ~82-83% rate across every skill for 3+ review rounds -- never
+    discriminating between skills, just uniformly hard, because it graded
+    "did you happen to pick our exact words" rather than "did you write a
+    real caption." A prior judge-based replacement (scored against "as
+    informative as the ground truth's own caption") also scored near-zero,
+    just too strict in a different way.
+
+    New bar, deliberately much lower: a caption only FAILS if it's a
+    trivial restatement of the title/subtitle, or a generic non-committal
+    "here's what this table is about" template with no real insight.
+    Anything else -- even a caption nowhere near as sharp as the ground
+    truth's -- passes. Two purely mechanical signals, no judge call:
+
+    1. Restatement: caption content words are compared against the
+       title+subtitle content-word set. A caption whose words overlap that
+       set almost entirely (>=80%) AND that contributes at most 1 word not
+       already in the title/subtitle is adding nothing -- it's the same
+       sentence reworded, not a new observation.
+    2. Generic template: a caption opening with a bare "the/this table/
+       chart/data shows/displays/..." pattern with nothing distinctive
+       following is exactly a non-committal description, regardless of
+       overlap.
+
+    A candidate that skips the caption/source-note entirely, or writes only
+    a data-provenance line ("Source: ..." with no accompanying insight
+    sentence), fails the same way as an explicit restatement -- it hasn't
+    written a real caption either way.
+
+    Calibrated 2026-08-13 (one-off script, not committed) against the 6
+    ground truths' own captions (all 6 pass -- these are the reference for
+    "what a real caption looks like") and the ~54 non-baseline candidates
+    already committed under `eval-results/{house,prose,scripts}/samples/
+    */*/table.py`: the old keyword check passed ~17-18% of real
+    candidates; this one passes ~93% (50/54), reserving failures for
+    captions that are genuinely just a reworded subtitle, a bare template
+    opener, an attribution-only source note, or a missing caption outright
+    -- see the PR description for the 4 real failing examples.
+    """
+    name = "Caption is substantive"
     # Pure source-text extraction (title/subtitle/source_note are literal
     # strings, independent of whether the script's DATA execution
     # succeeds) -- not gated on tier2.ok, unlike the value-based checks.
     # `source_note_texts` entries are `str | None` (`_source_note_texts_local`
     # returns `None` for a note whose text isn't a static string literal --
-    # e.g. an f-string or a computed expression); `" ".join(...)` raises
-    # `TypeError` on any `None` entry, crashing this check on a candidate
-    # that legitimately renders fine. Drop `None` entries before joining --
-    # a dynamic caption's literal-text portion (if any) still contributes,
-    # it just can't check the part it couldn't statically read.
-    caption_text = " ".join(t for t in (cand["tier1"].get("source_note_texts") or []) if t).lower()
-    subtitle_text = (cand["tier1"].get("subtitle_text") or "").lower()
-    total = len(should_mention) + len(should_not_duplicate)
-    ok_count = 0
-    missing = [k for k in should_mention if k.lower() not in caption_text]
-    ok_count += len(should_mention) - len(missing)
-    leaked = [k for k in should_not_duplicate if k.lower() in subtitle_text]
-    ok_count += len(should_not_duplicate) - len(leaked)
-    pts = _round_points_covered(ok_count, total, 3) if total else 3
-    detail = f"{ok_count}/{total} caption-keyword rules satisfied"
-    if missing:
-        detail += f"; caption missing: {missing}"
-    if leaked:
-        detail += f"; subtitle wrongly duplicates: {leaked}"
-    return CheckResult(name, 3, pts, ok_count == total, detail)
+    # e.g. an f-string or a computed expression); drop `None` entries before
+    # joining -- a dynamic caption's literal-text portion (if any) still
+    # contributes, it just can't check the part it couldn't statically read.
+    truth_notes = [t for t in (truth["tier1"].get("source_note_texts") or []) if t]
+    if not truth_notes:
+        return _na(name, "ground truth has no caption/source-note text to require")
+
+    cand_notes = [t for t in (cand["tier1"].get("source_note_texts") or []) if t]
+    substantive_notes = [t for t in cand_notes if not _CAPTION_ATTRIBUTION_RE.match(t.strip())]
+    caption_text = " ".join(substantive_notes)
+    if not caption_text.strip():
+        detail = "candidate has no caption" if not cand_notes else (
+            "candidate's only source note is a data-source citation, with no accompanying insight sentence"
+        )
+        return CheckResult(name, 3, 0, False, detail)
+
+    if _CAPTION_GENERIC_OPENER_RE.search(caption_text):
+        return CheckResult(
+            name, 3, 0, False,
+            f"caption is a generic non-committal template ('what this table is about'): {caption_text!r}",
+        )
+
+    cap_words = _caption_content_words(caption_text)
+    title_subtitle_text = f"{cand['tier1'].get('title_text') or ''} {cand['tier1'].get('subtitle_text') or ''}"
+    ts_words = _caption_content_words(title_subtitle_text)
+    if not cap_words:
+        return CheckResult(name, 3, 0, False, f"caption has no real content words: {caption_text!r}")
+
+    overlap = cap_words & ts_words
+    overlap_frac = len(overlap) / len(cap_words)
+    new_words = cap_words - ts_words
+    if overlap_frac >= 0.8 and len(new_words) <= 1:
+        detail = (
+            f"caption is a near-verbatim restatement of the title/subtitle "
+            f"({len(overlap)}/{len(cap_words)} words already there, only {sorted(new_words)} new): {caption_text!r}"
+        )
+        return CheckResult(name, 3, 0, False, detail)
+
+    detail = f"caption adds {len(new_words)} word(s) beyond the title/subtitle (overlap {overlap_frac:.0%}): {caption_text!r}"
+    return CheckResult(name, 3, 3, True, detail)
 
 
 def _mechanics_entry_for_column(mechanics: list[dict], fp: dict, column: str) -> dict | None:
@@ -5556,7 +5658,7 @@ FORMAT_CHECKS: list[CheckFn] = [
     check_stripe_color,
     check_hero_not_bold,
     check_force_sign,
-    check_caption_keywords,
+    check_caption_not_generic,
     check_color_mechanics,
     check_summary_row_formatting,
     check_fmt_semantic_type,

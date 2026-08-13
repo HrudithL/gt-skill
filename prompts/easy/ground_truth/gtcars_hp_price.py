@@ -90,16 +90,6 @@ LABEL_SYNONYMS = {
 # grouping, no requested sort order -- so this is intentionally empty.
 REQUIRED_INSTRUCTIONS = {}
 
-# Keyword-presence check for the caption/subtitle overlap rule. Verified
-# against the actual rendered text below (case-insensitive substring): the
-# caption's unique insight is the Bentley/Corvette price-vs-horsepower
-# divergence, which the subtitle (a plain "sorted by MSRP" description)
-# never states.
-CAPTION_KEYWORDS = {
-    "caption_should_mention": ["bentley", "corvette", "don't move together"],
-    "subtitle_should_not_duplicate": ["bentley", "corvette", "don't move together"],
-}
-
 # Underlying SOURCE CSV column(s) that are the canonical colored measure(s),
 # used for value-based matching -- NOT the rendered column name/label.
 CANONICAL_MEASURES = {
