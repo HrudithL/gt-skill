@@ -811,3 +811,108 @@ output (see `runner/comparator.py`'s test suite,
 unit coverage of each fix) — the stored `eval-results/**` files still
 reflect the PRE-#116 `check_caption_keywords` scores until a full
 harness regenerate lands.
+
+### Round-5 follow-up (2026-08-13): round-4's own fix introduced 2 real regressions, plus 1 unrelated bug
+
+A further review round found that round-4's structural strip-and-grade fix
+(above) over-corrected: after stripping a generic-opener prefix or a
+citation label, the ONLY remaining defense against the remainder itself
+being vacuous was the `_CAPTION_MIN_CONTENT_WORDS` word-count floor — which
+any generic table description clears trivially (naming 3+ of the table's
+own column/subject nouns is enough). This made the generic-opener gate
+**effectively unreachable**, and separately, round-4's floor change
+(4 -> 3) accidentally un-broke a bare `"Data:"` citation label round-2 had
+deliberately made to fail. Two concrete real-corpus consequences, and the
+tests that should have caught them:
+
+- **`scripts/islands_sizes/repeat_2`** — `"Data shows the area of islands
+  across the world."` — this is the SAME caption the very first version of
+  this PR's own "Calibration" section (above) cited as a textbook generic-
+  template-opener failure, and round-4's own recalibration table
+  (immediately above) mischaracterized this exact candidate flipping to
+  3/3 as a *fix* ("previously zeroed by the generic-opener veto") — it was
+  actually a regression: round-4's strip-and-grade change stripped "Data
+  shows " and then had nothing left to stop "the area of islands across
+  the world" (a bare, insight-free noun phrase) from passing on word count
+  alone. The original verdict-level test asserting this exact caption
+  fails (`test_generic_template_opener_fails`) was **deleted** in round-4
+  and replaced with a strictly weaker test that only checked a helper
+  function's raw string output, never the actual pass/fail verdict — so
+  it couldn't have caught this regression shipping.
+- **`creator/sp500_monthly_performance/repeat_1`** — `"Data: S&P 500 daily
+  prices and volumes, 2010-2015."` — round-2 had deliberately added `"data"`
+  to the stopword list specifically to zero this exact caption (see that
+  round's own PR text, Fix 2: *"creator/sp500_monthly_performance/repeat_1's
+  caption ... was creator's ONLY passing caption in the whole corpus, and
+  it's itself vacuous"*). Round-4's floor change (4 -> 3) accidentally let
+  this caption's 3 surviving content words (daily/price/volume) clear the
+  lowered floor, un-breaking round-2's deliberate fix — and the test
+  covering it was **inverted** (changed to assert the caption passes)
+  rather than the regression being caught and the logic fixed.
+
+**Fixed this round:**
+
+1. A citation-/generic-opener-stripped remainder now has to clear an
+   additional check, `_stripped_remainder_is_vacuous` (reuses the same
+   overlap-based restatement test the whole-caption check already used,
+   applied to just the remainder, OR'd with a new "no analytical signal"
+   check — a curated comparison/trend/relationship word list plus a crude
+   past-tense/gerund verb heuristic) — a remainder that's itself just a
+   bare restatement of the title/subtitle, or a bare noun phrase with no
+   comparison/computation/relationship language, contributes nothing, the
+   same way an empty remainder always has. A caption's naturally-written
+   sentences (never opener-/citation-prefixed) are NOT subject to this
+   extra scrutiny — only prefix-stripped remainders are.
+2. `_CAPTION_LABELED_CITATION_RE` now also recognizes a bare `"Data:"`
+   label (previously only `"Source:"`/`"Data source:"`/`"Dataset:"`),
+   stripping it the same way and grading what's left via the same
+   `_stripped_remainder_is_vacuous` check — the stale code comment that
+   described the now-superseded "data" stopword-list defense mechanism
+   was also corrected.
+3. `_stem`'s trailing-`s` strip was mangling stopwords that end in "s" but
+   aren't plurals ("across" -> "acros", "this" -> "thi"), so they no
+   longer matched the (unstemmed) stopword set and leaked through as
+   counted content words. Fixed by checking the raw word against the
+   stopword set BEFORE stemming, in addition to (not instead of) checking
+   the stemmed form (which round-4 added to catch plurals of stopwords).
+   Verified zero corpus-verdict impact in isolation (see below).
+
+Restored/added tests in `tests/test_caption_not_generic.py`: the deleted
+`test_generic_template_opener_fails` (verdict-level, the exact caption
+above), a new verdict-level test sweeping every recognized opener verb
+against a vacuous remainder, the inverted `"Data:"` test corrected back to
+asserting FAIL, and direct coverage of the stemming/stopword-order fix.
+
+**Isolated before/after impact of just this round's fixes** (same
+72-candidate methodology; "before" = the round-4 numbers already in the
+table above, "after" = post round-5 fix):
+
+| Skill | Before (round-4) mean pts/3 | After (round-5) mean pts/3 | Mean points delta | Before pass-rate | After pass-rate |
+|---|---|---|---|---|---|
+| `house` | 2.667 | 2.667 | +0.000 | 88.9% | 88.9% |
+| `prose` | 2.833 | 2.833 | +0.000 | 94.4% | 94.4% |
+| `scripts` | 2.833 | 2.667 | **-0.167** | 94.4% | 88.9% |
+| `creator` | 0.500 | 0.333 | **-0.167** | 16.7% | 11.1% |
+| **All 72** | **2.208** | **2.125** | **-0.083** | 73.6% | 70.8% |
+
+Exactly 2 of the 72 candidates changed verdict, and both are the two
+regressions identified above, both correctly flipping back from an
+incorrect 3/3 to the correct 0/3 (not new failures — a restoration of the
+pre-round-4 correct verdict for each):
+
+- `scripts/islands_sizes/repeat_2` — `"Data shows the area of islands
+  across the world."` — correctly fails the generic-opener check again.
+- `creator/sp500_monthly_performance/repeat_1` — `"Data: S&P 500 daily
+  prices and volumes, 2010-2015."` — correctly fails as a bare, insight-free
+  citation again.
+
+No other candidate's verdict changed. Fix 3 (the stemming/stopword-order
+fix) was verified in isolation to have **zero verdict impact** on any of
+the 72 candidates — several candidates' detail messages now report
+slightly different word counts/overlap percentages (since "across"/"this"
+no longer inflate the content-word count), but no pass/fail outcome moved
+because of Fix 3 alone; the two flips above are entirely attributable to
+Fixes 1 and 2. All 6 ground truths' own captions still pass at 3/3. As
+with prior rounds, this is a scoped, non-committed script output — the
+stored `eval-results/**` files still reflect the PRE-#116
+`check_caption_keywords` scores until a full harness regenerate lands.

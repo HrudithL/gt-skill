@@ -212,21 +212,30 @@ def test_two_word_caption_fails_the_content_word_floor():
     assert result.points_earned == 0
 
 
-def test_short_but_real_metadata_caption_passes_after_floor_recalibration():
+def test_bare_data_citation_with_no_real_insight_fails():
     # Real committed candidate (creator/sp500_monthly_performance/repeat_1):
-    # 3 real content words survive tokenization (daily, price, volume) once
-    # stopwords, digits, and "S&P"'s single-letter fragments are dropped.
-    # Prior round set the floor at 4 specifically to zero this caption; the
-    # round-4 review found the floor itself was zeroing genuinely short-but-
-    # real insights ("Price is the MSRP in USD." -- also exactly 3 content
-    # words -- is a real committed candidate that should pass), and lowered
-    # it to 3. By that same, now-consistently-applied bar, this caption
-    # (frequency: daily; columns: price/volume; range: 2010-2015) also
-    # carries real information and correctly passes.
+    # a bare "Data:" label (round-5 review: now recognized and stripped as
+    # a citation clause, like "Source:"/"Dataset:" already were) leaves
+    # "S&P 500 daily prices and volumes, 2010-2015" -- itself just a bare
+    # restatement of the dataset's own contents (frequency: daily; columns:
+    # price/volume; range: 2010-2015) with nothing analytical about it, no
+    # comparison, no computation, no claim. It tokenizes to exactly 3
+    # content words (daily/price/volume), clearing the word-count floor on
+    # its own -- but `_stripped_remainder_is_vacuous` catches it anyway,
+    # same as an attribution-only citation with nothing after it.
+    #
+    # This was deliberately made to fail in an earlier round (via a
+    # dedicated "data" stopword-list entry) and a round-4 floor
+    # recalibration accidentally un-broke it -- this test was wrongly
+    # inverted to assert the (regressed) passing behavior rather than the
+    # regression being caught and fixed. Restored here to assert the
+    # correct (failing) verdict once more, now via citation-clause
+    # stripping + the shared vacuity check instead of the "data" stopword.
     cand = _cand(["Data: S&P 500 daily prices and volumes, 2010–2015."], title="X", subtitle="Y")
     result = check_caption_not_generic(cand, _TRUTH_WITH_CAPTION, {})
-    assert result.passed is True
-    assert result.points_earned == 3
+    assert result.passed is False
+    assert result.points_earned == 0
+    assert "data-source citation" in result.detail
 
 
 def test_bare_dataset_citation_without_colon_fails_as_attribution_only():
@@ -262,14 +271,69 @@ def test_generic_opener_verbs_are_still_recognized_and_their_prefix_stripped():
     # verbs -- what changed is what happens on a match. Verify directly on
     # the stripping helper that each verb's prefix (not the whole sentence)
     # is what gets removed, leaving the rest of the sentence intact.
+    #
+    # round-5: the remainder used here ("that the Bentley costs more than
+    # the Corvette") deliberately carries a real comparison ("more than"),
+    # so it survives `_stripped_remainder_is_vacuous` and this test stays
+    # focused on verifying the PREFIX-stripping mechanism itself, decoupled
+    # from the (separately tested below) vacuity judgment now applied to
+    # what's left. The original example text ("the area of islands across
+    # the world") is a bare noun phrase with no such signal -- it's now
+    # correctly dropped as vacuous, which is exactly the round-5 fix (see
+    # `test_generic_opener_verb_variants_with_vacuous_remainder_all_fail`
+    # below); it would be wrong to keep asserting it survives unmodified.
     from runner.comparator import _strip_generic_opener_sentences
 
     for verb in ["shows", "displays", "presents", "contains", "summarizes", "illustrates", "represents", "lists", "provides"]:
-        sentence = f"This table {verb} the area of islands across the world."
+        sentence = f"This table {verb} that the Bentley costs more than the Corvette."
         fragments = _strip_generic_opener_sentences([sentence])
-        assert fragments == ["the area of islands across the world"], (
+        assert fragments == ["that the Bentley costs more than the Corvette"], (
             f"expected '{verb}' opener prefix to be stripped, leaving the rest of the sentence; got {fragments}"
         )
+
+
+def test_generic_opener_verb_variants_with_vacuous_remainder_all_fail():
+    # Verdict-level regression test (round-5 review): the prior round
+    # deleted the original `test_generic_template_opener_fails` (a
+    # verdict-level test) and replaced it with a test that only checked
+    # `_strip_generic_opener_sentences`'s raw string output, never the
+    # actual pass/fail verdict -- so it couldn't have caught the gate
+    # becoming unreachable. Restored at the verdict level, across every
+    # recognized opener verb: a generic-opener sentence whose remainder is
+    # itself just a bare noun phrase (no comparison/relationship/
+    # computation) must fail the WHOLE-CAPTION check, not just have its
+    # prefix stripped and then pass on word count alone.
+    for verb in ["shows", "displays", "presents", "contains", "summarizes", "illustrates", "represents", "lists", "provides"]:
+        cand = _cand(
+            [f"This table {verb} the area of islands across the world."],
+            title="Islands by Size",
+            subtitle="Land area in thousands of square kilometers",
+        )
+        result = check_caption_not_generic(cand, _TRUTH_WITH_CAPTION, {})
+        assert result.passed is False, f"expected '{verb}' opener with a vacuous remainder to fail"
+        assert result.points_earned == 0
+        assert "generic" in result.detail
+
+
+def test_generic_template_opener_fails():
+    # Restored (round-5 review): this exact verdict-level test was deleted
+    # in the prior round and replaced with a strictly weaker test covering
+    # only the "nothing at all left after the opener" case -- letting a
+    # real regression (this caption incorrectly passing) ship undetected.
+    # "Data shows the area of islands across the world." is a textbook
+    # generic-template opener: after "Data shows" is stripped, "the area
+    # of islands across the world" is just a bare noun phrase restating
+    # the table's own subject, with zero comparative/analytical insight --
+    # it must fail, not merely clear the word-count floor.
+    cand = _cand(
+        ["Data shows the area of islands across the world."],
+        title="Islands by Size",
+        subtitle="Land area in thousands of square kilometers",
+    )
+    result = check_caption_not_generic(cand, _TRUTH_WITH_CAPTION, {})
+    assert result.passed is False
+    assert result.points_earned == 0
+    assert "generic" in result.detail
 
 
 # --- round-4 (2026-08-13): Bugs A+B, structural strip-and-grade fix for the ---
@@ -477,6 +541,68 @@ def test_stopword_plural_no_longer_leaks_through_as_content_word():
 
     assert "display" not in _caption_content_words("The dashboard displays live totals for review.")
     assert "display" not in _caption_content_words("The dashboard display is live for review.")
+
+
+# --- round-5 (2026-08-13): Fix 1, generic-opener gate was effectively ---
+# --- unreachable; Fix 2, bare "Data:" citation regression; Fix 3, ---
+# --- stemming let "s"-ending stopwords leak through ---
+
+def test_generic_opener_remainder_that_is_just_a_bare_noun_list_still_fails():
+    # Fix 1: round-4's strip-and-grade fix left the word-count floor as the
+    # ONLY remaining defense after opener-prefix stripping, and any generic
+    # description of a table clears that floor trivially (it always names
+    # 3+ of the table's own nouns). These are pure, generic descriptions of
+    # what a table's columns are, with zero comparative/analytical insight
+    # -- and, unlike the restored `test_generic_template_opener_fails`
+    # above, deliberately use a neutral title/subtitle so the failure can
+    # only come from the "no analytical signal" branch of
+    # `_stripped_remainder_is_vacuous`, not from title/subtitle overlap.
+    for note in [
+        "This table displays horsepower and price for each car.",
+        "The table shows the values by region and year.",
+        "The table shows: values, counts, totals.",
+    ]:
+        cand = _cand([note], title="X", subtitle="Y")
+        result = check_caption_not_generic(cand, _TRUTH_WITH_CAPTION, {})
+        assert result.passed is False, f"expected {note!r} to fail as a generic, insight-free opener remainder"
+        assert result.points_earned == 0
+
+
+def test_generic_opener_remainder_with_real_insight_still_passes():
+    # Fix 1 sanity check: the new post-strip scrutiny must not become a
+    # blanket veto on every opener-stripped remainder -- one that actually
+    # says something (a comparison, here "more than") still passes, same
+    # as before.
+    cand = _cand(
+        ["This table shows that price and horsepower move together: the Bentley costs more than the Corvette."],
+        title="X", subtitle="Y",
+    )
+    result = check_caption_not_generic(cand, _TRUTH_WITH_CAPTION, {})
+    assert result.passed is True
+    assert result.points_earned == 3
+
+
+def test_stopword_ending_in_s_no_longer_leaks_through_stemming():
+    # Fix 3: `_stem` unconditionally strips a trailing "s" from words > 3
+    # characters for plural normalization -- but that also mangles
+    # stopwords that happen to end in "s" and aren't plurals at all, e.g.
+    # "across" -> "acros" and "this" -> "thi", neither of which matches the
+    # (unstemmed) stopword set. Stemming-before-filtering (the round-4 fix)
+    # made this worse by checking ONLY the stemmed form. Checking the raw
+    # word against the stopword set first -- before it can be mangled --
+    # fixes this while keeping the round-4 fix (checking the stemmed form
+    # too) for genuine plurals of stopwords.
+    from runner.comparator import _caption_content_words
+
+    reading_words = _caption_content_words("The reading varies across stations.")
+    assert "across" not in reading_words
+    assert "acros" not in reading_words
+    assert reading_words == {"reading", "varie", "station"}
+
+    chart_words = _caption_content_words("This chart is informative.")
+    assert "this" not in chart_words
+    assert "thi" not in chart_words
+    assert chart_words == {"chart", "informative"}
 
 
 if __name__ == "__main__":
