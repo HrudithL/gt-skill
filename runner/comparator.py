@@ -483,6 +483,50 @@ def _blocks_target_table_png(
     return False
 
 
+def _module_level_functions(tree: ast.Module) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
+    """name -> node for every `def`/`async def` sitting directly in
+    `tree.body` -- used only to resolve the one special case `_walk_top_
+    level` and `_walk_exported_scope` unwrap (see their docstrings): a
+    bare `if __name__ == "__main__": some_name()` calling a function
+    defined at module level.
+    """
+    return {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
+def _main_guard_call_target(node: ast.stmt) -> str | None:
+    """If `node` is exactly `if __name__ == "__main__": name()` -- a
+    single bare, zero-argument call as the ENTIRE if-body, no `elif`/
+    `else`, no other statements -- returns the called `name`;
+    otherwise `None`. See `_walk_top_level`'s docstring for why this one
+    shape gets special-cased instead of generalized into real
+    reachability analysis.
+    """
+    if not isinstance(node, ast.If) or node.orelse:
+        return None
+    test = node.test
+    if not (
+        isinstance(test, ast.Compare)
+        and isinstance(test.left, ast.Name)
+        and test.left.id == "__name__"
+        and len(test.ops) == 1
+        and isinstance(test.ops[0], ast.Eq)
+        and len(test.comparators) == 1
+        and isinstance(test.comparators[0], ast.Constant)
+        and test.comparators[0].value == "__main__"
+    ):
+        return None
+    if len(node.body) != 1 or not isinstance(node.body[0], ast.Expr):
+        return None
+    call = node.body[0].value
+    if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and not call.args and not call.keywords):
+        return None
+    return call.func.id
+
+
 def _walk_top_level(tree: ast.AST):
     """Like `ast.walk`, but does NOT descend into the body of a `def`/
     `class` statement -- yields every node reachable from `tree` WITHOUT
@@ -506,10 +550,35 @@ def _walk_top_level(tree: ast.AST):
     real shape. A call buried inside a function definition (called or
     not) is unusual enough to exclude outright rather than try to prove
     reachability.
+
+    2026-08-13 addition: a script that wraps its ENTIRE body in
+    `def build_table(): ...` and only calls it via `if __name__ ==
+    "__main__": build_table()` is ordinary, idiomatic Python that
+    executes exactly like an inlined top-level script when the harness
+    runs `python table.py` -- but the blanket def/class exclusion above
+    made it invisible to every check built on this function (confirmed
+    twice in `eval-results/house/SUMMARY.md`: `towny_growth_trends/
+    repeat_1` and `airquality_monthly_summary/repeat_1`, both scored
+    ~18% purely from this blind spot, not from any real quality
+    problem). This is ONE narrow, additive special case, not a general
+    call-graph/reachability analysis (still explicitly out of scope,
+    per above): when the `if __name__ == "__main__":` guard's entire
+    body is a single bare, zero-argument call to a name that resolves to
+    a module-level `def` (`_main_guard_call_target` /
+    `_module_level_functions`), that function's OWN body is walked in
+    place of the `if` statement, as if inlined there -- one level of
+    unwrapping only. A `def`/`class` nested inside the unwrapped
+    function's own body is still excluded, same as ever.
     """
+    main_guard_defs = _module_level_functions(tree) if isinstance(tree, ast.Module) else {}
     stack = [tree]
     while stack:
         node = stack.pop()
+        target_name = _main_guard_call_target(node)
+        if target_name in main_guard_defs:
+            yield node
+            stack.extend(reversed(main_guard_defs[target_name].body))
+            continue
         yield node
         for child in ast.iter_child_nodes(node):
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -649,6 +718,19 @@ def _walk_exported_scope(tree: ast.AST):
     from the restricted scope like any other statement that doesn't
     directly, syntactically target the exported name, matching this
     corpus's own linear top-level script convention.
+
+    2026-08-13 addition: this function's own `tree.body` loop -- unlike
+    `_walk_top_level`'s internal stack -- filters each MODULE-level
+    statement by `_stmt_targets_name` before ever calling `_walk_top_
+    level` on it, so an `if __name__ == "__main__": build_table()`
+    guard (an `ast.If`, not an `Assign`/`Expr`) never matched that filter
+    and was skipped outright, even after `_walk_top_level` itself learned
+    to unwrap it. Same fix, applied here too: when a top-level statement
+    is that one special guard shape calling a module-level `def`, this
+    walks the CALLED function's own body statements in its place,
+    filtering each of THOSE by `_stmt_targets_name` exactly like any
+    other module-level statement -- see `_walk_top_level`'s docstring for
+    the exact false-negative (and the real candidates) this closes.
     """
     if not isinstance(tree, ast.Module):
         yield from _walk_top_level(tree)
@@ -657,7 +739,15 @@ def _walk_exported_scope(tree: ast.AST):
     if exported_name is None:
         yield from _walk_top_level(tree)
         return
+    main_guard_defs = _module_level_functions(tree)
     for node in tree.body:
+        target_name = _main_guard_call_target(node)
+        if target_name in main_guard_defs:
+            for inner in main_guard_defs[target_name].body:
+                if not _stmt_targets_name(inner, exported_name):
+                    continue
+                yield from _walk_top_level(inner)
+            continue
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             continue
         if not _stmt_targets_name(node, exported_name):
