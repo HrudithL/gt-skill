@@ -26,6 +26,7 @@ from plotnine import (
     aes,
     element_blank,
     element_text,
+    geom_blank,
     geom_boxplot,
     geom_col,
     geom_point,
@@ -78,6 +79,16 @@ def _save(plot, out_path: Path) -> None:
 
 def _prompt_order(prompt_labels: dict[str, str], prompt_ids: list[str]) -> list[str]:
     return [prompt_labels[p] for p in prompt_ids]
+
+
+def _layer_or_blank(df: pd.DataFrame, layer):
+    """Swap in a no-op layer when `df` (the data the layer would draw from)
+    is empty. plotnine raises a confusing "could not evaluate the mapping"
+    PlotnineError if a geom's own frame has zero rows -- checking emptiness
+    on the frame directly, once, here avoids that crash at every call site
+    that has an optional data series (e.g. no baseline ran, or every skill
+    repeat failed to score)."""
+    return layer if not df.empty else geom_blank()
 
 
 def plot_usage(
@@ -140,10 +151,12 @@ def plot_usage(
     # renderable, non-degenerate axis instead of ylim(0, 0).
     upper = max(df["tokens_k"].max() * 1.22, 1.0)
 
-    # preserve="single" keeps every bar at its full dodged width and slot
-    # even when one prompt is missing a group (e.g. a crashed baseline) --
-    # without it, a lone surviving bar re-centers and doubles in width,
-    # which reads as a normal bar rather than a visibly missing one.
+    # preserve="single" keeps every bar at its full dodged width even when
+    # one prompt is missing a group (e.g. a crashed baseline) -- without it,
+    # a lone surviving bar re-centers and doubles in width, which reads as
+    # a normal bar rather than a visibly missing one. (It still slides into
+    # the missing group's slot, not its own -- only the fill color marks
+    # which group it is -- but the width alone no longer disguises it.)
     dodge = position_dodge(width=0.75, preserve="single")
 
     plot = (
@@ -208,15 +221,21 @@ def plot_consistency(
 
     plot = (
         ggplot(df, aes(x="prompt", y="pct"))
-        + geom_segment(
-            data=seg_df,
-            mapping=aes(x="prompt", xend="prompt", y="lo", yend="hi"),
-            color=REPEAT_COLOR,
-            size=3,
-            alpha=0.55,
-            inherit_aes=False,
+        + _layer_or_blank(
+            seg_df,
+            geom_segment(
+                data=seg_df,
+                mapping=aes(x="prompt", xend="prompt", y="lo", yend="hi"),
+                color=REPEAT_COLOR,
+                size=3,
+                alpha=0.55,
+                inherit_aes=False,
+            ),
         )
-        + geom_point(aes(color="group"), size=3.2)
+        # shape (in addition to color) distinguishes the two series even
+        # when a tied score would otherwise let one point fully hide the
+        # other.
+        + geom_point(aes(color="group", shape="group"), size=3.2)
         + scale_color_manual(values=GROUP_COLORS)
         + scale_x_discrete(limits=order)
         + ylim(0, 100)
@@ -266,7 +285,7 @@ def plot_comparator_score(
     plot = (
         ggplot(box_df, aes(x="prompt", y="pct"))
         + geom_boxplot(fill=REPEAT_COLOR, alpha=0.5, width=0.5, outlier_size=1.5)
-        + geom_point(point_df, aes(color="group"), size=3.2)
+        + _layer_or_blank(point_df, geom_point(point_df, aes(color="group"), size=3.2))
         + scale_color_manual(values={BASELINE_LABEL: BASELINE_COLOR})
         + scale_x_discrete(limits=order)
         + ylim(0, 100)
