@@ -4915,7 +4915,23 @@ _CAPTION_BARE_CITATION_RE = re.compile(
     re.IGNORECASE,
 )
 
-_CAPTION_SENTENCE_END_RE = re.compile(r"[.;—]")  # . ; —
+# Boundary-aware: the terminator must be followed by whitespace or
+# end-of-string, not just be the first `.`/`;`/em-dash/en-dash occurring
+# anywhere after the citation label. Without the lookahead, a period
+# embedded in a filename/URL ("Source: airquality.csv, R datasets package,
+# May-September observations") truncates the clause at the period INSIDE
+# "airquality.csv", leaving a meaningless mid-word/mid-number fragment
+# ("csv, R datasets package, May-September observations") that then gets
+# graded as if it were real caption content -- a false pass on a caption
+# that's actually pure attribution with nothing else (2026-08-13 review
+# round, Bug C). En-dash (–) is included alongside em-dash (—)
+# since this corpus uses en-dashes pervasively for ranges/separators
+# ("1996-2021"); without it, identical prose separated by an en-dash vs. a
+# semicolon/em-dash used to reach opposite verdicts purely because only the
+# semicolon/em-dash was recognized as a valid clause boundary. Bare hyphen
+# ("-") is deliberately NOT a terminator -- it's far more often part of a
+# compound word or a numeric range than an actual clause boundary.
+_CAPTION_SENTENCE_END_RE = re.compile(r"[.;—–](?=\s|$)")  # . ; — – (boundary-aware)
 
 
 def _strip_citation_clause(note: str) -> str:
@@ -4964,20 +4980,55 @@ _CAPTION_GENERIC_OPENER_RE = re.compile(
 _CAPTION_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
-def _caption_generic_opener_sentence(texts: list[str]) -> str | None:
+def _strip_generic_opener_sentences(texts: list[str]) -> list[str]:
     """Checks the generic-opener pattern against EACH individual source
     note, and against each sentence within a note -- not just position 0
-    of the first note joined into one string. (2026-08-13 review round: a
+    of the first note joined into one string (2026-08-13 review round: a
     leading filler note/phrase, or being the 2nd+ source note, both used to
-    defeat the old single `^`-anchored-on-the-joined-string check.) Returns
-    the offending sentence, or None.
+    defeat the old single `^`-anchored-on-the-joined-string check).
+
+    2026-08-13 review round-4: this used to return the FIRST offending
+    sentence and the caller zeroed the WHOLE caption on any match -- a pure
+    prefix match treated as a whole-caption verdict, same shape bug as the
+    citation-clause handling above. Two concrete failures that shape
+    caused: (1) the ground truth's own `airquality_monthly_summary` caption
+    (3/3) dropped to 0/3 when "The data shows " was merely prepended to
+    it, even though every word after the prefix was exactly as substantive
+    as before; (2) a genuinely multi-sentence caption ("Bentley costs more
+    than the Corvette despite fewer horsepower. The table shows all 47
+    models. Prices are MSRP in USD.") scored 0/3 solely because ONE
+    sentence in the middle sounded generic, zeroing two other sentences
+    that carried real content.
+
+    Fixed the same way `_strip_citation_clause` handles a leading
+    citation: for each sentence, if it matches the generic-opener pattern,
+    strip only the MATCHED PREFIX (e.g. "The table shows") and keep
+    whatever follows it in the same sentence, rather than discarding the
+    whole sentence -- let alone the whole caption. A sentence that reduces
+    to nothing after the prefix is stripped (e.g. "The table shows.")
+    contributes nothing, the same way a pure citation clause with no
+    trailing insight contributes nothing; a sentence that doesn't match at
+    all is kept unchanged. The caller then grades whatever text survives
+    across ALL sentences/notes combined -- a caption only fails on
+    "generic" grounds if NOTHING distinctive remains anywhere.
+
+    Returns the list of surviving fragments (opener-stripped where
+    applicable, in order, across all texts) -- not a single offender.
     """
+    fragments: list[str] = []
     for text in texts:
         for sentence in _CAPTION_SENTENCE_SPLIT_RE.split(text.strip()):
             sentence = sentence.strip()
-            if sentence and _CAPTION_GENERIC_OPENER_RE.match(sentence):
-                return sentence
-    return None
+            if not sentence:
+                continue
+            m = _CAPTION_GENERIC_OPENER_RE.match(sentence)
+            if m:
+                remainder = sentence[m.end():].strip(" \t\n,;:.-—–")
+                if remainder:
+                    fragments.append(remainder)
+            else:
+                fragments.append(sentence)
+    return fragments
 
 
 # Small stopword list for the restatement check below -- articles,
@@ -5010,7 +5061,18 @@ _CAPTION_TOKEN_RE = re.compile(r"[a-zA-Z']+")
 # these previously scored full marks because the only two gates were
 # restatement-overlap and generic-opener, neither of which a near-empty
 # caption necessarily trips).
-_CAPTION_MIN_CONTENT_WORDS = 4
+#
+# Lowered 4 -> 3 in the 2026-08-13 round-4 review: at 4, several genuinely
+# substantive short captions were zeroed purely for being terse -- "HP and
+# MSRP do not move together." (a real domain observation), "The Corvette
+# outguns the Bentley." (a real comparative insight), and "Price is the
+# MSRP in USD." (a real committed candidate, house/gtcars_hp_price/
+# repeat_3, that only ever tokenizes to 3 distinct content words: price,
+# msrp, usd -- there's no meaningful 4th word to find here no matter how
+# the tokenizer/stopword list is tuned). 3 is still high enough to catch
+# true non-answers ("Whatever." = 1 word, "Bentley outliers." = 2 words)
+# while no longer punishing a real 3-word insight purely for brevity.
+_CAPTION_MIN_CONTENT_WORDS = 3
 
 
 def _stem(word: str) -> str:
@@ -5034,11 +5096,28 @@ def _caption_content_words(text: str) -> set[str]:
     so shared function words (e.g. "in", "the") never count as "the caption
     is just repeating the subtitle," and simple plurals don't count as new
     words.
+
+    2026-08-13 round-4 review, two fixes:
+
+    1. Length filter loosened from `len(w) > 2` to `len(w) >= 2`: a strict
+       `> 2` dropped short domain abbreviations like "HP" and "US" even
+       though they're genuinely meaningful content words, undercounting
+       real captions -- "HP and MSRP do not move together." used to tokenize
+       to only 3 counted words (msrp/move/together) once "HP" was dropped
+       for being 2 characters, wrongly failing the vacuity floor.
+    2. Stemming now happens BEFORE the stopword filter, not after. The old
+       order filtered the RAW word against the stopword set, then stemmed
+       only the words that survived -- so a plural of a stopword (e.g.
+       "displays", plural of the stopword "display") never matched the
+       singular stopword and leaked through as a counted content word. Stem
+       first, then filter the stemmed form, so plurals of stopwords are
+       correctly excluded too.
     """
     if not text:
         return set()
     words = _CAPTION_TOKEN_RE.findall(text.lower())
-    return {_stem(w) for w in words if len(w) > 2 and w not in _CAPTION_STOPWORDS}
+    stemmed = (_stem(w) for w in words)
+    return {w for w in stemmed if len(w) >= 2 and w not in _CAPTION_STOPWORDS}
 
 
 def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResult:
@@ -5067,11 +5146,17 @@ def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResul
        any) that remains after it is graded as the caption.
     2. Generic template: any individual source note, or any sentence
        within one, opening with a bare "the/this table/chart/data shows/
-       displays/..." pattern is a non-committal description, regardless of
-       overlap.
-    3. Vacuity floor: fewer than 4 distinct content words after stripping
-       (1) and (2) can't carry real information regardless of what the
-       overlap check below would say.
+       displays/..." pattern has that opening PREFIX stripped (same
+       strip-and-grade-the-remainder treatment as the citation clause in
+       (1)) -- only a caption with NOTHING distinctive left anywhere,
+       across every note and sentence, fails on generic-template grounds.
+       A generic-sounding sentence sitting alongside other, substantive
+       sentences no longer vetoes the whole caption (round-4 review fix;
+       see `_strip_generic_opener_sentences`'s docstring for the two
+       concrete false failures this replaces).
+    3. Vacuity floor: fewer than `_CAPTION_MIN_CONTENT_WORDS` distinct
+       content words after stripping (1) and (2) can't carry real
+       information regardless of what the overlap check below would say.
     4. Restatement: caption content words (suffix-normalized) are compared
        against the title+subtitle content-word set. A caption whose words
        overlap that set almost entirely (>=80%) AND that contributes at
@@ -5079,14 +5164,17 @@ def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResul
        it's the same sentence reworded, not a new observation.
 
     A candidate that skips the caption/source-note entirely, or whose only
-    source note reduces to nothing after citation-stripping, fails the same
-    way as an explicit restatement -- it hasn't written a real caption
-    either way.
+    source note reduces to nothing after citation- and generic-opener-
+    stripping, fails the same way as an explicit restatement -- it hasn't
+    written a real caption either way.
 
     Recalibrated 2026-08-13 (review round; see the PR description for the
     full before/after numbers) against all 72 real committed candidates
     across all 4 skills (`house`/`prose`/`scripts`/`creator`, 18 each) plus
-    the 6 ground truths' own captions.
+    the 6 ground truths' own captions. Recalibrated again 2026-08-13
+    round-4 (structural strip-and-grade fix for citation/generic-opener
+    handling, boundary-aware citation-clause termination, and the word-
+    filter/floor fixes in `_caption_content_words`/`_CAPTION_MIN_CONTENT_WORDS`).
     """
     name = "Caption is substantive"
     # Pure source-text extraction (title/subtitle/source_note are literal
@@ -5113,14 +5201,15 @@ def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResul
             "candidate's only source note is a data-source citation, with no accompanying insight sentence",
         )
 
-    offender = _caption_generic_opener_sentence(substantive_texts)
-    if offender:
+    fragments = _strip_generic_opener_sentences(substantive_texts)
+    if not fragments:
         return CheckResult(
             name, 3, 0, False,
-            f"caption is a generic non-committal template ('what this table is about'): {offender!r}",
+            "caption's only content is a generic non-committal template "
+            f"('what this table is about') with nothing distinctive left after it: {' '.join(substantive_texts)!r}",
         )
 
-    caption_text = " ".join(substantive_texts)
+    caption_text = " ".join(fragments)
     cap_words = _caption_content_words(caption_text)
     if not cap_words:
         return CheckResult(name, 3, 0, False, f"caption has no real content words: {caption_text!r}")
