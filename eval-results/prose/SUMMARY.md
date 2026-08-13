@@ -132,11 +132,11 @@ most expensive" table and filled 100% of rows, violating that file's own cap);
 | Metric | This round | Round 3 |
 |---|---|---|
 | Mean score | **84.7%** | 79.0% |
-| Mean repeat spread | 8.2pp | 23.5pp |
+| Mean repeat spread | 8.1pp | 23.5pp |
 | Mean cost | $0.190 | $0.182 |
 
 **RESOLVED (2026-08-13, `chore/recompute-eval-results-post-fixes`):** the
-figures above (84.7% / 8.2pp) are the final, fully-recomputed numbers,
+figures above (84.7% / 8.1pp) are the final, fully-recomputed numbers,
 after the deferred `normalize_id` date-matching fix and the
 `check_caption_not_generic` redesign were both applied to this round's
 actual committed candidates. They supersede an earlier, briefly-committed

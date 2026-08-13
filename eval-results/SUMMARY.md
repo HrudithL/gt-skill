@@ -562,16 +562,21 @@ guard target no longer being wrongly inlined. `creator` not re-swept
 | Skill | Mean score | Mean spread (was, round 3) | Max spread (was) | Mean cost |
 |---|---|---|---|---|
 | `house` | 83.3% | 16.4pp (18.1pp) | 51.7pp | **$0.131** (cheapest) |
-| `prose` | 84.7% | 8.2pp (23.5pp) | 28.9pp | $0.190 |
+| `prose` | 84.7% | 8.1pp (23.5pp) | 28.9pp | $0.190 |
 | `scripts` | 86.0% | 16.4pp (20.2pp) | 40.3pp | $0.189 |
 
 (Mean-score and mean-spread columns updated 2026-08-13 in
 `chore/recompute-eval-results-post-fixes` — see "RESOLVED" below. Original
 round-4 figures, before the `normalize_id` date-matching and
 `check_caption_not_generic` fixes were recomputed into these files, were
-`house` 82.4% / 10.8pp, `prose` 81.7% / 10.3pp, `scripts` 81.5% / 16.2pp.
-Max-spread figures are essentially unchanged, since they're driven by the
-same outlier repeats as before.)
+`house` 82.4% / 16.0pp, `prose` 81.7% / 10.3pp, `scripts` 81.5% / 16.2pp.
+(A previously-committed `house` spread figure of 10.8pp was itself already
+incorrect — an independent, pre-existing documentation error that predates
+this recompute and is unrelated to the `normalize_id`/caption-check fixes;
+recomputing the same pre-fix candidates gives 16.0pp, not 10.8pp. The real,
+recompute-attributable change for `house` is therefore 16.0pp → 16.4pp, not
+10.8pp → 16.4pp.) Max-spread figures are essentially unchanged, since
+they're driven by the same outlier repeats as before.)
 
 All three land in a tight band, similar to round 3's own "tight band"
 finding. Several single-prompt spreads are WIDER than the mid-fix-cycle
@@ -770,7 +775,12 @@ not a full harness re-run) — directionally reliable but not yet reflected
 in the actual `eval-results/**` files. That gap is now closed (see
 "RESOLVED" above): the actual `eval-results/**` files (per-skill
 `metrics.json`/`SUMMARY.md`/plots) reflect the POST-#116
-`check_caption_not_generic` scores as of 2026-08-13's full regenerate.
+`check_caption_not_generic` scores as of 2026-08-13's full regenerate. (The
+2 plots per skill -- `comparator_score.png` and `usage.png` -- were
+regenerated in a same-day follow-up commit directly from each skill's
+already-recomputed `metrics.json` on disk, not by re-running the
+sweep-based `make_plots.py`/`_lib.dump_metrics` path, so producing them
+made no new judge/API calls and did not risk picking up a different sweep.)
 
 ### Round-4 follow-up (2026-08-13): fixed a recurring "prefix veto instead of strip-and-grade" bug shape
 

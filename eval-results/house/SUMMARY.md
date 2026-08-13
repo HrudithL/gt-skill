@@ -184,7 +184,7 @@ Per-prompt means: `gtcars_hp_price` 95.3%, `islands_sizes` 94.0%, `gtcars_top10_
 89.3%, `sp500_monthly_performance` 75.8%, `airquality_monthly_summary` 72.8%,
 `towny_growth_trends` 72.5%. Two individual repeats scored far below their siblings
 this round, both traced to the same one-off mistake, not a bug: `towny_growth_trends/
-repeat_1` (38.4% vs. 85–90% siblings) used `.set_index('Town')` instead of passing
+repeat_1` (39.5% vs. 86–91% siblings) used `.set_index('Town')` instead of passing
 `rowname_col="Town"` to `GT(...)`, so no stub was ever created; `sp500_monthly_
 performance` also runs into the known month-label-format ambiguity (see top-level
 `SUMMARY.md`). Both are places `RULES.md`/the worked example already teach the correct
