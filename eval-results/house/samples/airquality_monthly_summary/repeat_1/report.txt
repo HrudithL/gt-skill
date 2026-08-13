@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080322_house_6prompts/prompts/airquality_monthly_summary/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py
 
-TOTAL: 63/88 (71.6%)
+TOTAL: 64/88 (72.7%)
   Data-compliance:        27/47
-  Formatting-compliance:  36/41
+  Formatting-compliance:  37/41
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/3 canonical measures have a value-matching candidate column; unmatched: ['avg_temp', 'avg_ozone', 'avg_wind']
@@ -26,7 +26,7 @@ TOTAL: 63/88 (71.6%)
 [PASS] [MECHANICAL] Stripe color (neutral grey): 2/2 -- expected #F6F6F6, got '#F6F6F6'
 [N/A] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 0/0 -- no hero_uncolored measure value-matched a candidate column
 [N/A] [MECHANICAL] Signed-percent force_sign correctness: 0/0 -- ground truth declares no percent-semantic columns
-[FAIL] [MECHANICAL] Caption keyword coverage: 2/3 -- 2/4 caption-keyword rules satisfied; caption missing: ['missing', 'recorded value']
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 6 word(s) beyond the title/subtitle (overlap 45%): 'Ozone levels are shown in parts per billion (ppb); Wind speed in miles per hour; Temperature in Fahrenheit.'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/3 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['avg_temp', 'avg_wind', 'avg_ozone']

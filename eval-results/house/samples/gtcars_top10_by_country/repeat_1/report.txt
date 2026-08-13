@@ -26,7 +26,7 @@ TOTAL: 72/97 (74.2%)
 [PASS] [MECHANICAL] Stripe color (neutral grey): 2/2 -- expected #F6F6F6, got '#F6F6F6'
 [N/A] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 0/0 -- ground truth declares no hero_uncolored measures
 [N/A] [MECHANICAL] Signed-percent force_sign correctness: 0/0 -- ground truth declares no percent-semantic columns
-[PASS] [MECHANICAL] Caption keyword coverage: 3/3 -- 2/2 caption-keyword rules satisfied
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 9 word(s) beyond the title/subtitle (overlap 10%): 'Ranking based on manufacturer suggested retail price (MSRP) at time of model year.'
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type

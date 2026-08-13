@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080331_prose_6prompts/prompts/airquality_monthly_summary/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py
 
-TOTAL: 84/91 (92.3%)
+TOTAL: 85/91 (93.4%)
   Data-compliance:        46/48
-  Formatting-compliance:  38/43
+  Formatting-compliance:  39/43
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 3/3 canonical measures have a value-matching candidate column
@@ -26,7 +26,7 @@ TOTAL: 84/91 (92.3%)
 [FAIL] [MECHANICAL] Stripe color (neutral grey): 0/2 -- expected #F6F6F6, got None
 [PASS] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 2/2 -- 1/1 hero-uncolored measures are plain text
 [N/A] [MECHANICAL] Signed-percent force_sign correctness: 0/0 -- ground truth declares no percent-semantic columns
-[FAIL] [MECHANICAL] Caption keyword coverage: 2/3 -- 2/4 caption-keyword rules satisfied; caption missing: ['missing', 'recorded value']
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 4 word(s) beyond the title/subtitle (overlap 60%): 'Temperature and Ozone show distinct dimensions of air quality patterns; Wind Speed shown for context.'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 2/2, truncate=False correct 2/2, autocolor_text=True correct 2/2, reverse orientation matches truth 2/2
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 3/3 columns formatted per their semantic type

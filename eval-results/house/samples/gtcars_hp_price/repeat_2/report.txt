@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080322_house_6prompts/prompts/gtcars_hp_price/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 78/85 (91.8%)
+TOTAL: 79/85 (92.9%)
   Data-compliance:        36/42
-  Formatting-compliance:  42/43
+  Formatting-compliance:  43/43
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 2/2 canonical measures have a value-matching candidate column
@@ -26,7 +26,7 @@ TOTAL: 78/85 (91.8%)
 [PASS] [MECHANICAL] Stripe color (neutral grey): 2/2 -- expected #F6F6F6, got '#F6F6F6'
 [PASS] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 2/2 -- 1/1 hero-uncolored measures are plain text
 [N/A] [MECHANICAL] Signed-percent force_sign correctness: 0/0 -- ground truth declares no percent-semantic columns
-[FAIL] [MECHANICAL] Caption keyword coverage: 2/3 -- 3/6 caption-keyword rules satisfied; caption missing: ['bentley', 'corvette', "don't move together"]
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 8 word(s) beyond the title/subtitle (overlap 20%): 'Horsepower represents maximum output at peak RPM; vehicles ranked by horsepower in descending order.'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type

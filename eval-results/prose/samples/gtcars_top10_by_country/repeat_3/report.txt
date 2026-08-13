@@ -26,7 +26,7 @@ TOTAL: 65/95 (68.4%)
 [PASS] [MECHANICAL] Stripe color (neutral grey): 2/2 -- expected #F6F6F6, got '#F6F6F6'
 [N/A] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 0/0 -- ground truth declares no hero_uncolored measures
 [N/A] [MECHANICAL] Signed-percent force_sign correctness: 0/0 -- ground truth declares no percent-semantic columns
-[PASS] [MECHANICAL] Caption keyword coverage: 3/3 -- 2/2 caption-keyword rules satisfied
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 4 word(s) beyond the title/subtitle (overlap 56%): 'Includes the top 10 highest-priced GT cars from the dataset, displayed with their country of origin.'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type

@@ -164,15 +164,27 @@ script as inlined top-level code (previously invisible to either).
 
 | Metric | This round | Round 3 |
 |---|---|---|
-| Mean score | **82.4%** | 79.4% |
-| Mean repeat spread | 16.0pp | 18.1pp |
+| Mean score | **83.3%** | 79.4% |
+| Mean repeat spread | 16.4pp | 18.1pp |
 | Mean cost | $0.131 | $0.134 |
 
-Per-prompt means: `gtcars_hp_price` 94.1%, `islands_sizes` 94.4%, `gtcars_top10_by_country`
-89.3%, `sp500_monthly_performance` 73.6%, `airquality_monthly_summary` 71.7%,
-`towny_growth_trends` 71.4%. Two individual repeats scored far below their siblings
+**RESOLVED (2026-08-13, `chore/recompute-eval-results-post-fixes`):** the
+figures above (83.3% / 16.4pp) are the final, fully-recomputed numbers,
+after the deferred `normalize_id` date-matching fix and the
+`check_caption_not_generic` redesign were both applied to this round's
+actual committed candidates. They supersede an earlier, briefly-committed
+82.4% / 16.0pp reading of this same sweep that predated that recompute.
+`house`'s number moved the least of the three skills (+0.9pp) because its
+`sp500_monthly_performance` candidates already rendered month labels in
+the ground truth's date format, so only the broader caption-check fix
+touched it — see the top-level `SUMMARY.md` for the full three-skill
+picture and the ranking this settles.
+
+Per-prompt means: `gtcars_hp_price` 95.3%, `islands_sizes` 94.0%, `gtcars_top10_by_country`
+89.3%, `sp500_monthly_performance` 75.8%, `airquality_monthly_summary` 72.8%,
+`towny_growth_trends` 72.5%. Two individual repeats scored far below their siblings
 this round, both traced to the same one-off mistake, not a bug: `towny_growth_trends/
-repeat_1` (38.4% vs. 85–90% siblings) used `.set_index('Town')` instead of passing
+repeat_1` (39.5% vs. 86–91% siblings) used `.set_index('Town')` instead of passing
 `rowname_col="Town"` to `GT(...)`, so no stub was ever created; `sp500_monthly_
 performance` also runs into the known month-label-format ambiguity (see top-level
 `SUMMARY.md`). Both are places `RULES.md`/the worked example already teach the correct
