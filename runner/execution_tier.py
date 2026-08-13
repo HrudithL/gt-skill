@@ -26,6 +26,7 @@ import json
 import math
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -459,6 +460,62 @@ def values_close(a: Any, b: Any, *, rel_tol: float = _REL_TOL, abs_tol: float = 
 # same "none" and be treated as the same entity).
 _MISSING_ID = "\x00__MISSING__\x00"
 
+# Prefixes for date-normalized keys (see `normalize_id` below), wrapped in
+# the same `\x00` control-character convention as `_MISSING_ID` and for the
+# same reason: a plain ASCII prefix like `"__date_ym__"` is not actually
+# guaranteed distinct from real, user-authored identifier text -- a candidate
+# row id that happens to literally read e.g. `"__date_ym__2010-01"` would
+# silently collide with a genuine date-normalization result. No real
+# identifier can contain a `\x00` control character, so wrapping the prefix
+# in `\x00` makes the collision structurally impossible rather than merely
+# unlikely. The plain-ASCII inner text (`__date_ym__` / `__date_ymd__`) is
+# kept for readability in test-failure output; only the `\x00` boundary
+# markers carry the actual collision-safety guarantee.
+_DATE_YM_PREFIX = "\x00__date_ym__\x00"
+_DATE_YMD_PREFIX = "\x00__date_ymd__\x00"
+_DATE_YMDHMS_PREFIX = "\x00__date_ymdhms__\x00"
+
+
+# Strict, explicit whitelist of `datetime.strptime` formats tried (in
+# order) when normalizing a row/group identifier. Deliberately NOT a
+# fuzzy/liberal parser (e.g. `dateutil.parser.parse`) -- fuzzy inference
+# would misparse ordinary non-date identifiers (car names, town names,
+# product codes) as dates. Each format is matched against the WHOLE
+# trimmed string, so a partial/substring date inside a longer label never
+# triggers. Formats with no day component are month-granularity; the rest
+# are day-granularity -- the two granularities normalize to differently
+# prefixed sentinel keys (see below) so a month-only match never collides
+# with a same-month full-date match.
+#
+# `"%Y-%m-%d %H:%M:%S"` covers Python/pandas' own default stringification
+# of a plain `datetime.datetime`/`pd.Timestamp` (e.g. `str(pd.Timestamp(...))`
+# -> `"2010-01-15 00:00:00"`), which is the single most common way a
+# non-`Period` pandas datetime column renders to text. Timezone-aware
+# variants (e.g. a trailing `"+00:00"`) are deliberately not handled here --
+# not present in this repo's corpus data, so out of scope. This format
+# carries strictly finer granularity than a bare `"%Y-%m-%d"` date -- two
+# timestamps on the same calendar day but different times of day are
+# different instants -- so it normalizes through its own `_DATE_YMDHMS_PREFIX`
+# key (including hour/minute/second) rather than falling into the plain
+# day-granularity bucket, following the same distinct-prefix-per-granularity
+# pattern used to keep month-only and day-only matches apart.
+#
+# `%b`/`%B` (abbreviated/full month name) are locale-sensitive in general --
+# `strptime` parses month names against the process's current locale, not
+# always English. This is NOT a live risk in this repo: nothing here ever
+# calls `locale.setlocale()`, so CPython stays in the default `C` locale,
+# where `%b`/`%B` always parse English month names. If a future change adds
+# a `locale.setlocale()` call anywhere in this codebase, this assumption
+# must be revisited.
+_MONTH_ID_FORMATS = ("%b %Y", "%B %Y", "%Y-%m", "%m/%Y")
+_DAY_ID_FORMATS = (
+    "%Y-%m-%d",
+    "%m/%d/%Y",
+    "%b %d, %Y",
+    "%B %d, %Y",
+    "%Y-%m-%d %H:%M:%S",
+)
+
 
 def normalize_id(x: Any) -> str:
     """Canonical form of a row/entity identifier for set comparison.
@@ -467,10 +524,73 @@ def normalize_id(x: Any) -> str:
     `_MISSING_ID` sentinel, kept distinct from the literal text "None" --
     without this, a candidate row with a missing stub value and a truth
     row whose stub literally reads "None" would incorrectly compare equal.
+
+    Date-like identifiers are additionally format-normalized: ground truth
+    and candidate scripts routinely render the same calendar month/day in
+    different (equally reasonable) string formats -- e.g. "Jan 2010" vs
+    "2010-01" vs "January 2010" -- and a prompt rarely pins one down. Naive
+    string comparison would treat these as unrelated identities, zeroing
+    out row matching and cascading into spurious per-row value failures
+    even when a candidate's numbers are correct. Each trimmed string is
+    tried, in order, against a strict whitelist of `datetime.strptime`
+    formats (`_MONTH_ID_FORMATS` then `_DAY_ID_FORMATS`); the first format
+    that parses the ENTIRE string AND round-trips wins (see below). A
+    month-granularity match normalizes to the wrapped key produced by
+    `_DATE_YM_PREFIX`; a day-granularity match normalizes to the wrapped
+    key produced by `_DATE_YMD_PREFIX`; a full-timestamp match (the
+    `"%Y-%m-%d %H:%M:%S"` format) normalizes to the wrapped key produced by
+    `_DATE_YMDHMS_PREFIX` and additionally carries the hour/minute/second --
+    the distinct prefixes (and lengths) keep all three granularities from
+    ever comparing equal to each other, even for the same calendar day/month,
+    since a stub author who wrote a bare month/day presumably meant the
+    whole month/day, not one specific narrower instant of it, and two
+    different times of day on the same date are different instants.
+    Strings that don't match any whitelisted format fall back, unchanged,
+    to the original `str(x).strip().casefold()` behavior.
+
+    Round-trip guard: `strptime`'s `%m`/`%d` directives accept non-zero-
+    padded values even when the format string specifies padding -- e.g.
+    `"2010-1"` parses successfully against `"%Y-%m"`, which would otherwise
+    silently normalize it to the same key as `"2010-01"`. Two textually-
+    distinct candidate identifiers merging into one is exactly the kind of
+    false match this function must not produce. So after a format parses,
+    the parsed `datetime` is re-rendered with `strftime` using that SAME
+    format string, and the result must exactly equal the original trimmed
+    input; if it doesn't, that format is treated as a non-match and the
+    next format in the whitelist is tried (falling through to the plain
+    casefold fallback if none match this way). The comparison is casefolded
+    on both sides -- `%b`/`%B` accept case-insensitive month names on the
+    `strptime` side (e.g. "JAN"/"jan"/"Jan" all parse), but `strftime`
+    always re-renders its own canonical capitalization ("Jan"), so a
+    byte-exact (non-casefolded) comparison would wrongly reject case
+    variants like "JAN 2010" as non-round-tripping even though they are a
+    perfectly valid, unambiguous match for the same month.
     """
     if x is None:
         return _MISSING_ID
-    return str(x).strip().casefold()
+    text = str(x).strip()
+    for fmt in _MONTH_ID_FORMATS:
+        try:
+            dt = datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        if dt.strftime(fmt).casefold() != text.casefold():
+            continue
+        return f"{_DATE_YM_PREFIX}{dt.year:04d}-{dt.month:02d}"
+    for fmt in _DAY_ID_FORMATS:
+        try:
+            dt = datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        if dt.strftime(fmt).casefold() != text.casefold():
+            continue
+        if fmt == "%Y-%m-%d %H:%M:%S":
+            return (
+                f"{_DATE_YMDHMS_PREFIX}{dt.year:04d}-{dt.month:02d}-{dt.day:02d} "
+                f"{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
+            )
+        return f"{_DATE_YMD_PREFIX}{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
+    return text.casefold()
 
 
 def row_set_identity(
