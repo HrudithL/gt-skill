@@ -46,10 +46,13 @@ is a computable condition, not a judgment call: if it fires, the action is manda
 **requires** that the stub already exist — **no orphan label** (setting a stubhead
 when there is no `rowname_col` is wrong, PP-25).
 
-Never `df.set_index('col')` before `GT(...)` to fake a stub — `great_tables`'
-stub is a real column selected via `rowname_col=`, not the DataFrame's pandas
-index; `.set_index()` leaves `GT(...)` with no stub at all. Pass the identifier
-as `GT(df, rowname_col='col')` on the un-indexed frame.
+Never rely on `df.set_index('col')` for the stub — `great_tables` never reads
+the pandas index. The stub is a real column named by `rowname_col=`. `set_index`
+also moves that column out of the frame (`drop=True` by default), so `GT(...)`
+renders no stub and the identifier's values vanish from the table entirely, not
+just demote to a plain column. If the frame is already indexed (straight out of
+`groupby().agg()`, say), reset it first: `GT(df.reset_index(), rowname_col='col')`.
+Passing `rowname_col='col'` while `col` is still the index raises `KeyError`.
 
 ### Grouping — a computable trigger (PP-1)
 
