@@ -267,11 +267,15 @@ row identifiers. `tab_stubhead(label=...)` requires the stub to already
 exist — see the `product` column / `tab_stubhead("Product")` call in
 `house_table.py`.
 
-Never rely on `df.set_index("col")` for the stub — `great_tables` never reads
-the pandas index; the stub is a real column set via `rowname_col=`. If `col`
-is already the frame's index (e.g. from `groupby("col").agg(...)`), call
-`.reset_index()` first — but only when `df.index.name == "col"`, since
-resetting a default integer index instead adds a spurious `index` column.
+Never rely on `df.set_index("col")` for the stub — `great_tables` never
+reads the pandas index; the stub is a real column set via
+`rowname_col=`. `set_index()` defaults to `drop=True`, which removes
+that column from the frame entirely, so `GT(...)` renders without it —
+the identifier's values vanish, rather than merely being demoted to a
+plain column. Pass `GT(df, rowname_col="col")` on the frame while `col`
+is still a real column (i.e. before any `set_index()` call) — passing
+`rowname_col="col"` once `col` is only the pandas index raises a
+`KeyError`, since it's no longer a column at all.
 
 ## Natural grouping category
 
