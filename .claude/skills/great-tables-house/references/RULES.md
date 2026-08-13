@@ -267,6 +267,11 @@ row identifiers. `tab_stubhead(label=...)` requires the stub to already
 exist — see the `product` column / `tab_stubhead("Product")` call in
 `house_table.py`.
 
+Never `df.set_index('col')` before `GT(...)` to fake a stub — `great_tables`'
+stub is a real column selected via `rowname_col=`, not the DataFrame's pandas
+index; `.set_index()` leaves `GT(...)` with no stub at all. Pass the identifier
+as `GT(df, rowname_col='col')` on the un-indexed frame.
+
 ## Natural grouping category
 
 `groupname_col=...` + `group_emphasis(gt, hue=...)` when the prompt names
