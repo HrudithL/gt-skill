@@ -521,7 +521,7 @@ eval-results/
                                the 2 PNGs below -- see the warning below before running this
       usage.png                 tokens (x) vs. cost (y) per prompt, baseline -> skill as a connected
                                  arrow, faceted by difficulty tier
-      comparator_score.png      comparator score: 3 repeats (box, width = consistency) vs. baseline
+      comparator_score.png      comparator score: 3 repeats (box, height = consistency) vs. baseline
                                  (point), faceted by difficulty tier, with a computed mean-lift subtitle
     samples/<prompt>/<variant>/  curated table.py + table.png + comparator report.txt
 ```

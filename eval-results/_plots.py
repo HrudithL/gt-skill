@@ -113,7 +113,7 @@ def _prompt_order(prompt_ids: list[str], prompt_labels: dict[str, str]) -> list[
     return [prompt_labels[p].replace("\n", " ") for p in prompt_ids]
 
 
-def _adaptive_decimals(vals: list[float], min_decimals: int, max_decimals: int = 4) -> int:
+def _adaptive_decimals(vals: list[float], min_decimals: int, max_decimals: int = 6) -> int:
     """Enough decimal places that adjacent TICKS stay visually distinct even
     on a narrow `scales="free"` panel -- a fixed `.2f`/`.0f` degenerates to
     identical-looking ticks (e.g. every tick reading "$0.06" or "40K")
@@ -137,7 +137,7 @@ def _token_tick_labels(vals):
 
 
 def _cost_tick_labels(vals):
-    decimals = _adaptive_decimals(vals, min_decimals=2, max_decimals=4)
+    decimals = _adaptive_decimals(vals, min_decimals=2, max_decimals=6)
     return [f"${v:.{decimals}f}" for v in vals]
 
 
@@ -181,13 +181,17 @@ def _layer_or_blank(df: pd.DataFrame, layer):
 
 def _prompt_rows(metrics: dict, prompt_ids: list[str], prompt_labels: dict[str, str]):
     """One row per (prompt, difficulty, short display label) that actually
-    has data in this sweep, in prompt-list order."""
+    has data in this sweep, in prompt-list order. A missing/null difficulty
+    becomes its own "unknown" tier (handled by `_difficulty_categories`)
+    rather than silently defaulting to "easy" -- a real but mistiered
+    prompt should be visibly off to the side, not folded into a tier it
+    was never scored under."""
     prompts = metrics["prompts"]
     for pid in prompt_ids:
         entry = prompts.get(pid)
         if not entry:
             continue
-        yield pid, entry.get("difficulty", "easy"), prompt_labels[pid].replace("\n", " ")
+        yield pid, entry.get("difficulty") or "unknown", prompt_labels[pid].replace("\n", " ")
 
 
 def plot_usage(
@@ -270,34 +274,29 @@ def plot_usage(
         seg_df["label_x"] = (seg_df["x0"] + seg_df["x1"]) / 2
         seg_df["_top"] = seg_df[["y0", "y1"]].max(axis=1)
 
-        # Vertical stagger scaled to the FACET's full y-extent (every
-        # baseline/skill point in that panel, not just this segment's own
-        # span) -- staggering by *this segment's* span collapses to ~0
-        # exactly when two segments' tops are close together, which is
-        # precisely the collision case a stagger exists to prevent.
-        y_bounds = (
-            pd.concat([seg_df[["difficulty_label", "y0"]].rename(columns={"y0": "y"}),
-                       seg_df[["difficulty_label", "y1"]].rename(columns={"y1": "y"})])
-            .groupby("difficulty_label", observed=True)["y"]
-            .agg(y_min="min", y_max="max")
-        )
+        # Vertical stagger scaled to the FACET's full y-extent -- and the
+        # extent must come from `df` (every point actually plotted in that
+        # panel, including a prompt with only a baseline or only skill
+        # repeats) rather than from `seg_df` (paired segments only). A lone
+        # unpaired point can easily sit outside the segments' own combined
+        # range, which would make this offset/anchor describe a
+        # sub-region of the panel instead of the whole thing -- the same
+        # failure shape the stagger and `ha` logic below exist to prevent.
+        y_bounds = df.groupby("difficulty_label", observed=True)["cost"].agg(y_min="min", y_max="max")
         y_bounds["y_span"] = (y_bounds["y_max"] - y_bounds["y_min"]).clip(lower=1e-9)
         seg_df = seg_df.merge(y_bounds[["y_span"]], left_on="difficulty_label", right_index=True)
         rank = seg_df.groupby("difficulty_label", observed=True)["_top"].rank(method="first") - 1
         seg_df["label_y"] = seg_df["_top"] + seg_df["y_span"] * (0.16 + rank * 0.24)
 
         # Horizontal anchor: grow the label toward whichever side of the
-        # facet's own x-extent has more room, rather than always growing
-        # from the segment's midpoint outward -- a short segment sitting
-        # near a panel's data extreme (set by some *other*, wider segment
+        # facet's own x-extent (again, from `df`, the whole panel -- not
+        # just the paired segments) has more room, rather than always
+        # growing from the segment's midpoint outward -- a short segment
+        # sitting near a panel's data extreme (set by some *other* point
         # sharing the facet) would otherwise still run its label past the
-        # panel edge even though its anchor point is technically "inside".
-        x_bounds = (
-            pd.concat([seg_df[["difficulty_label", "x0"]].rename(columns={"x0": "x"}),
-                       seg_df[["difficulty_label", "x1"]].rename(columns={"x1": "x"})])
-            .groupby("difficulty_label", observed=True)["x"]
-            .agg(x_min="min", x_max="max")
-        )
+        # panel edge even though its anchor point is technically "inside"
+        # the segments' own combined range.
+        x_bounds = df.groupby("difficulty_label", observed=True)["tokens_k"].agg(x_min="min", x_max="max")
         x_bounds["x_mid"] = (x_bounds["x_min"] + x_bounds["x_max"]) / 2
         x_bounds["x_span"] = (x_bounds["x_max"] - x_bounds["x_min"]).clip(lower=1e-9)
         seg_df = seg_df.merge(x_bounds[["x_mid", "x_span"]], left_on="difficulty_label", right_index=True)
@@ -387,14 +386,20 @@ def plot_comparator_score(
         return False
     box_df = pd.DataFrame(box_rows)
     box_df["group"] = SKILL_LABEL
-    diff_categories = _difficulty_categories(box_df["difficulty"])
+    point_df = pd.DataFrame(point_rows)
+    # Union both frames' difficulty values before deriving categories -- a
+    # prompt that only has a baseline (no scored skill repeats) contributes
+    # rows to `point_df` but not `box_df`; deriving categories from `box_df`
+    # alone would silently turn that prompt's own tier into NaN (a blank
+    # `nan`-titled facet) whenever it's the only prompt carrying that tier.
+    all_difficulties = pd.concat([box_df["difficulty"], point_df["difficulty"]]) if not point_df.empty else box_df["difficulty"]
+    diff_categories = _difficulty_categories(all_difficulties)
     diff_label_categories = [_difficulty_label(d) for d in diff_categories]
     box_df["difficulty"] = pd.Categorical(box_df["difficulty"], categories=diff_categories, ordered=True)
     box_df["difficulty_label"] = box_df["difficulty"].map(_difficulty_label)
     box_df["difficulty_label"] = pd.Categorical(
         box_df["difficulty_label"], categories=diff_label_categories, ordered=True
     )
-    point_df = pd.DataFrame(point_rows)
     if not point_df.empty:
         point_df["difficulty"] = pd.Categorical(point_df["difficulty"], categories=diff_categories, ordered=True)
         point_df["difficulty_label"] = point_df["difficulty"].map(_difficulty_label)
@@ -414,17 +419,22 @@ def plot_comparator_score(
 
     if lifts:
         mean_lift = float(np.mean(lifts))
-        direction = "above" if mean_lift >= 0 else "below"
-        point_word = "point" if round(abs(mean_lift)) == 1 else "points"
+        rounded = round(abs(mean_lift))
+        prompt_word = "prompt" if len(prompt_ids) == 1 else "prompts"
         coverage = (
-            f"across all {len(prompt_ids)} prompts"
+            f"across all {len(prompt_ids)} {prompt_word}"
             if len(lifts) == len(prompt_ids)
-            else f"across the {len(lifts)} of {len(prompt_ids)} prompts with both a baseline and 3 attempts"
+            else f"across the {len(lifts)} of {len(prompt_ids)} {prompt_word} with both a baseline and 3 attempts"
         )
-        lift_line = (
-            f"The skill's mean score is {abs(mean_lift):.0f} {point_word} {direction} the unassisted "
-            f"baseline, on average {coverage}."
-        )
+        if rounded == 0:
+            lift_line = f"The skill's mean score matches the unassisted baseline, on average {coverage}."
+        else:
+            direction = "above" if mean_lift >= 0 else "below"
+            point_word = "point" if rounded == 1 else "points"
+            lift_line = (
+                f"The skill's mean score is {rounded:.0f} {point_word} {direction} the unassisted "
+                f"baseline, on average {coverage}."
+            )
     else:
         lift_line = "Comparator score per prompt, with the skill vs. without."
 
