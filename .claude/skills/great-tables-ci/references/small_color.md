@@ -144,6 +144,23 @@ gt = gt.tab_options(column_labels_border_bottom_color="#CCCCCC",
                     column_labels_border_bottom_width="2px")
 ```
 
+**Column-label text is white — the mechanism is `tab_style`, not `tab_options`.** The
+heading band (Step 4) requires white column-label text over the dark navy fill, but
+`tab_options()` has no parameter that sets it — set it with a `tab_style` call instead:
+
+```python
+from great_tables import GT, style, loc
+
+gt = gt.tab_style(style=style.text(color="white"), locations=loc.column_labels())
+```
+
+`tab_options()` has **no** `column_labels_font_color` or `column_labels_text_color`
+parameter — confirmed via `inspect.signature(GT.tab_options)` (great_tables 0.22.0):
+none of its 141 parameters matches either name. White column-label text is only ever
+set via `tab_style(style.text(color="white"), loc.column_labels())`, as in
+`assets/examples/ranking/ranking.py` — and `gt_check.py`'s `heading-band` check
+(`scripts.md`) enforces exactly this at review time.
+
 ---
 
 ## (b) Column-group vertical dividers
@@ -190,6 +207,22 @@ gt = (
     .tab_options(row_striping_background_color="#F6F6F6")
 )
 ```
+
+**Hallucinated-kwarg guardrail.** `opt_row_striping()` takes **only** `row_striping: bool
+= True` — confirmed via `inspect.signature(GT.opt_row_striping)`. It has no color/style
+parameter of its own. Do not invent `opt_row_striping(background_color=...)`,
+`opt_row_striping(color=...)`, `opt_row_striping(style=...)`, or
+`opt_row_striping(row_striping_background_color=...)` — stripe color is set exactly as
+shown above, via a **separate** `tab_options(row_striping_background_color=...)` call.
+
+The same discipline applies to `heading_*` kwargs on `tab_options()`. Confirmed via
+`inspect.signature(GT.tab_options)` (great_tables 0.22.0), the real ones are
+`heading_title_font_size`, `heading_subtitle_font_size`, `heading_title_font_weight`,
+`heading_subtitle_font_weight`, `heading_background_color`, `heading_align`,
+`heading_padding`, `heading_padding_horizontal`, and `heading_border_bottom_*` /
+`heading_border_lr_*`. There is **no** `heading_font_size`, `heading_text_transform`,
+`heading_font_weight`, `heading_text_font_weight`, `heading_text_color`, or
+`heading_has_subtitle_padding` — none of these exist on `tab_options()`.
 
 ---
 
@@ -280,6 +313,37 @@ technique of bolding a small number of individual outlier CELLS within an
 otherwise-plain column when the request specifically calls for highlighting extremes
 — that's a distinct technique for a few cells, not a consolation treatment for a
 whole measure that lost a fill.
+
+---
+
+## (g) Compact layout — `cols_width` + pinned padding
+
+**Gate:** every table. **Checked mechanically, at INFO/advisory level** — `gt_check.py`'s
+`layout-advisory` rule (`scripts.md`) flags a missing `cols_width(cases={...})` call, or
+an incomplete standard padding block, as a non-blocking INFO note. It never fails a
+table, but it does fire in review, so build it in on the first draft rather than
+patching it in after a check flags it.
+
+Every table sizes each column with `cols_width(cases={...})` to its own content plus a
+small buffer — never left to auto-width. Exact widths are content-dependent (pick per
+column based on your actual header/value text). These six padding values are consistent
+across nearly every table in this project's corpus (one ground truth in this project's
+corpus, `towny_growth_trends.py`, uses `6px` instead of `8px` for the two
+horizontal-padding values) — treat `8px`/`8px` as the default and `6px`/`6px` as an
+acceptable, occasionally-used alternative, not a hard universal constant. Pin whichever
+pair you choose via `tab_options(...)`:
+
+```python
+gt = gt.cols_width(cases={"category_col": "180px", "metric_a": "120px", "metric_b": "110px"})  # illustrative -- size to YOUR content
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
+```
 
 ---
 
@@ -388,25 +452,7 @@ in order: (1) raise `gtsave(vwidth=…, vheight=…)` to give it room; (2) raise
 `gtsave(zoom=…)` to keep it crisp; (3) only then reduce font size, minimally. Never
 *lower* `zoom` below 2.0 to force a fit — that just blurs the render.
 
-**Compact layout — `cols_width` + pinned padding (a consistency addition, not
-currently mechanically checked).** Every table sizes each column with
-`cols_width(cases={...})` to its own content plus a small buffer — never left to
-auto-width. Exact widths are content-dependent (pick per column based on your actual
-header/value text). These six padding values are consistent across nearly every
-table in this project's corpus (one ground truth in this project's corpus,
-`towny_growth_trends.py`, uses `6px` instead of `8px` for the two horizontal-padding
-values) — treat `8px`/`8px` as the default and
-`6px`/`6px` as an acceptable, occasionally-used alternative, not a hard universal
-constant. Pin whichever pair you choose via `tab_options(...)`:
-
-```python
-gt = gt.cols_width(cases={"category_col": "180px", "metric_a": "120px", "metric_b": "110px"})  # illustrative -- size to YOUR content
-gt = gt.tab_options(
-    heading_padding="6px",
-    column_labels_padding="6px",
-    column_labels_padding_horizontal="8px",
-    data_row_padding="5px",
-    data_row_padding_horizontal="8px",
-    source_notes_padding="6px",
-)
-```
+**Compact layout (`cols_width` + pinned padding)** is now checklist item **(g)** above,
+alongside the other Step-5 items — it moved there because `gt_check.py` mechanically
+checks it (INFO/advisory level), so it belongs with the rest of the mandatory pass
+rather than as a render-parameters aside.
