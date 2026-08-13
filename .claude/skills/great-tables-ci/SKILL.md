@@ -57,16 +57,12 @@ it renders the same way whether or not Step 3 produced any Big Color.
 ## Step 7 is a full manual audit — `gt_check.py` does not cover these items
 
 Before you consider the table done, re-check every item below by eye against the
-rendered PNG. `gt_check.py` mechanically enforces its own colored-measure and
-frame rules; it does **not** currently check hairlines, column dividers, stub
-tint, or the footer's two-call convention (an earlier version of this checklist
-claimed it did — that was wrong, and mechanical checks for these are a real but
-separate follow-up, not something to assume exists today):
+rendered PNG. `gt_check.py` mechanically enforces its own colored-measure, frame,
+and hairline rules; it does **not** currently check column dividers, stub tint,
+or the footer's two-call convention (an earlier version of this checklist claimed
+it did — that was wrong, and mechanical checks for these are a real but separate
+follow-up, not something to assume exists today):
 
-- **Body-row hairlines** — a separate `great_tables` option family from the outer
-  frame; `great_tables` renders a hairline by default, so the actual thing to
-  verify is that its color is pinned to the house/washed-neutral tone (see
-  `small_color.md` (a)), not left at the raw library gray.
 - **Column dividers** at each spanner seam, when 2+ column groups exist.
 - **The footer's two-call convention** (`small_color.md` (f)): an analytical
   caption AND a separate source note, not one combined line, on any table with
