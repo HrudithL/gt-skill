@@ -46,6 +46,15 @@ is a computable condition, not a judgment call: if it fires, the action is manda
 **requires** that the stub already exist — **no orphan label** (setting a stubhead
 when there is no `rowname_col` is wrong, PP-25).
 
+Never rely on `df.set_index("col")` for the stub — `great_tables` never reads the
+pandas index; the stub is a real column set via `rowname_col=`. `set_index()`
+defaults to `drop=True`, which removes that column from the frame entirely, so
+`GT(...)` renders without it — the identifier's values vanish, rather than merely
+being demoted to a plain column. Pass `GT(df, rowname_col="col")` on the frame while
+`col` is still a real column (i.e. before any `set_index()` call) — passing
+`rowname_col="col"` once `col` is only the pandas index raises a `KeyError`, since
+it's no longer a column at all.
+
 ### Grouping — a computable trigger (PP-1)
 
 **IF the user's prompt names a grouping dimension** ("grouped by X", "by country",
