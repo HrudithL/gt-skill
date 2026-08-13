@@ -2,22 +2,25 @@
 """Regression test for `_walk_top_level`/`_walk_exported_scope`'s
 2026-08-13 `if __name__ == "__main__":` unwrap.
 
-Confirmed twice in `eval-results/house/SUMMARY.md`
-(`towny_growth_trends/repeat_1`, `airquality_monthly_summary/repeat_1`):
-a candidate that wraps its ENTIRE table-building script in
-`def build_table(): ...` and only calls it via `if __name__ ==
-"__main__": build_table()` is ordinary, idiomatic Python -- it executes
-identically to an inlined top-level script when the harness runs `python
-table.py`, and both real candidates' rendered `table.png` were fine. But
-`_walk_top_level`'s blanket "never descend into a def/class body" rule
-(see its own docstring) made every AST-based check built on it --
-`_frame_present`, `_hairlines_present`, `_render_call_present`, color
-mechanics, formatter detection, etc. -- see an empty top-level scope,
-scoring both candidates ~18% purely from this blind spot, not from any
-real quality problem.
+Confirmed directly against the currently-committed `eval-results/house/
+samples/airquality_monthly_summary/repeat_1/table.py`: a candidate that
+wraps its ENTIRE table-building script in `def build_table(): ...` and
+only calls it via `if __name__ == "__main__": build_table()` is
+ordinary, idiomatic Python -- it executes identically to an inlined
+top-level script when the harness runs `python table.py`, and the real
+candidate's rendered `table.png` was fine. But `_walk_top_level`'s
+blanket "never descend into a def/class body" rule (see its own
+docstring) made every AST-based check built on it -- `_frame_present`,
+`_hairlines_present`, `_render_call_present`, color mechanics, formatter
+detection, etc. -- see an empty top-level scope, scoring it ~18% purely
+from this blind spot, not from any real quality problem.
+(`eval-results/house/SUMMARY.md`'s own round-2 write-up attributes the
+same shape to that round's `towny_growth_trends/repeat_1` too; that
+sweep has since been regenerated, so today's sample in its place no
+longer reproduces it -- not independently re-verified here.)
 
-This constructs a minimal candidate shaped exactly like those two real
-cases (a `build_table()` wrapping `GT`, `hairlines(gt)`, `frame(gt)`, and
+This constructs a minimal candidate shaped exactly like that real case
+(a `build_table()` wrapping `GT`, `hairlines(gt)`, `frame(gt)`, and
 `finalize(gt, path="table.png")`, invoked only via the `__main__` guard)
 and asserts that the checks reading `_walk_exported_scope`/`_walk_top_
 level` now see it -- before this fix, every one of them was `False`.
@@ -152,6 +155,24 @@ if __name__ == "__main__":
 def build_table():
     gt = hairlines(gt)
     finalize(gt, path="table.png")
+"""
+    assert _hairlines_present(src) is False
+    assert _render_call_present(src) is False
+
+
+def test_async_def_guard_target_is_not_unwrapped():
+    # Round-2 review finding: `_module_level_functions` previously included
+    # `async def`, and the guard shape this resolves is a BARE, non-awaited
+    # call -- `build()` on an async function only constructs a coroutine
+    # and never runs its body, so nothing is ever rendered. Must not be
+    # scored as if it were.
+    src = """\
+async def build():
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+
+if __name__ == "__main__":
+    build()
 """
     assert _hairlines_present(src) is False
     assert _render_call_present(src) is False

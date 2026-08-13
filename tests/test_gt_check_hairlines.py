@@ -15,11 +15,16 @@ AST-based detection exists to avoid. `check_hairlines` is now AST-based
 """
 from __future__ import annotations
 
+import glob
 import importlib.util
 import os
 import sys
 
+import pytest
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO_ROOT)
+from runner.comparator import _hairlines_present  # noqa: E402
 GT_CHECK_PATH = os.path.join(
     REPO_ROOT, ".claude", "skills", "great-tables-ci", "scripts", "gt_check.py"
 )
@@ -102,6 +107,66 @@ def test_nothing_set_does_not_pass():
 
 def test_syntax_error_does_not_crash():
     assert gt_check.check_hairlines("def broken(:\n") == []
+
+
+def test_dead_code_does_not_pass():
+    # Round-2 review finding: an earlier version used unrestricted
+    # `ast.walk`, so a `hairlines(gt)` call trapped inside a never-invoked
+    # helper function counted as real styling. Must fail now, matching the
+    # comparator (which only sees the exported call chain).
+    src = "def _never_called():\n    gt = hairlines(gt)\ngt = GT(df)\n"
+    assert _fails(src)
+
+
+def test_white_hairline_is_not_treated_as_transparent():
+    # Round-2 review finding: an earlier version hardcoded "#ffffff"/"#fff"
+    # as invisible, but a white hairline IS visible -- the comparator's own
+    # `_is_effectively_transparent` doesn't treat white as transparent
+    # either. Must pass.
+    src = """\
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#ffffff",
+    table_body_hlines_width="1px",
+)
+"""
+    assert not _fails(src)
+
+
+def test_later_tab_options_call_wins_in_source_order():
+    # Round-2 review finding: "last occurrence wins" must mean last in
+    # SOURCE order, not last in `ast.walk`'s (breadth-first) traversal
+    # order. A disabling first call followed by an enabling second call
+    # must pass -- that's what actually renders at runtime.
+    src = """\
+gt = gt.tab_options(table_body_hlines_style="none")
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#E8E8E8",
+    table_body_hlines_width="1px",
+)
+"""
+    assert not _fails(src)
+
+
+# Only `scripts` (great-tables-ci) candidates ever actually run through
+# gt_check.py -- house/prose have no CI checker (see their own SKILL.md) and
+# use a different helper library (house_table.py's own wrapped-example
+# convention, which the comparator's function-body unwrap handles but this
+# standalone checker has no equivalent for and was never meant to). Testing
+# agreement against house/prose samples would fail on exactly that mismatch
+# without it being a real bug -- scope this to the skill that actually uses it.
+_REAL_SAMPLES = sorted(glob.glob(os.path.join(REPO_ROOT, "eval-results", "scripts", "samples", "*", "*", "table.py")))
+
+
+@pytest.mark.parametrize("path", _REAL_SAMPLES, ids=[os.path.relpath(p, REPO_ROOT) for p in _REAL_SAMPLES])
+def test_checker_agrees_with_comparator_on_every_real_sample(path):
+    # Round-2 review finding: the checker and the real scorer had drifted
+    # apart in several ways (scope, ordering, transparency handling) that
+    # happened not to fire on the checked-in samples -- pin agreement
+    # directly so a future drift is caught here instead of staying latent.
+    source = open(path, encoding="utf-8").read()
+    assert bool(gt_check.check_hairlines(source)) == (not _hairlines_present(source))
 
 
 if __name__ == "__main__":

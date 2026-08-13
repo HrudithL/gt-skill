@@ -483,17 +483,26 @@ def _blocks_target_table_png(
     return False
 
 
-def _module_level_functions(tree: ast.Module) -> dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
-    """name -> node for every `def`/`async def` sitting directly in
-    `tree.body` -- used only to resolve the one special case `_walk_top_
-    level` and `_walk_exported_scope` unwrap (see their docstrings): a
-    bare `if __name__ == "__main__": some_name()` calling a function
-    defined at module level.
+def _module_level_functions(tree: ast.Module) -> dict[str, ast.FunctionDef]:
+    """name -> node for every plain `def` sitting directly in `tree.body`
+    -- used only to resolve the one special case `_walk_top_level` and
+    `_walk_exported_scope` unwrap (see their docstrings): a bare
+    `if __name__ == "__main__": some_name()` calling a function defined
+    at module level.
+
+    Deliberately excludes `async def` (2026-08-13 review finding): the
+    guard shape this resolves is a BARE, non-awaited call
+    (`_main_guard_call_target` requires it) -- calling an async function
+    that way only constructs a coroutine object and never runs its body
+    at all, so unwrapping it would score a script that renders NOTHING as
+    if its whole body executed. An `async def` target now simply fails to
+    resolve (falls back to the unrestricted walk), the same safe default
+    used whenever the guard's target can't be resolved at all.
     """
     return {
         node.name: node
         for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        if isinstance(node, ast.FunctionDef)
     }
 
 
@@ -556,11 +565,16 @@ def _walk_top_level(tree: ast.AST):
     "__main__": build_table()` is ordinary, idiomatic Python that
     executes exactly like an inlined top-level script when the harness
     runs `python table.py` -- but the blanket def/class exclusion above
-    made it invisible to every check built on this function (confirmed
-    twice in `eval-results/house/SUMMARY.md`: `towny_growth_trends/
-    repeat_1` and `airquality_monthly_summary/repeat_1`, both scored
-    ~18% purely from this blind spot, not from any real quality
-    problem). This is ONE narrow, additive special case, not a general
+    made it invisible to every check built on this function. Confirmed
+    directly against the currently-committed `eval-results/house/
+    samples/airquality_monthly_summary/repeat_1/table.py` (scored ~18%
+    purely from this blind spot, not from any real quality problem).
+    `eval-results/house/SUMMARY.md`'s own round-2 write-up attributes the
+    same shape to `towny_growth_trends/repeat_1` in that round's sweep --
+    that sweep has since been regenerated, so the sample currently
+    checked in in its place no longer reproduces it; the attribution is
+    real but not independently re-verifiable against today's tree. This
+    is ONE narrow, additive special case, not a general
     call-graph/reachability analysis (still explicitly out of scope,
     per above): when the `if __name__ == "__main__":` guard's entire
     body is a single bare, zero-argument call to a name that resolves to
