@@ -10,7 +10,7 @@ This file is two things at once:
            stripe, stub_tint, heatmap, status_chip, summary_row, \
            group_emphasis, humanize_labels
 
-   Six of these helpers are similarly-shaped but each take a DIFFERENT
+   Seven of these helpers are similarly-shaped but each take a DIFFERENT
    parameter list — do not reconstruct these from memory. This is the
    complete list; nothing else is accepted (an unlisted kwarg raises
    ``TypeError``, not a silent no-op):
@@ -32,9 +32,10 @@ This file is two things at once:
      and it has no default either.
    * ``finalize(gt, path="table.png", **overrides)`` — ``zoom=``/``expand=``
      ARE valid here (via ``**overrides``, e.g. ``finalize(gt, "table.png",
-     zoom=3)``) — this is the helper that actually takes them. Do NOT
-     reassign its return value to ``gt`` (see ``finalize()``'s own
-     docstring below).
+     zoom=3)``) — this is the helper that actually takes them. Call it
+     LAST, after every other styling call, and never call
+     ``gt.gtsave(...)`` again afterward (see ``finalize()``'s own
+     docstring below for why).
 
 2. **The one worked example.** Running this file directly
    (``python house_table.py``) builds a single synthetic "Regional Product
@@ -322,13 +323,16 @@ def finalize(gt, path="table.png", **overrides):
     ever shrinking font size (see ``references/RULES.md``'s font-size fit
     order).
 
-    DO NOT write ``gt = finalize(gt, ...)``. Unlike ``frame``/``hairlines``/
-    ``band``/``stripe``/``stub_tint`` above — each of which wraps a chainable
-    ``tab_options``/``tab_style`` call and documents "Returns the GT" for
-    exactly that reason — this wraps ``gt.gtsave()``, a save-to-disk action
-    meant to be the LAST call in the script, with nothing chained after it.
-    Call it as a bare statement: ``finalize(gt, "table.png")``, not
-    ``gt = finalize(gt, "table.png")``.
+    Call ``finalize()`` LAST, after every other styling/formatting call on
+    ``gt``. It snapshots the table's rendered HTML at the moment it's called
+    and writes it to disk immediately, so any change made to ``gt``
+    afterward silently never reaches the saved PNG. Likewise, never call
+    ``gt.gtsave(...)`` again after ``finalize()``: it would silently
+    overwrite the file using ``gtsave``'s own defaults (``expand=5``)
+    instead of the pinned ``expand=15``/``zoom=2.0`` above — a real,
+    invisible render-parameter downgrade. Reassigning the return value
+    (``gt = finalize(gt, ...)``) is harmless either way — ``gtsave``
+    returns ``self`` for chaining — so either form is fine.
     """
     opts = {"expand": 15, "zoom": 2.0}
     opts.update(overrides)

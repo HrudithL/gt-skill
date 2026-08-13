@@ -127,7 +127,7 @@ value changes: edit `palettes.md`, then this module — never the reverse.
 
 ### Every helper's real parameters, at a glance
 
-Six similarly-shaped helpers, each with a *different* parameter list — do not
+Seven similarly-shaped helpers, each with a *different* parameter list — do not
 reconstruct these from memory. This is the complete list; nothing else is
 accepted (an unlisted kwarg raises `TypeError`, not a silent no-op):
 
@@ -139,7 +139,7 @@ accepted (an unlisted kwarg raises `TypeError`, not a silent no-op):
 | `band` | `band(gt, *, shade="dark", hue="navy")` | `columns=`, `header_color=` — `band()` takes only `shade`/`hue`; there is no column selector or a raw-color kwarg. |
 | `stripe` | `stripe(gt)` | Any kwarg — `stripe()` takes no parameters besides `gt`. |
 | `stub_tint` | `stub_tint(gt, *, hue="navy")` | `columns=`, `header_color=` — same confusion as `band()`; only `hue` exists. |
-| `finalize` | `finalize(gt, path="table.png", **overrides)` | `zoom=`/`expand=` ARE valid here (via `**overrides`, e.g. `finalize(gt, "table.png", zoom=3)`) — this is the one that actually takes them. Do **not** reassign its return value to `gt`; see the callout below. |
+| `finalize` | `finalize(gt, path="table.png", **overrides)` | `zoom=`/`expand=` ARE valid here (via `**overrides`, e.g. `finalize(gt, "table.png", zoom=3)`) — this is the one that actually takes them. Call it LAST, after all other styling calls, and never call `gt.gtsave(...)` again afterward; see the callout below. |
 
 ### `PALETTE`
 
@@ -246,16 +246,21 @@ gt = stub_tint(gt)                 # or stub_tint(gt, hue="forest") — same #EA
   satisfy the `render-params` check. You may instead call `gt.gtsave(...)`
   directly with `expand`/`zoom` at or above those defaults.
 
-**Do NOT write `gt = finalize(gt, ...)`.** Unlike `frame`/`hairlines`/`band`/
-`stripe`/`stub_tint` above — whose docstrings each explicitly say "Returns the
-GT object" because they wrap a chainable `tab_options`/`tab_style` call —
-`finalize()` wraps `gt.gtsave()`, a save-to-disk action that is meant to be
-the LAST call in the script, with nothing chained after it. Call it as a bare
-statement:
+**Call `finalize()` LAST, after every other styling/formatting call — and
+never call `gt.gtsave(...)` again after it.** `finalize()`/`gtsave()`
+snapshots the table's rendered HTML *at the moment it's called* and writes it
+to disk immediately: any change made to `gt` after that call never reaches
+the saved PNG — silently. And if something calls `gt.gtsave(...)` again
+afterward (a leftover debug call, or confusion about which save is "the real
+one"), it silently overwrites the file using `gtsave`'s own defaults
+(`expand=5`) instead of `finalize`'s pinned defaults (`expand=15`) — a real,
+invisible render-parameter downgrade. Reassigning its return value
+(`gt = finalize(gt, ...)`) is harmless either way — `gtsave` returns `self`
+for chaining — so either form below is fine:
 
 ```python
 gt = frame(gt)
 gt = hairlines(gt)
-finalize(gt, "table.png")            # NOT `gt = finalize(gt, "table.png")`
-                                      # or: gt.gtsave("table.png", expand=15, zoom=2.0)
+finalize(gt, "table.png")            # last call — no further styling or gtsave() after this
+                                      # or: gt = finalize(gt, "table.png")
 ```
