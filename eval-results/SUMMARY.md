@@ -579,3 +579,35 @@ would eliminate. Combined with the already-known sources (sp500's
 ground-truth month-label ambiguity, occasional Big-Color restraint lapses,
 towny's spanner/ranking-metric ambiguity), this round's remaining spread has
 no fixable mechanical cause left that this effort's deep-dive could find.
+
+**CAVEAT (2026-08-13, added after this round's numbers above were
+committed):** the "sp500's ground-truth month-label ambiguity" item cited
+above as an unfixable source of spread was, in fact, a real comparator bug
+in row/date-identity matching — `normalize_id()` in `runner/execution_tier.py`
+compared date-like row/stub labels as plain strings, so semantically
+identical months rendered in different (equally legitimate) formats, e.g.
+ground truth's `"Jan 2010"` vs. a candidate's `"2010-01"` or
+`.dt.to_period("M")` output, scored as a complete row-set mismatch. This
+has been found and fixed (`fix/comparator-date-aware-row-matching`, PR
+#108). As a direct, measured consequence, `sp500_monthly_performance`
+scores in this file are **understated** for `prose` and `scripts`: their
+sweep candidates commonly used the `"2010-01"`-style format, while `house`'s
+candidates already happened to match the ground truth's `"%b %Y"` format,
+so `house` is unaffected. Directly measured impact on the "Row/entity
+selection identity" mechanical check alone (re-executing the actual
+committed candidate scripts with the old vs. new `normalize_id`): `prose`
+repeat_1 and repeat_3 flip from 0/10 (FAIL, complete row-set mismatch) to
+10/10 (PASS); all 3 `scripts` repeats flip from 0/10 to 10/10; `prose`
+repeat_2 and all 3 `house` repeats were already 10/10 and are unchanged.
+Since the mean-score margin between `house` (82.4%) and `prose` (81.7%)
+above is well under 1 percentage point, and this fix moves multiple
+`sp500_monthly_performance` repeats for `prose`/`scripts` up by a full
+mechanical-check's worth of points (with a likely further, unquantified
+uplift on the row-alignment-gated "Computed/derived value correctness"
+check for the same repeats), **the `house`-over-`prose` ranking call in
+this round should be treated as stale pending a fresh recompute.** That
+recompute (a full `eval-results/**` regenerate reflecting the fixed
+`normalize_id`) is deliberately deferred to a separate, small follow-up PR
+— not done as part of #108, to keep that PR's diff focused on the
+comparator code fix alone. Until that recompute lands, do not cite this
+round's `house`-vs-`prose` ranking as settled.

@@ -23,12 +23,18 @@ behavior when none match.
 from __future__ import annotations
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from runner.execution_tier import _MISSING_ID, normalize_id  # noqa: E402
+from runner.execution_tier import (  # noqa: E402
+    _DATE_YM_PREFIX,
+    _DATE_YMD_PREFIX,
+    _MISSING_ID,
+    normalize_id,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -97,8 +103,9 @@ def test_month_and_day_granularity_keys_have_visibly_different_shapes():
     month_key = normalize_id("Jan 2010")
     day_key = normalize_id("2010-01-15")
     assert month_key != day_key
-    assert not month_key.startswith("__date_ymd__")
-    assert day_key.startswith("__date_ymd__")
+    assert not month_key.startswith(_DATE_YMD_PREFIX)
+    assert day_key.startswith(_DATE_YMD_PREFIX)
+    assert month_key.startswith(_DATE_YM_PREFIX)
 
 
 # ---------------------------------------------------------------------------
@@ -112,3 +119,65 @@ def test_none_still_maps_to_missing_id_sentinel():
 
 def test_missing_id_sentinel_does_not_collide_with_literal_none_text():
     assert normalize_id(None) != normalize_id("None")
+
+
+# ---------------------------------------------------------------------------
+# pandas/datetime default stringification (round-4 review finding #1).
+# ---------------------------------------------------------------------------
+
+
+def test_pandas_timestamp_default_str_form_matches_equivalent_date():
+    # `str(pd.Timestamp("2010-01-15"))` / `str(datetime.datetime(2010, 1, 15))`
+    # both render as "2010-01-15 00:00:00" -- the single most common way a
+    # plain (non-Period) pandas datetime column stringifies. Avoid a hard
+    # pandas dependency in this test file; the stub string is what actually
+    # reaches `normalize_id` regardless of which object produced it.
+    assert normalize_id("2010-01-15 00:00:00") == normalize_id("2010-01-15")
+    assert normalize_id(str(datetime(2010, 1, 15))) == normalize_id("2010-01-15")
+
+
+# ---------------------------------------------------------------------------
+# Zero-padding round-trip guard (round-4 review finding #2): non-zero-padded
+# numbers must NOT silently merge with their zero-padded equivalents.
+# ---------------------------------------------------------------------------
+
+
+def test_non_zero_padded_month_does_not_merge_with_zero_padded():
+    assert normalize_id("2010-1") != normalize_id("2010-01")
+
+
+# ---------------------------------------------------------------------------
+# Near-misses: strings that must NOT match any date format, and must fall
+# back to plain casefold instead of silently matching the wrong thing.
+# ---------------------------------------------------------------------------
+
+
+def test_near_miss_strings_fall_back_to_plain_casefold():
+    assert normalize_id("October") == "october"
+    assert normalize_id("2010") == "2010"
+    assert normalize_id("Jan 2010 sales") == "jan 2010 sales"
+    assert normalize_id("Jan-2010") == "jan-2010"
+    assert normalize_id("2010/01") == "2010/01"
+    assert normalize_id("15 Jan 2010") == "15 jan 2010"
+
+
+# ---------------------------------------------------------------------------
+# Sentinel collision-safety (round-4 review finding #3): a literal candidate
+# string shaped like the internal prefix must not collide with a real date.
+# ---------------------------------------------------------------------------
+
+
+def test_literal_prefix_shaped_string_does_not_collide_with_real_date():
+    # If the prefix were plain ASCII (e.g. "__date_ym__2010-01"), a
+    # hypothetical row id that happens to read exactly that would collide
+    # with the real date-normalization output for "Jan 2010"/"2010-01". The
+    # `\x00`-wrapped prefix makes this structurally impossible: no
+    # user-authored identifier can contain a `\x00` control character.
+    fake_id = "__date_ym__2010-01"
+    assert normalize_id(fake_id) != normalize_id("Jan 2010")
+    assert normalize_id(fake_id) != normalize_id("2010-01")
+    assert normalize_id(fake_id) == fake_id.casefold()
+
+    fake_day_id = "__date_ymd__2010-01-15"
+    assert normalize_id(fake_day_id) != normalize_id("2010-01-15")
+    assert normalize_id(fake_day_id) == fake_day_id.casefold()
