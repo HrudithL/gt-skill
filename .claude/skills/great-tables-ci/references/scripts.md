@@ -82,6 +82,7 @@ Every rule maps to the single reference file that pins its fix (this is the
 | `domain-symmetry` | FAIL | A signed diverging `domain=` that is **not symmetric about 0** | `big_color/diverging_fill.md` |
 | `domain-present` | FAIL | A literal `data_color(...)` with **no explicit `domain=`** | `big_color/column_gradient_fill.md` |
 | `frame-missing` | FAIL | No enclosing boxed frame, or LEFT/RIGHT border **style** left at `none` (color/width alone is invisible) | `small_color.md` |
+| `hairlines-missing` | FAIL | No body-row hairline pinned to the palette neutral — either `hairlines(gt)` or an explicit `table_body_hlines_*` `tab_options(...)` call | `small_color.md` |
 | `heading-band` | FAIL | No band, a hex other than the fixed branding navy (`#08306B`), column labels not bold, or a band without white label text — 2026-08-12: every table uses the SAME band regardless of Big Color; there is no more light/dark branching | `palettes.md` |
 | `render-params` | FAIL | `gtsave` `zoom < 2.0` or `expand <= 5` (INFO if no `gtsave` call is detected) | `small_color.md` |
 | `striping-gate` | FAIL | Striping not enabled on a body that is **not genuinely 100% color-filled** — 2026-08-12: striping is the default with no row-count floor; the old `>=10 rows` gate is gone | `small_color.md` |
@@ -115,7 +116,7 @@ source-only checks still run.
 Import the helpers you need at the top of `table.py`:
 
 ```python
-from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
+from gt_consistency import PALETTE, frame, hairlines, finalize, heatmap, band, stripe, stub_tint
 ```
 
 These helpers encode zero design decisions — they only guarantee identical
@@ -200,13 +201,18 @@ gt = stripe(gt)
 gt = stub_tint(gt)                 # or stub_tint(gt, hue="forest") — same #EAF0F6 output
 ```
 
-### `frame(gt, ...)` and `finalize(gt, ...)` — global constants
+### `frame(gt, ...)`, `hairlines(gt, ...)`, and `finalize(gt, ...)` — global constants
 
 - `frame(gt, color=None, width="1px", style="solid")` — the non-negotiable
   boxed enclosing border on all four sides. Sets the side border **style**
   explicitly (great-tables defaults it to `none`), which is what the
   `frame-missing` check requires. Defaults `color` to
   `PALETTE["neutral"]["column_label_rule"]`.
+- `hairlines(gt, color=None, width="1px", style="solid")` — pins the body-row
+  hairline to `PALETTE["neutral"]["hairline"]` (`#E8E8E8`). A different option
+  family from `frame()` above — `great_tables` already renders a hairline by
+  default, so skipping this leaves the raw library gray instead of the
+  branded tone. This is what the `hairlines-missing` check requires.
 - `finalize(gt, path="table.png", **overrides)` — `gt.gtsave(path, expand=15,
   zoom=2.0)`, letting any override (e.g. `vwidth`/`vheight`) win. These values
   satisfy the `render-params` check. You may instead call `gt.gtsave(...)`
@@ -214,5 +220,6 @@ gt = stub_tint(gt)                 # or stub_tint(gt, hue="forest") — same #EA
 
 ```python
 gt = frame(gt)
+gt = hairlines(gt)
 finalize(gt, "table.png")            # or: gt.gtsave("table.png", expand=15, zoom=2.0)
 ```

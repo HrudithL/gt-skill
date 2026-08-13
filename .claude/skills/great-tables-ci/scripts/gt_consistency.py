@@ -129,6 +129,29 @@ def frame(gt, color=None, width="1px", style="solid"):
     )
 
 
+def hairlines(gt, color=None, width="1px", style="solid"):
+    """Pin the body-row hairline to the palette's neutral hex.
+
+    Sets ``table_body_hlines_style``/``_color``/``_width`` — the thin rule
+    BETWEEN ordinary rows. Great Tables renders this line ON BY DEFAULT even
+    if nothing ever calls this helper, so the gap this closes is not "no line
+    at all," it's "the raw library default gray instead of the pinned
+    ``PALETTE["neutral"]["hairline"]`` (``#E8E8E8``)" — a different option
+    family from ``frame()``'s outer table border, so this is its own helper
+    rather than folded into that one. Unconditional: every table gets it,
+    same as ``frame()``.
+
+    Returns the GT object (``tab_options`` is chainable).
+    """
+    if color is None:
+        color = PALETTE["neutral"]["hairline"]
+    return gt.tab_options(
+        table_body_hlines_style=style,
+        table_body_hlines_color=color,
+        table_body_hlines_width=width,
+    )
+
+
 def finalize(gt, path="table.png", **overrides):
     """Save the table with the CONSISTENCY_DEV ``gtsave`` defaults.
 

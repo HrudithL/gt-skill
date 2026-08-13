@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""Regression test for `_walk_top_level`/`_walk_exported_scope`'s
+2026-08-13 `if __name__ == "__main__":` unwrap.
+
+Confirmed directly against the currently-committed `eval-results/house/
+samples/airquality_monthly_summary/repeat_1/table.py`: a candidate that
+wraps its ENTIRE table-building script in `def build_table(): ...` and
+only calls it via `if __name__ == "__main__": build_table()` is
+ordinary, idiomatic Python -- it executes identically to an inlined
+top-level script when the harness runs `python table.py`, and the real
+candidate's rendered `table.png` was fine. But `_walk_top_level`'s
+blanket "never descend into a def/class body" rule (see its own
+docstring) made every AST-based check built on it -- `_frame_present`,
+`_hairlines_present`, `_render_call_present`, color mechanics, formatter
+detection, etc. -- see an empty top-level scope, scoring it ~18% purely
+from this blind spot, not from any real quality problem.
+(`eval-results/house/SUMMARY.md`'s own round-2 write-up attributes the
+same shape to that round's `towny_growth_trends/repeat_1` too; that
+sweep has since been regenerated, so today's sample in its place no
+longer reproduces it -- not independently re-verified here.)
+
+This constructs a minimal candidate shaped exactly like that real case
+(a `build_table()` wrapping `GT`, `hairlines(gt)`, `frame(gt)`, and
+`finalize(gt, path="table.png")`, invoked only via the `__main__` guard)
+and asserts that the checks reading `_walk_exported_scope`/`_walk_top_
+level` now see it -- before this fix, every one of them was `False`.
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from runner.comparator import (  # noqa: E402
+    _frame_present,
+    _hairlines_present,
+    _render_call_present,
+)
+
+_WRAPPED_SRC = """\
+from great_tables import GT
+
+def build_table():
+    gt = GT(df)
+    gt = gt.data_color(columns=["x"])
+    gt = hairlines(gt)
+    gt = frame(gt)
+    finalize(gt, path="table.png")
+
+if __name__ == "__main__":
+    build_table()
+"""
+
+
+def test_wrapped_script_hairlines_call_is_recognized():
+    assert _hairlines_present(_WRAPPED_SRC) is True
+
+
+def test_wrapped_script_frame_call_is_recognized():
+    assert _frame_present(_WRAPPED_SRC) is True
+
+
+def test_wrapped_script_render_call_is_recognized():
+    assert _render_call_present(_WRAPPED_SRC) is True
+
+
+def test_unwrap_is_one_level_only_nested_helper_def_still_excluded():
+    # `build_table` itself defines a nested helper that also calls
+    # `hairlines(...)` -- the unwrap only inlines `build_table`'s own
+    # body, it does NOT recurse into a `def` nested inside that body, so
+    # a call trapped inside a NEVER-INVOKED nested helper still doesn't
+    # count (same bounded-scope guarantee `_walk_top_level` always gave
+    # for any other nested def).
+    src = """\
+from great_tables import GT
+
+def build_table():
+    def _never_called_helper():
+        return hairlines(gt)
+    gt = GT(df)
+    finalize(gt, path="table.png")
+
+if __name__ == "__main__":
+    build_table()
+"""
+    assert _hairlines_present(src) is False
+
+
+def test_main_guard_calling_an_unresolvable_name_is_left_alone():
+    # `run()` isn't a module-level `def` here (e.g. imported from
+    # elsewhere) -- nothing to unwrap, and this must not raise.
+    src = """\
+from other_module import run
+
+if __name__ == "__main__":
+    run()
+"""
+    assert _hairlines_present(src) is False
+    assert _render_call_present(src) is False
+
+
+def test_self_referential_guard_does_not_hang():
+    # Review finding (2026-08-13): a function whose OWN body contains
+    # another `__main__`-guard shape re-triggered the same special case
+    # inside `_walk_top_level`'s stack loop, which never terminated for a
+    # self-referential `def build(): if __name__=="__main__(): build()`.
+    # `guard_ids`/`body_index` now restrict the unwrap to the guard
+    # literally sitting in `tree.body` -- anything reached BY an unwrap
+    # gets no second chance to unwrap again.
+    src = """\
+def build():
+    if __name__ == "__main__":
+        build()
+
+if __name__ == "__main__":
+    build()
+"""
+    # Must terminate and must not raise -- the exact regression was an
+    # unbounded `while stack` loop, not a wrong return value.
+    assert _hairlines_present(src) is False
+
+
+def test_chained_guards_do_not_unwrap_transitively():
+    # Review finding (2026-08-13): `a()`'s own body contains a SECOND
+    # `__main__`-guard calling `b()`, and the pre-fix code unwrapped both,
+    # contradicting the "one level of unwrapping only" design intent this
+    # module's docstrings state. Only `a`'s own body is inlined; `b`'s
+    # `hairlines(gt)` call, one level deeper, must not be seen.
+    src = """\
+def b():
+    gt = hairlines(gt)
+
+def a():
+    if __name__ == "__main__":
+        b()
+
+if __name__ == "__main__":
+    a()
+"""
+    assert _hairlines_present(src) is False
+
+
+def test_guard_before_def_is_not_unwrapped():
+    # Review finding (2026-08-13): the guard's target `def` must appear
+    # BEFORE the guard in source order -- calling it any earlier raises a
+    # real `NameError` when the harness runs `python table.py`, so this is
+    # not an inlined-equivalent script and must not be scored as if it
+    # rendered fine.
+    src = """\
+if __name__ == "__main__":
+    build_table()
+
+def build_table():
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+"""
+    assert _hairlines_present(src) is False
+    assert _render_call_present(src) is False
+
+
+def test_async_def_guard_target_is_not_unwrapped():
+    # Round-2 review finding: `_module_level_functions` previously included
+    # `async def`, and the guard shape this resolves is a BARE, non-awaited
+    # call -- `build()` on an async function only constructs a coroutine
+    # and never runs its body, so nothing is ever rendered. Must not be
+    # scored as if it were.
+    src = """\
+async def build():
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+
+if __name__ == "__main__":
+    build()
+"""
+    assert _hairlines_present(src) is False
+    assert _render_call_present(src) is False
+
+
+def test_required_arg_guard_target_is_not_unwrapped():
+    # Round-3 review finding: `_main_guard_call_target` only checks the
+    # CALL SITE is zero-argument, not that the resolved `def` can accept
+    # that -- `def build_table(df):` called bare as `build_table()`
+    # raises `TypeError` and renders nothing, the same "scored as if it
+    # ran, but it didn't" bug class as the async/NameError cases above.
+    src = """\
+def build_table(df):
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+
+if __name__ == "__main__":
+    build_table()
+"""
+    assert _hairlines_present(src) is False
+    assert _render_call_present(src) is False
+
+
+def test_defaulted_or_variadic_guard_target_is_still_unwrapped():
+    # A default, or *args/**kwargs, still makes the bare zero-arg call
+    # site valid -- must not be excluded by the arity check above.
+    for params in ("df=None", "*args, **kwargs"):
+        src = f"""\
+def build_table({params}):
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+
+if __name__ == "__main__":
+    build_table()
+"""
+        assert _hairlines_present(src) is True, params
+
+
+def test_decorated_guard_target_is_not_unwrapped():
+    # Round-5 review finding: a decorator can replace the function
+    # entirely (or wrap it requiring an argument) -- calling the bare
+    # name then runs the decorator's wrapper, not the plain body, so
+    # crediting the undecorated body is the same fabricated-execution bug
+    # the async/arity/ordering checks above exist to prevent.
+    src = """\
+def tag(fn):
+    return "not a function"
+
+@tag
+def build_table():
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+
+if __name__ == "__main__":
+    build_table()
+"""
+    assert _hairlines_present(src) is False
+
+
+def test_class_shadowed_def_is_not_unwrapped():
+    # Round-5 review finding: a LATER `class build_table: ...` shadows an
+    # earlier `def build_table(): ...` at real runtime exactly like a
+    # later same-name `def` already does -- generalizes that resolution
+    # to every kind of rebinding, not just def-vs-def.
+    src = """\
+def build_table():
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+
+class build_table:
+    pass
+
+if __name__ == "__main__":
+    build_table()
+"""
+    assert _hairlines_present(src) is False
+
+
+def test_plain_unwrapped_script_is_unaffected():
+    # A normal, already-linear top-level script (no wrapper function at
+    # all) must keep working exactly as before.
+    src = """\
+from great_tables import GT
+
+gt = GT(df)
+gt = hairlines(gt)
+gt = frame(gt)
+finalize(gt, path="table.png")
+"""
+    assert _hairlines_present(src) is True
+    assert _frame_present(src) is True
+    assert _render_call_present(src) is True
