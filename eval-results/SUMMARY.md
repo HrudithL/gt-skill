@@ -519,10 +519,10 @@ eval-results/
     plots/
       make_plots.py           re-scores the LATEST local runs/sweep/*_<skill>_6prompts and regenerates
                                the 2 PNGs below -- see the warning below before running this
-      usage.png                 tokens (x) vs. cost (y) per prompt, baseline -> skill as a connected
-                                 arrow, faceted by difficulty tier
-      comparator_score.png      comparator score: 3 repeats (box, height = consistency) vs. baseline
-                                 (point), faceted by difficulty tier, with a computed mean-lift subtitle
+      usage.png                 grouped bar chart: bar height = tokens per prompt (skill vs.
+                                 baseline), cost per invocation labeled above each bar
+      comparator_score.png      evaluation score: 3 repeats (box, height = consistency) vs. baseline
+                                 (point), all 6 prompts in one view, with a computed mean-lift subtitle
     samples/<prompt>/<variant>/  curated table.py + table.png + comparator report.txt
 ```
 
