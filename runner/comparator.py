@@ -425,6 +425,8 @@ def _blocks_target_table_png(
     path_kwarg: str,
     path_index: int,
     var_literals: dict[tuple[int, int], str] | None = None,
+    *,
+    default_path: str | None = None,
 ) -> bool:
     """True if any call block's path argument plausibly targets `table.png`.
 
@@ -440,6 +442,23 @@ def _blocks_target_table_png(
     path to a known literal, in which case it's checked directly and does
     NOT fall back to the benefit of the doubt (a resolved-but-wrong
     literal is a real, provable failure, not an unknowable one).
+
+    Fresh-sweep finding (2026-08-12): a call whose path argument is
+    absent entirely (neither `path_kwarg` nor a positional at `path_
+    index` is set) previously always fell through to `continue` --
+    treated as "nothing learned from this call." That's correct for
+    `gtsave(file, ...)` (`file` has no default in `great_tables`'s own
+    `GT.save`/`gtsave` signature -- omitting it is a `TypeError`, not a
+    fallback to `table.png`), but WRONG for `great-tables-house`'s and
+    `great-tables-ci`'s `finalize(gt, path="table.png", **overrides)`
+    helper, whose OWN signature defaults `path` to `"table.png"` --  a
+    bare `finalize(gt)` call genuinely renders to `table.png` via that
+    documented default, not to nothing. `default_path` lets a caller that
+    KNOWS its call form has such a default (only the `finalize(...)`
+    call site does; `gtsave(...)` passes nothing here and keeps the old
+    "no path argument -- can't tell" behavior) supply it so an absent
+    argument is treated as that resolved literal instead of being
+    silently skipped.
     """
     for pos, b in blocks:
         path_val = convergence._kwarg_value(b, path_kwarg)
@@ -449,6 +468,8 @@ def _blocks_target_table_png(
             ]
             path_val = positionals[path_index] if len(positionals) > path_index else None
         if path_val is None:
+            if default_path is not None and convergence._targets_table_png(default_path):
+                return True
             continue
         stripped = path_val.strip()
         if var_literals and pos in var_literals and re.fullmatch(r"[A-Za-z_]\w*", stripped):
@@ -1009,7 +1030,30 @@ def _hairlines_present(source: str) -> bool:
     `_has_active_tab_style_border`, and (round 8) requires the border's
     own `locations=` to actually target `loc.body(...)` -- a hairline
     scoped to the column-labels row or the stub isn't a body row rule.
+
+    Fresh-sweep finding (2026-08-12, same family as `_frame_present`'s
+    round-6 `frame(...)` helper check): `.claude/skills/great-tables-
+    house/scripts/house_table.py` defines `hairlines(gt, color=None,
+    width="1px", style="solid")` -- an UNCONDITIONAL helper (every table
+    gets it, per its own docstring) whose body sets `table_body_hlines_
+    style`/`_color`/`_width` via `tab_options(...)` INSIDE the helper's
+    own function body, invisible to source-level parsing of a CANDIDATE
+    script that only imports/calls `hairlines(gt)` -- it never inlines
+    the helper's own body. Every `house`-skill candidate correctly
+    calling this taught helper previously scored `hairlines_present=
+    False` regardless, because neither `_option_line_present` nor
+    `_has_visible_tab_style_border` can see literal `tab_options` kwargs
+    that only exist inside the helper's own definition. Recognizing a
+    genuine `hairlines(...)` CALL itself (via `_has_real_call`, the same
+    AST-based approach `_frame_present` already uses for its own
+    `frame(...)` helper -- immune to a candidate merely DEFINING its own
+    `hairlines` function, a comment, or a docstring mention) closes this
+    gap the same way, as an additional detection mechanism alongside the
+    existing literal/tab_style checks below (which still correctly cover
+    scripts that set the border directly instead of using this helper).
     """
+    if _has_real_call(source, "hairlines", allow_bare=True):
+        return True
     if _option_line_present(source, "table_body_hlines"):
         return True
     return _has_visible_tab_style_border(source, "top|bottom", r"loc\s*\.\s*body\s*\(")
