@@ -1,65 +1,128 @@
 # `scripts` skill — eval summary
 
-Sweep: `runs/sweep/20260809_124542_scripts_6prompts` — 6 corpus prompts x (3
+Sweep: `runs/sweep/20260812_212019_scripts_6prompts` — 6 corpus prompts x (3
 repeats + 1 auto-baseline), Haiku, scored by `runner.comparator.compare()`
 against each prompt's ground truth. Full detail in [`metrics.json`](metrics.json).
-This is a fresh sweep (2026-08-09), not the 2026-08-07 one the consensus-
-tuning passes below were validated against — see the top-level
-[`SUMMARY.md`](../SUMMARY.md)'s "Data refresh" section.
 
-**Comparator methodology (2026-08-09, 2 passes):** 6 checks were removed
-from `runner/comparator.py` — 3 uniformly near-zero across every skill
-(hero-column formatting, stub tint/grey-budget, caption-not-restating-
-subtitle), then 3 more flat/non-discriminating across every skill (title/
-subtitle/caption/source presence, subtitle quality, color theme/palette
-taste). See the top-level [`SUMMARY.md`](../SUMMARY.md) for the full
-removal rationale and cross-skill comparison. Scores below are **not
-comparable** to this file's pre-2026-08-09 numbers (denominator shrank
-114 -> 97 pts).
+**This is the third and final sweep round, run after three landed fixes,
+in order:** (1) the skill-realignment + comparator-generalization effort
+(PRs #93–#101 — redesigned ground truths, removed the ≤2-measure cap on
+colored-measure credit, made the header band/stub tint fixed-and-universal,
+made striping apply by default); (2) the `runner/convergence.py`
+Header-branding/Stub-tint parsing fix (PR #102 — fixed misreading comments
+as calls, taking the first matching call instead of the last, and a
+hue-defaulting bug that made a correctly-styled header score as missing);
+and (3) the `hairlines`/`finalize` helper-detection fix (PR #103 — a
+`house`-specific parsing gap; see `house/SUMMARY.md` and the note below on
+how it affects `scripts` at much smaller scale). All three landed on `main`
+before this sweep ran. **This supersedes round 2's numbers for the same
+reason round 2 superseded round 1: a real scoring bug got fixed, not a
+skill change** — there is no valid "before → after %" to compute across
+rounds for `scripts` in general; see the top-level
+[`SUMMARY.md`](../SUMMARY.md)'s "Data refresh" section for the full
+history.
 
-**Comparator bug fixes (2026-08-11):** two bugs were fixed, both of which
-happened to affect this skill more than the others.
-1. `check_render_mechanics` was scoring 0/2 for every candidate that
-   renders via a bare `finalize(gt, ...)` statement rather than
-   `gt = gt.gtsave(...)` — a comparator detection bug (7 of this skill's
-   18 skill invocations used that pattern).
-2. Separately, `runner/execution_tier.py`/`convergence.py`'s no-render
-   stub for `GT.gtsave`/`GT.save` returned `None` instead of `self`,
-   breaking the `gt = gt.gtsave(...)` *reassignment* idiom specifically —
-   `towny_growth_trends/repeat_1`'s candidate used exactly that idiom,
-   so it failed Tier-2 execution entirely (scored 21/81, 25.9%) even
-   though its rendered PNG was completely fine. Fixed; that invocation
-   now executes and was re-scored for real (including a fresh judge
-   call, since its previous judge result was cached as "unavailable"
-   under the old, broken execution status and that's no longer true) —
-   it now scores 68/88 (77.3%).
+**One invocation, `airquality_monthly_summary/repeat_1`, has no score.**
+The same still-open `runner/comparator.py` bug documented in round 2's
+`prose/SUMMARY.md` (`check_caption_keywords` crashes with `TypeError` when
+a candidate's caption text isn't a static string literal) hit a different
+invocation this round — this one, on `scripts`, not `prose`'s
+`sp500_monthly_performance/repeat_2` from round 2 (which does not crash on
+this round's `prose` data; see `prose/SUMMARY.md`). Confirms the bug is
+real and candidate-text-dependent rather than tied to one specific
+skill/prompt. Out of scope to fix here (touches `runner/`); this file's
+mean is computed over the other 17 invocations, worked around per this
+task's instructions (a small scratchpad script that catches this one
+specific exception per-invocation, reusing `make_plots.py`'s own
+unmodified plotting/scoring code otherwise — `runner/comparator.py` itself
+was not touched).
 
-Numbers below reflect both fixes. See the top-level
-[`SUMMARY.md`](../SUMMARY.md) for the full root-cause writeups.
-
-| Metric (mean across 6 prompts) | `scripts` skill | baseline (no skill) |
+| Metric (mean across scored invocations) | `scripts` skill | baseline (no skill) |
 |---|---|---|
-| Comparator total score | **66.1%** | 24.7% |
-| Cost per invocation | $0.175 | $0.090 |
-| Score spread across 3 repeats | 16.9 points | n/a (1 run) |
+| Comparator total score | **82.3%** (n=17) | 22.2% |
+| Data-compliance split | 75.9% (591/779 pts) | — |
+| Formatting-compliance split | 88.9% (666/749 pts) | — |
+| Cost per invocation | $0.184 | $0.068 |
+| Repeat-to-repeat spread (mean across 6 prompts) | 20.2 points | n/a (1 run) |
 
 See [`plots/cost.png`](plots/cost.png), [`plots/tokens.png`](plots/tokens.png),
 [`plots/consistency.png`](plots/consistency.png),
 [`plots/comparator_score.png`](plots/comparator_score.png).
 
-`great-tables-ci` is the same 7-step-flowchart skill as `prose` plus a
-mechanical checker loop (`gt_check.py`) it runs and fixes against before
-finishing. On this sweep `house` edges it out on mean score (see the
-top-level [`SUMMARY.md`](../SUMMARY.md) — that ordering is close enough to
-the repeat-to-repeat spread that it shouldn't be read as settled either
-way), and the checker loop remains the **most expensive and least
-consistent** of the three real skills regardless — the loop itself is a
-source of run-to-run variance (how many issues it happens to catch, how
-many fix attempts it takes) that a higher mean score, on sweeps where it
-has one, doesn't offset. See
-[`progressive_disclosure.md`](progressive_disclosure.md) for a transcript
-excerpt showing both halves: reference reads before writing code, then a
-targeted checker-driven fix pass after.
+`scripts` again scores highest of the three real skills on this sweep
+(82.3% vs. `house`'s 79.4% and `prose`'s 79.0% — see the top-level
+`SUMMARY.md` for the full cross-skill read). `sp500_monthly_performance` is
+by far its hardest prompt (59.8% mean, vs. 74–96% everywhere else) — same
+as for `prose` and `house`. The checker loop (`gt_check.py`) is also the
+most expensive of the three real skills here ($0.184/invocation, vs. $0.182
+for `prose` and $0.134 for `house`), consistent with every prior sweep this
+file has reported.
+
+## What the comparator still fails `scripts` on
+
+Computed across the 17 scored (non-baseline) invocations, sorted by how
+often each check fails or partially fails:
+
+1. **Title quality (judge)** — 5/6 (83%) fail or partially fail, mean
+   66.7%, judge-scored rather than mechanical — mostly small
+   specificity gaps, not wrong titles.
+   - `[islands_sizes/repeat_2]` "judge score 2/5 -- The candidate's title
+     is 'Island Sizes' — generic and flat. The ground truth's title is
+     'Islands of the World, by Size,' which establishes both the scope
+     (world) and the ordering principle (by size)."
+2. **Column order quality (judge)** — 5/6 (83%) fail or partially fail,
+   mean 50.0%.
+   - `[islands_sizes/repeat_1]` "judge score 2/5 -- The candidate orders
+     rows alphabetically ... rather than by descending size as the ground
+     truth does ... This alphabetic order breaks the core analytical
+     story."
+3. **Caption keyword coverage** — 14/17 (82%) fail or partially fail, mean
+   60.8%.
+   - `[gtcars_hp_price/repeat_1]` "3/6 caption-keyword rules satisfied;
+     caption missing: ['bentley', 'corvette', "don't move together"]" —
+     same specific-outlier-naming gap seen in `prose` and `house` on this
+     exact prompt; this looks like a corpus-wide pattern (the model
+     writes a directionally-correct caption without the two named cars
+     the ground truth's caption calls out), not a `scripts`-specific one.
+4. **Column set shown vs. hidden** — 12/17 (71%) fail or partially fail,
+   mean 58.8%.
+   - `[airquality_monthly_summary/repeat_2]` "visible-column overlap 0.00
+     (candidate-only=['Month', 'Ozone', 'Temp', 'Wind'],
+     missing=['avg_ozone', 'avg_temp', 'avg_wind', 'month'])" — a full
+     rename the matcher can't reconcile.
+5. **Column-label concept-correctness (judge)** — 4/6 (67%) fail or
+   partially fail, mean 33.3%.
+   - `[islands_sizes/repeat_3]` "judge score 1/5 -- The candidate's column
+     header reads only 'size' while the ground truth clearly labels it
+     'Size (thousand sq. mi.)' ... The candidate's subtitle says 'Land
+     area in thousands of km²' — a different unit entirely."
+6. **Computed/derived value correctness** — 9/17 (53%) fail or partially
+   fail, mean 62.9%.
+   - `[airquality_monthly_summary/repeat_2]` "0/3 canonical measures have
+     a value-matching candidate column; unmatched: ['avg_temp',
+     'avg_ozone', 'avg_wind']".
+7. **Signed-percent force_sign correctness** — 3/6 (50%) fail, mean 50.0%,
+   always a full miss.
+   - `[sp500_monthly_performance/repeat_1]` "0/1 signed percent columns
+     use force_sign=True; missing/wrong on: ['pct_change']" — a
+     diverging (crosses-zero) percent column rendered without an explicit
+     `+` sign on positive values.
+
+`Frame + hairlines + dividers` (41% fail, mean 84.3%, entirely partial
+misses) and `Render mechanics` (0% fail, mean 100%) both continue to score
+well here — for `scripts`, most candidates already inline an explicit
+`table_body_hlines_*` `tab_options` call and/or pass `path="table.png"`
+explicitly rather than relying on the `hairlines(gt)`/`finalize(gt)`
+helper defaults alone, so `scripts` was only lightly exposed to the two
+comparator gaps PR #103 fixed (unlike `house`, which relies on the bare
+helper forms almost exclusively — see `house/SUMMARY.md`). `Render
+mechanics` moving from 11% fail (round 2) to 0% fail here is consistent
+with PR #103's fix, at the smaller scale `scripts`' worked example was
+ever exposed to it.
+
+See [`progressive_disclosure.md`](progressive_disclosure.md) for a
+transcript excerpt showing both halves: reference reads before writing
+code, then a targeted checker-driven fix pass after.
 
 Curated candidate scripts, renders, and comparator reports for every
 invocation are under [`samples/`](samples/), organized `samples/<prompt>/<variant>/`.

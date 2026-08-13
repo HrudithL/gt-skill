@@ -1,50 +1,60 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, style, loc, md
+from great_tables import GT, style, loc
 
-df = pd.read_csv("airquality.csv")
+df = pd.read_csv("./airquality.csv")
 
-monthly = df.groupby("Month").agg({
-    "Temp": "mean",
-    "Wind": "mean",
-    "Ozone": "mean"
-}).reset_index()
+# Convert Month to month names for display
+month_map = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
+df["Month_Name"] = df["Month"].map(month_map)
 
-month_names = {
-    5: "May",
-    6: "June",
-    7: "July",
-    8: "August",
-    9: "September"
-}
-monthly["Month"] = monthly["Month"].map(month_names)
+# Group by month and calculate averages
+monthly = df.groupby("Month_Name")[["Temp", "Wind", "Ozone"]].mean().reset_index()
+monthly = monthly.rename(columns={"Month_Name": "Month"})
 
-cols = ["Ozone"]
-lo = float(np.nanmin(monthly[cols].to_numpy()))
-hi = float(np.nanmax(monthly[cols].to_numpy()))
+# Round to 1 decimal place
+monthly["Temp"] = monthly["Temp"].round(1)
+monthly["Wind"] = monthly["Wind"].round(1)
+monthly["Ozone"] = monthly["Ozone"].round(1)
+
+# Compute domains for data_color
+ozone_cols = ["Ozone"]
+ozone_lo = float(np.nanmin(monthly[ozone_cols].to_numpy()))
+ozone_hi = float(np.nanmax(monthly[ozone_cols].to_numpy()))
+
+temp_cols = ["Temp"]
+temp_lo = float(np.nanmin(monthly[temp_cols].to_numpy()))
+temp_hi = float(np.nanmax(monthly[temp_cols].to_numpy()))
 
 gt = (
     GT(monthly, rowname_col="Month")
-    .fmt_number(columns=["Temp", "Wind", "Ozone"], decimals=1)
+    .fmt_number(columns=["Temp", "Wind", "Ozone"], decimals=1, use_seps=False)
     .data_color(
-        columns=cols,
+        columns="Temp",
         palette="Blues",
-        domain=[lo, hi],
+        domain=[temp_lo, temp_hi],
         truncate=False,
         na_color="#808080",
     )
-    .tab_style(
-        style=style.text(weight="bold"),
-        locations=loc.body(columns=["Temp", "Wind"]),
+    .data_color(
+        columns="Ozone",
+        palette="Reds",
+        domain=[ozone_lo, ozone_hi],
+        truncate=False,
+        na_color="#808080",
+    )
+    .cols_label(Temp="Temperature (°F)", Wind="Wind Speed (mph)", Ozone="Ozone (ppb)")
+    .cols_width(cases={"Temp": "130px", "Wind": "130px", "Ozone": "130px"})
+    .tab_header(
+        title="Air Quality Metrics by Month",
+        subtitle="Average temperature, wind speed, and ozone levels"
     )
     .tab_options(
-        column_labels_background_color="#EAF0F6",
-        column_labels_font_weight="bold",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
+        column_labels_border_bottom_color="#CCCCCC",
+        column_labels_border_bottom_width="2px",
         table_border_top_style="solid",
         table_border_top_color="#CCCCCC",
         table_border_top_width="1px",
@@ -57,25 +67,20 @@ gt = (
         table_border_right_style="solid",
         table_border_right_color="#CCCCCC",
         table_border_right_width="1px",
-        row_striping_background_color="#F6F6F6",
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
     )
     .opt_row_striping()
     .tab_style(
         style=style.fill(color="#EAF0F6"),
         locations=loc.stub(),
     )
-    .cols_label(
-        Month="Month",
-        Temp="Avg Temperature (°F)",
-        Wind="Avg Wind Speed (mph)",
-        Ozone="Avg Ozone (ppb)"
-    )
-    .tab_header(
-        title="Monthly Air Quality Summary",
-        subtitle="Average Temperature, Wind Speed, and Ozone Levels"
-    )
-    .tab_source_note(source_note="Ozone levels are color-coded to highlight seasonal variation; higher values indicate greater ozone concentrations.")
-    .tab_source_note(source_note="Source: New York air quality data (May–September)")
+    .tab_source_note(source_note="Temperature shown in Fahrenheit, wind speed in miles per hour, and ozone in parts per billion (ppb).")
+    .tab_source_note(source_note="Source: New York air quality data.")
 )
 
 gt.gtsave("table.png", expand=15)

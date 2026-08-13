@@ -1,81 +1,84 @@
 import pandas as pd
-import polars as pl
 from great_tables import GT
+import great_tables as gt
 
-# Read the data
+# Load the data
 df = pd.read_csv('towny.csv')
 
-# Calculate overall growth (1996 to 2021)
-df['overall_growth_pct'] = ((df['population_2021'] - df['population_1996']) / df['population_1996'] * 100).round(2)
+# Calculate total growth from 1996 to 2021
+df['total_growth_pct'] = ((df['population_2021'] - df['population_1996']) / df['population_1996'] * 100)
 
 # Get top 15 fastest-growing towns
-top_15 = df.nlargest(15, 'overall_growth_pct')
+top_15 = df.nlargest(15, 'total_growth_pct')[['name', 'population_1996', 'population_2001', 'population_2006',
+                                                 'population_2011', 'population_2016', 'population_2021',
+                                                 'density_1996', 'density_2001', 'density_2006',
+                                                 'density_2011', 'density_2016', 'density_2021']].reset_index(drop=True)
 
-# Create a table with town name and density changes across census years
-data = []
-for _, row in top_15.iterrows():
-    density_cols = ['density_1996', 'density_2001', 'density_2006', 'density_2011', 'density_2016', 'density_2021']
-    densities = [row[col] for col in density_cols]
+# Create a result table with density and percentage changes
+def safe_pct_change(new_val, old_val):
+    if old_val == 0:
+        return None
+    return round(((new_val - old_val) / old_val * 100), 1)
 
-    pct_change_cols = ['pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct',
-                       'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']
-    pct_changes = [row[col] * 100 for col in pct_change_cols]
-
-    data.append({
+result_rows = []
+for idx, row in top_15.iterrows():
+    result_rows.append({
         'Town': row['name'],
-        'Density 1996': densities[0],
-        'Density 2001': densities[1],
-        'Change 1996-2001 (%)': pct_changes[0],
-        'Density 2006': densities[2],
-        'Change 2001-2006 (%)': pct_changes[1],
-        'Density 2011': densities[3],
-        'Change 2006-2011 (%)': pct_changes[2],
-        'Density 2016': densities[4],
-        'Change 2011-2016 (%)': pct_changes[3],
-        'Density 2021': densities[5],
-        'Change 2016-2021 (%)': pct_changes[4],
-        'Overall Growth (%)': row['overall_growth_pct']
+        'Pop 1996': int(row['population_1996']),
+        'Dens 1996': round(row['density_1996'], 2),
+        'Dens 2001': round(row['density_2001'], 2),
+        '% Δ 96-01': safe_pct_change(row['density_2001'], row['density_1996']),
+        'Dens 2006': round(row['density_2006'], 2),
+        '% Δ 01-06': safe_pct_change(row['density_2006'], row['density_2001']),
+        'Dens 2011': round(row['density_2011'], 2),
+        '% Δ 06-11': safe_pct_change(row['density_2011'], row['density_2006']),
+        'Dens 2016': round(row['density_2016'], 2),
+        '% Δ 11-16': safe_pct_change(row['density_2016'], row['density_2011']),
+        'Dens 2021': round(row['density_2021'], 2),
+        '% Δ 16-21': safe_pct_change(row['density_2021'], row['density_2016']),
     })
 
-table_df = pd.DataFrame(data)
+result_df = pd.DataFrame(result_rows)
 
-# Create the great_tables GT object
-gt = (GT(table_df)
+# Create the GT table
+gt_table = (
+    GT(result_df)
     .tab_header(
-        title="Population Growth Trends: Top 15 Fastest-Growing Ontario Towns",
-        subtitle="Population Density (people/km²) and Percentage Changes Across Census Years (1996-2021)"
+        title="Population Density Growth Trends",
+        subtitle="Top 15 Fastest-Growing Ontario Towns (1996-2021)"
     )
-    .cols_label(
-        Town="Town",
-        **{
-            'Density 1996': '1996',
-            'Density 2001': '2001',
-            'Change 1996-2001 (%)': 'Change %',
-            'Density 2006': '2006',
-            'Change 2001-2006 (%)': 'Change %',
-            'Density 2011': '2011',
-            'Change 2006-2011 (%)': 'Change %',
-            'Density 2016': '2016',
-            'Change 2011-2016 (%)': 'Change %',
-            'Density 2021': '2021',
-            'Change 2016-2021 (%)': 'Change %',
-            'Overall Growth (%)': 'Overall Growth %'
-        }
+    .tab_spanner(
+        label="1996-2001",
+        columns=['Dens 2001', '% Δ 96-01']
     )
-    .tab_spanner(label="1996-2001", columns=['Density 1996', 'Density 2001', 'Change 1996-2001 (%)'])
-    .tab_spanner(label="2001-2006", columns=['Density 2006', 'Change 2001-2006 (%)'])
-    .tab_spanner(label="2006-2011", columns=['Density 2011', 'Change 2006-2011 (%)'])
-    .tab_spanner(label="2011-2016", columns=['Density 2016', 'Change 2011-2016 (%)'])
-    .tab_spanner(label="2016-2021", columns=['Density 2021', 'Change 2016-2021 (%)'])
-    .fmt_number(columns=['Density 1996', 'Density 2001', 'Density 2006', 'Density 2011', 'Density 2016', 'Density 2021'], decimals=1)
-    .fmt_number(columns=['Change 1996-2001 (%)', 'Change 2001-2006 (%)', 'Change 2006-2011 (%)',
-                         'Change 2011-2016 (%)', 'Change 2016-2021 (%)', 'Overall Growth (%)'], decimals=2)
-    .opt_align_table_header(align='center')
+    .tab_spanner(
+        label="2001-2006",
+        columns=['Dens 2006', '% Δ 01-06']
+    )
+    .tab_spanner(
+        label="2006-2011",
+        columns=['Dens 2011', '% Δ 06-11']
+    )
+    .tab_spanner(
+        label="2011-2016",
+        columns=['Dens 2016', '% Δ 11-16']
+    )
+    .tab_spanner(
+        label="2016-2021",
+        columns=['Dens 2021', '% Δ 16-21']
+    )
+    .fmt_number(
+        columns=['Dens 1996', 'Dens 2001', 'Dens 2006', 'Dens 2011', 'Dens 2016', 'Dens 2021'],
+        decimals=1
+    )
+    .fmt_number(
+        columns=['Pop 1996'],
+        sep_mark=',',
+        decimals=0
+    )
     .tab_options(
-        table_font_size='small',
-        table_border_top_style='solid',
-        table_border_bottom_style='solid'
+        container_overflow_x="visible"
     )
 )
 
-gt.gtsave('table.png')
+gt_table.gtsave("table.png")

@@ -1,59 +1,78 @@
 import pandas as pd
-from great_tables import GT, style, loc
-from gt_consistency import frame, finalize, PALETTE
+import numpy as np
+from great_tables import GT, md
+from gt_consistency import heatmap, band, stripe, stub_tint, frame, finalize
 
-# Step 1: Load and clean the data
 df = pd.read_csv("gtcars.csv")
 
-# Select top 10 most expensive cars overall, then group by country
-top_10 = df.nlargest(10, "msrp")[["mfr", "model", "ctry_origin", "drivetrain", "trsmn", "msrp"]]
+# Step 1: Clean data and get top 10 most expensive
+df = df.sort_values("msrp", ascending=False).head(10).reset_index(drop=True)
+df = df[["mfr", "model", "ctry_origin", "msrp", "drivetrain", "trsmn"]].copy()
 
-# Sort by country for grouping, then by MSRP descending within country
-top_10_sorted = top_10.sort_values(["ctry_origin", "msrp"], ascending=[True, False]).reset_index(drop=True)
+# Create display name: mfr + model for stub
+df["car_name"] = df["mfr"] + " " + df["model"]
+df = df.drop(columns=["mfr", "model"])
 
-# Rename columns for display
-top_10_sorted = top_10_sorted.rename(columns={
-    "mfr": "Manufacturer",
-    "model": "Model",
-    "ctry_origin": "Country",
-    "drivetrain": "Drivetrain",
-    "trsmn": "Transmission",
-    "msrp": "Price"
-})
-
-# Step 2: Organize columns and create GT table
+# Step 2: Organize columns - group by country
 gt = (
-    GT(top_10_sorted, rowname_col="Manufacturer", groupname_col="Country")
-    .cols_hide(columns=["Country"])
-    # Step 5: Format columns
-    .fmt_currency(columns="Price", currency="USD", decimals=0)
-    # Add title and subtitle (Step 6)
+    GT(df, rowname_col="car_name", groupname_col="ctry_origin")
+    .cols_move_to_end(["msrp"])
+    .cols_width(cases={
+        "car_name": "200px",
+        "drivetrain": "100px",
+        "trsmn": "100px",
+        "msrp": "120px"
+    })
+)
+
+# Step 3: Big Color - msrp is neutral magnitude → Blues
+cols = ["msrp"]
+lo = float(np.nanmin(df[cols].to_numpy()))
+hi = float(np.nanmax(df[cols].to_numpy()))
+gt = heatmap(gt, "msrp", kind="sequential", hue="neutral", domain=[lo, hi])
+
+# Step 4: Heading band
+gt = band(gt)
+
+# Step 5: Small Color polish
+gt = (
+    gt
+    .fmt_currency(columns=["msrp"], decimals=0, currency="USD")
+    .sub_missing(columns=["msrp", "drivetrain", "trsmn"], missing_text="—")
+    .tab_options(
+        table_body_hlines_style="solid",
+        table_body_hlines_color="#E8E8E8",
+        table_body_hlines_width="1px",
+        column_labels_border_bottom_color="#CCCCCC",
+        column_labels_border_bottom_width="2px",
+        row_striping_background_color="#F6F6F6",
+        row_group_font_weight="bold",
+        row_group_border_top_color="#BDBDBD",
+        row_group_border_bottom_color="#BDBDBD",
+        row_group_padding="6px",
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
+    )
+)
+
+gt = stripe(gt)
+gt = stub_tint(gt)
+gt = frame(gt)
+
+# Step 6: Titles & annotations
+gt = (
+    gt
     .tab_header(
         title="Top 10 Most Expensive GT Cars",
         subtitle="Grouped by Country of Origin"
     )
-    # Add footer notes (Step 6)
-    .tab_source_note(source_note="Prices shown are manufacturer suggested retail prices (MSRP).")
+    .tab_source_note(source_note="Top 10 cars ranked by MSRP price, from highest to lowest.")
     .tab_source_note(source_note="Source: gtcars.csv")
-    # Step 4: Heading band (dark band since no Big Color)
-    .tab_options(
-        column_labels_background_color=PALETTE["solid"]["navy"],
-        column_labels_border_bottom_color=PALETTE["neutral"]["column_label_rule"],
-        column_labels_border_bottom_width="2px",
-    )
-    # Small Color polish (Step 5)
-    .tab_options(
-        table_body_hlines_style="solid",
-        table_body_hlines_color=PALETTE["neutral"]["hairline"],
-        table_body_hlines_width="1px",
-    )
-    .opt_row_striping()
-    .tab_style(
-        style=style.fill(color=PALETTE["neutral"]["label_band"]),
-        locations=loc.stub(),
-    )
 )
 
-# Apply frame and finalize
-gt = frame(gt)
-finalize(gt)
+# Step 7: Render
+finalize(gt, "table.png")

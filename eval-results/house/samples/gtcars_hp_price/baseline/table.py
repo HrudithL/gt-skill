@@ -1,15 +1,17 @@
 import pandas as pd
 from great_tables import GT
-from great_tables.data import exibble
 
-df = pd.read_csv("gtcars.csv")
+df = pd.read_csv('gtcars.csv')
+df_display = df[['mfr', 'model', 'hp', 'msrp']].copy()
+df_display.columns = ['Manufacturer', 'Model', 'Horsepower', 'Price']
+df_display['Price'] = df_display['Price'].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "")
+df_display['Horsepower'] = df_display['Horsepower'].apply(lambda x: f"{x:.0f}" if pd.notna(x) else "")
 
-# Select relevant columns: manufacturer, model, horsepower, and price (msrp)
-df_display = df[["mfr", "model", "hp", "msrp"]].copy()
-df_display.columns = ["Manufacturer", "Model", "Horsepower", "Price"]
+gt = (
+    GT(df_display)
+    .tab_header(
+        title="GT Cars: Horsepower and Price"
+    )
+)
 
-# Create and render the table
-gt = GT(df_display)
-gt = gt.fmt_number(columns="Price", decimals=0, use_seps=True)
-gt = gt.cols_label(Horsepower="HP", Price="Price ($)")
 gt.gtsave("table.png")

@@ -1,98 +1,132 @@
 import pandas as pd
-from great_tables import GT, md, loc, style
-from house_table import PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap, humanize_labels
+import numpy as np
+from house_table import (
+    PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap,
+    humanize_labels
+)
+from great_tables import GT, loc
 
-# Load and prepare data
+# Read and prepare data
 df = pd.read_csv('sp500.csv')
 df['date'] = pd.to_datetime(df['date'])
 
 # Filter for 2010-2015
-df = df[(df['date'] >= '2010-01-01') & (df['date'] <= '2015-12-31')]
+df = df[(df['date'].dt.year >= 2010) & (df['date'].dt.year <= 2015)]
 df = df.sort_values('date').reset_index(drop=True)
 
-# Calculate daily gains/losses
-df['daily_gain_loss'] = df['close'] - df['open']
-
-# Group by year-month
+# Group by year-month and calculate monthly metrics
 df['year_month'] = df['date'].dt.to_period('M')
+monthly = df.groupby('year_month').agg(
+    open_price=('open', 'first'),
+    close_price=('close', 'last'),
+    high=('high', 'max'),
+    low=('low', 'min'),
+    volume=('volume', 'mean'),
+).reset_index()
 
-# Create monthly summary
-monthly_data = []
-for period, group in df.groupby('year_month'):
-    year, month = period.year, period.month
+# Calculate percent change and daily gains/losses
+monthly['pct_change'] = ((monthly['close_price'] - monthly['open_price']) /
+                         monthly['open_price'])
 
-    open_price = group.iloc[0]['open']
-    close_price = group.iloc[-1]['close']
-    pct_change = ((close_price - open_price) / open_price) * 100
-    avg_volume = group['volume'].mean()
-
-    # Highest single-day gain (max close - open for the day)
-    daily_gains = group['close'] - group['open']
-    max_gain = daily_gains.max()
-
-    # Highest single-day loss (min close - open for the day, i.e., most negative)
-    min_loss = daily_gains.min()
-
-    monthly_data.append({
-        'year_month': f"{period}",
-        'open': open_price,
-        'close': close_price,
-        'pct_change': pct_change,
-        'avg_volume': avg_volume,
-        'max_gain': max_gain,
-        'max_loss': min_loss,
+# For each month, get the highest single-day gain and loss
+def get_daily_extremes(group):
+    group = group.sort_values('date')
+    group['daily_change'] = group['close'].diff()
+    daily_gain = group['daily_change'].max()
+    daily_loss = group['daily_change'].min()
+    return pd.Series({
+        'highest_daily_gain': daily_gain if pd.notna(daily_gain) else 0,
+        'largest_daily_loss': daily_loss if pd.notna(daily_loss) else 0,
     })
 
-summary_df = pd.DataFrame(monthly_data)
+daily_extremes = df.groupby('year_month').apply(get_daily_extremes).reset_index()
+monthly = monthly.merge(daily_extremes, on='year_month')
+
+# Create display columns
+monthly['month_label'] = monthly['year_month'].astype(str)
+monthly['avg_daily_volume'] = monthly['volume']
+
+# Reorder and select columns
+display_cols = ['month_label', 'open_price', 'close_price', 'pct_change',
+                'avg_daily_volume', 'highest_daily_gain', 'largest_daily_loss']
+monthly = monthly[display_cols].copy()
 
 # Create GT table
-gt = (
-    GT(summary_df, rowname_col='year_month')
-    .tab_header(
-        title='S&P 500 Monthly Performance Summary',
-        subtitle=md('2010–2015: opening/closing prices, percent change, and intra-month volatility')
-    )
-    .tab_stubhead(label='Month')
-    .fmt_number(columns='open', decimals=2)
-    .fmt_number(columns='close', decimals=2)
-    .fmt_number(columns='pct_change', decimals=2)
-    .fmt_number(columns='avg_volume', decimals=0, use_seps=True)
-    .fmt_number(columns='max_gain', decimals=2)
-    .fmt_number(columns='max_loss', decimals=2)
+gt = GT(
+    monthly,
+    rowname_col='month_label'
+).tab_header(
+    title='S&P 500 Monthly Performance',
+    subtitle='Opening price, closing price, monthly return, and daily extremes (2010–2015)'
+).tab_stubhead(label='Month').fmt_number(
+    columns='open_price',
+    decimals=2
+).fmt_number(
+    columns='close_price',
+    decimals=2
+).fmt_percent(
+    columns='pct_change',
+    decimals=2,
+    force_sign=True
+).fmt_number(
+    columns='avg_daily_volume',
+    decimals=0,
+    use_seps=True
+).fmt_number(
+    columns='highest_daily_gain',
+    decimals=2
+).fmt_number(
+    columns='largest_daily_loss',
+    decimals=2
 )
 
-# Label columns
 gt = humanize_labels(
     gt,
-    summary_df,
+    monthly,
     overrides={
-        'open': 'Open',
-        'close': 'Close',
-        'pct_change': '% Change',
-        'avg_volume': 'Avg Daily Volume',
-        'max_gain': 'Max Daily Gain',
-        'max_loss': 'Max Daily Loss',
+        'open_price': 'Opening Price',
+        'close_price': 'Closing Price',
+        'pct_change': 'Monthly Return',
+        'avg_daily_volume': 'Avg Daily Volume',
+        'highest_daily_gain': 'Highest Daily Gain',
+        'largest_daily_loss': 'Largest Daily Loss',
     }
 )
 
-# Apply percent change heatmap (diverging, since it can be positive/negative)
+gt = gt.cols_width(
+    cases={
+        'month_label': '100px',
+        'open_price': '110px',
+        'close_price': '110px',
+        'pct_change': '110px',
+        'avg_daily_volume': '130px',
+        'highest_daily_gain': '130px',
+        'largest_daily_loss': '130px',
+    }
+).tab_options(
+    heading_padding='6px',
+    column_labels_padding='6px',
+    column_labels_padding_horizontal='8px',
+    data_row_padding='5px',
+    data_row_padding_horizontal='8px',
+    source_notes_padding='6px',
+)
+
+# Heatmap the monthly return as the primary measure (diverging, positive=good)
 gt = heatmap(gt, 'pct_change', kind='diverging', hue='default')
 
-# Apply band styling with forest hue (finance-appropriate)
-gt = band(gt, hue='forest')
-
-# Apply striping (72 rows is well above 10-row threshold)
+# Add polish: striping, stub tint, band, frame, hairlines
 gt = stripe(gt)
+gt = stub_tint(gt, hue='navy')
+gt = band(gt, hue='navy')
 
-# Apply stub tint to match the forest hue
-gt = stub_tint(gt, hue='forest')
+# Source notes
+gt = gt.tab_source_note(
+    source_note='Monthly Return is the percent change from opening to closing price for each month.'
+).tab_source_note(
+    source_note='Source: S&P 500 daily price and volume data.'
+)
 
-# Apply frame and hairlines
 gt = hairlines(gt)
 gt = frame(gt)
-
-# Source note
-gt = gt.tab_source_note(source_note='Source: S&P 500 daily price and volume data, 2010–2015.')
-
-# Finalize and save
 finalize(gt, path='table.png')

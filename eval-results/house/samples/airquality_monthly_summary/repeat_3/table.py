@@ -1,56 +1,76 @@
 import pandas as pd
 from great_tables import GT, md
 from house_table import (
-    PALETTE, frame, hairlines, finalize, band, stub_tint, heatmap,
-    humanize_labels
+    PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap, humanize_labels
 )
 
-# Load the data
+# Read the air quality data
 df = pd.read_csv("airquality.csv")
 
-# Calculate monthly averages
-monthly_avg = df.groupby("Month")[["Temp", "Wind", "Ozone"]].mean().reset_index()
+# Group by month and compute averages
+monthly_avg = df.groupby("Month")[["Ozone", "Wind", "Temp"]].mean().reset_index()
 
-# Create month names
+# Round to one decimal place for readability
+monthly_avg = monthly_avg.round(1)
+
+# Map month numbers to names
 month_names = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
 monthly_avg["Month"] = monthly_avg["Month"].map(month_names)
 
-# Round to 1 decimal place for display
-monthly_avg["Temp"] = monthly_avg["Temp"].round(1)
-monthly_avg["Wind"] = monthly_avg["Wind"].round(1)
-monthly_avg["Ozone"] = monthly_avg["Ozone"].round(1)
-
 # Create the GT table
-gt = (
-    GT(monthly_avg, rowname_col="Month")
-    .tab_header(
-        title="Monthly Air Quality Summary",
-        subtitle=md("Average temperature, wind speed, and ozone levels by month")
-    )
-    .fmt_number(columns=["Temp", "Wind", "Ozone"], decimals=1)
+gt = GT(monthly_avg, rowname_col="Month")
+gt = gt.tab_header(
+    title="Air Quality Metrics by Month",
+    subtitle=md("Average temperature, wind speed, and ozone levels across each month"),
 )
 
-gt = humanize_labels(
-    gt,
-    monthly_avg,
-    overrides={"Temp": "Temperature (°F)", "Wind": "Wind Speed (mph)", "Ozone": "Ozone (ppb)"}
+# Format the columns
+gt = gt.fmt_number(columns=["Ozone", "Wind", "Temp"], decimals=1)
+
+# Apply humanized labels with custom overrides
+gt = humanize_labels(gt, monthly_avg)
+
+# Set column widths and padding
+gt = gt.cols_width(
+    cases={
+        "Month": "100px",
+        "Ozone": "110px",
+        "Wind": "110px",
+        "Temp": "110px",
+    }
+)
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
 )
 
-# Apply the single heatmap to Ozone (the main air quality measure)
-gt = heatmap(gt, "Ozone", kind="sequential", hue="warning")
+# Apply heatmaps for the three measures
+# Ozone and Temperature are sequential (neutral Blue palette)
+# Wind is sequential with a neutral/positive sense (Blue palette)
+gt = heatmap(gt, "Ozone", kind="sequential", hue="neutral")
+gt = heatmap(gt, "Temp", kind="sequential", hue="neutral")
+gt = heatmap(gt, "Wind", kind="sequential", hue="neutral")
 
-# Apply heading band with forest hue (environment/nature theme)
-gt = band(gt, hue="forest")
+# Apply house styling
+gt = band(gt, hue="navy")
+gt = stripe(gt)
+gt = stub_tint(gt, hue="navy")
 
-# Apply stub tint matching the band
-gt = stub_tint(gt, hue="forest")
+# Add source notes
+gt = gt.tab_source_note(
+    source_note="All measurements are monthly averages; missing values in source data were excluded from calculations."
+)
+gt = gt.tab_source_note(
+    source_note="Source: airquality.csv dataset."
+)
 
-# Add hairlines and frame
+# Apply frame and hairlines
 gt = hairlines(gt)
 gt = frame(gt)
 
-# Add source note
-gt = gt.tab_source_note(source_note="Source: provided air quality dataset.")
-
-# Finalize and render
-finalize(gt)
+# Finalize and save
+finalize(gt, path="table.png")
