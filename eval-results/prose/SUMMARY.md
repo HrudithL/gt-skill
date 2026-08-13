@@ -121,3 +121,29 @@ precede every write.
 
 Curated candidate scripts, renders, and comparator reports for every
 invocation are under [`samples/`](samples/), organized `samples/<prompt>/<variant>/`.
+
+## Round 4 (2026-08-13) — routing ambiguity + baseline-masking docs fixed
+
+Fresh sweep (`runs/sweep/20260813_004809_prose_6prompts`) after fixing: `REFERENCE.md`'s
+Top-N-vs-Ordered-magnitude routing ambiguity (one repeat picked `full_row_highlight.md`
+for a "top 10 most expensive" table and filled 100% of rows, violating that file's own
+cap); `data.md` was missing the zero/negative-baseline percent-masking gotcha entirely.
+
+| Metric | This round | Round 3 |
+|---|---|---|
+| Mean score | **81.9%** | 79.0% |
+| Mean repeat spread | 14.7pp | 23.5pp |
+| Mean cost | $0.181 | $0.182 |
+
+Per-prompt means: `islands_sizes` 91.8%, `gtcars_hp_price` 91.0%,
+`airquality_monthly_summary` 90.5%, `gtcars_top10_by_country` 88.8%,
+`towny_growth_trends` 71.6%, `sp500_monthly_performance` 57.7% (still the hardest —
+same ground-truth month-label-format ambiguity noted in the top-level `SUMMARY.md`).
+
+`repeat_1`'s original sweep invocation hit a transient API-disconnect (unrelated to
+any skill/comparator issue) and was individually re-run; the replacement then hit the
+independent, already-fixed `check_caption_keywords` crash on non-literal caption text
+(see the top-level `SUMMARY.md`) before landing at 82.2% — the "correct" side of the
+month-label-format coin flip, which is why this prompt's spread (37.9pp) is wider than
+round 3's despite the mean improving; not a new regression, just which side of an
+existing ambiguity this generation happened to land on.

@@ -126,3 +126,25 @@ code, then a targeted checker-driven fix pass after.
 
 Curated candidate scripts, renders, and comparator reports for every
 invocation are under [`samples/`](samples/), organized `samples/<prompt>/<variant>/`.
+
+## Round 4 (2026-08-13) — missing hairlines() helper + checker rule fixed
+
+Fresh sweep (`runs/sweep/20260813_004823_scripts_6prompts`) after fixing the biggest
+gap found for this skill: `gt_consistency.py` had `frame`/`finalize`/`heatmap`/`band`/
+`stripe`/`stub_tint` helpers but no `hairlines()`, and `gt_check.py` never verified the
+hairline color either — this skill silently missed the required body-row hairline on
+~29% of real invocations, undetected by its own "self-checking" premise. Also fixed:
+the `≤30%`-cap-vs-Top-N routing gap this skill shared with `great-tables`.
+
+| Metric | This round | Round 3 |
+|---|---|---|
+| Mean score | **86.2%** | 82.3% |
+| Mean repeat spread | 12.2pp | 20.2pp |
+| Mean cost | $0.213 | $0.184 |
+
+Per-prompt means: `gtcars_hp_price` 98.0%, `islands_sizes` 94.8%, `towny_growth_trends`
+87.2%, `gtcars_top10_by_country` 92.0%, `airquality_monthly_summary` 80.5%,
+`sp500_monthly_performance` 64.8% (still the hardest — same ground-truth
+month-label-format ambiguity noted in the top-level `SUMMARY.md`). One invocation
+(`gtcars_top10_by_country/repeat_2`) hit a transient API-disconnect unrelated to any
+skill/comparator issue and was individually re-run.

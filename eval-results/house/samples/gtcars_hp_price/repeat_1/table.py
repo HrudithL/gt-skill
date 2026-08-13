@@ -1,41 +1,71 @@
 import pandas as pd
-from great_tables import GT, loc
-from house_table import PALETTE, frame, hairlines, finalize, stripe, stub_tint, heatmap
-
-# Read and prepare data
-df = pd.read_csv("gtcars.csv")
-
-# Create composite row identifier and select relevant columns
-df["car"] = df["mfr"] + " " + df["model"]
-df = df[["car", "hp", "msrp"]].copy()
-df.columns = ["Car", "Horsepower", "Price"]
-
-# Format price as currency (divide by 1 to keep as float, finalize will format)
-df["Price"] = df["Price"].astype(float)
-
-# Create GT table
-gt = (
-    GT(df, rowname_col="Car")
-    .tab_header(
-        title="GT Cars Performance",
-        subtitle="Horsepower and pricing for high-performance vehicles"
-    )
-    .fmt_number(columns="Horsepower", decimals=0)
-    .fmt_currency(columns="Price", currency="USD")
-    .tab_source_note(
-        source_note="Horsepower is the primary performance measure; price shown for reference."
-    )
-    .tab_source_note(
-        source_note="Source: provided dataset."
-    )
+from great_tables import GT, md, loc, style
+from house_table import (
+    PALETTE, frame, hairlines, finalize, band, stripe, stub_tint,
+    heatmap, humanize_labels
 )
 
-# Apply styling
-gt = frame(gt)
-gt = hairlines(gt)
-gt = heatmap(gt, columns="Horsepower", hue="positive", kind="sequential")
+df = pd.read_csv("gtcars.csv")
+
+# Select and prepare columns
+df = df[["mfr", "model", "hp", "msrp"]].copy()
+
+# Create row identifier as composite of manufacturer and model
+df["car"] = df["mfr"] + " " + df["model"]
+
+# Remove the now-redundant mfr/model columns
+df = df[["car", "hp", "msrp"]]
+
+# Sort by horsepower descending for narrative interest
+df = df.sort_values("msrp", ascending=False).reset_index(drop=True)
+
+gt = (
+    GT(df, rowname_col="car")
+    .tab_header(
+        title="GT Cars",
+        subtitle=md("Horsepower and price by model"),
+    )
+    .fmt_number(columns="hp", decimals=0)
+    .fmt_currency(columns="msrp", decimals=0)
+)
+
+gt = humanize_labels(gt, df)
+
+# Column widths
+gt = gt.cols_width(
+    cases={
+        "car": "200px",
+        "hp": "100px",
+        "msrp": "120px",
+    }
+)
+
+# Padding
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
+
+# Apply color to the hero measure (price)
+gt = heatmap(gt, "msrp", kind="sequential", hue="neutral")
+
+# Styling
+gt = band(gt, hue="navy")
 gt = stripe(gt)
 gt = stub_tint(gt, hue="navy")
 
-# Finalize and render
+# Source notes
+gt = (
+    gt.tab_source_note(
+        source_note="Horsepower and MSRP are displayed for each model; sorted by price."
+    )
+    .tab_source_note(source_note="Source: provided dataset.")
+)
+
+gt = hairlines(gt)
+gt = frame(gt)
 finalize(gt, path="table.png")

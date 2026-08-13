@@ -1,17 +1,14 @@
 import pandas as pd
 from great_tables import GT
 
-df = pd.read_csv('gtcars.csv')
-df_display = df[['mfr', 'model', 'hp', 'msrp']].copy()
-df_display.columns = ['Manufacturer', 'Model', 'Horsepower', 'Price']
-df_display['Price'] = df_display['Price'].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "")
-df_display['Horsepower'] = df_display['Horsepower'].apply(lambda x: f"{x:.0f}" if pd.notna(x) else "")
+df = pd.read_csv("gtcars.csv")
+df_subset = df[["mfr", "model", "hp", "msrp"]].copy()
+df_subset.columns = ["Manufacturer", "Model", "Horsepower", "Price"]
 
-gt = (
-    GT(df_display)
-    .tab_header(
-        title="GT Cars: Horsepower and Price"
-    )
+gt_table = (
+    GT(df_subset)
+    .fmt_integer(columns="Horsepower")
+    .fmt_currency(columns="Price", currency="USD")
 )
 
-gt.gtsave("table.png")
+gt_table.gtsave("table.png")

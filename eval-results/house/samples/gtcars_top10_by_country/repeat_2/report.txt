@@ -1,22 +1,22 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260812_212028_house_6prompts/prompts/gtcars_top10_by_country/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_011158_house_6prompts/prompts/gtcars_top10_by_country/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
-TOTAL: 94/97 (96.9%)
+TOTAL: 93/97 (95.9%)
   Data-compliance:        48/51
-  Formatting-compliance:  46/46
+  Formatting-compliance:  45/46
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 1/1 canonical measures have a value-matching candidate column
 [PASS] [MECHANICAL] Colored-measure selection (right measure(s) colored): 6/6 -- 1/1 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 3/3 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.43 (candidate-only=['country', 'transmission'], missing=['ctry_origin', 'trsmn'])
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.43 (candidate-only=['country', 'transmission'], missing=['ctry_origin', 'trsmn']); value-matched renamed columns: {'msrp': 'price'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=True, truth=True
-[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by country of origin (Italy, United Kingdom, United States) in a structure that directly serves the prompt's requirement and preserves the analytical story revealed by the ground truth's grouping. The grouping decision illuminates that Italy dominates the top 10, which is explicitly called out in the ground truth's caption.
+[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate correctly groups by country of origin (Italy, United States, United Kingdom) as required by the REQUIRED_INSTRUCTIONS 'grouping: true' mandate. The grouping structure mirrors the ground truth's organizational choice and serves the analytical goal of showing geographic clustering of expensive GT cars.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The drivetrain and transmission columns use abbreviations ('rwd', 'awd', '7a', '8a', '8am') that obscure their meanings compared to the ground truth's clear labels ('RWD', 'AWD', '7-Speed Automatic', '8-Speed Automatic', '8-Speed Automated-Manual'). While these abbreviations might be recognized by experts, they undermine instant clarity of the underlying concepts.
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate's column labels have serious concept clarity issues. 'Vehicle' is awkward for 'Car', 'Price (MSRP)' is acceptable but redundant, and critically, the 'Transmission' column header is cut off to 'Transmissio' (truncated). More importantly, the transmission values themselves are abbreviated to cryptic codes like '7a', '8a', '8am' instead of the clear ground-truth format '7-Speed Automatic' or '8-Speed Automated-Manual', making the transmission concept unintelligible without inference.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=10, body not fully color-covered -> expected striping=True, actual=True
@@ -32,5 +32,5 @@ TOTAL: 94/97 (96.9%)
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' captures the core framing of the ground truth's 'The 10 Priciest GT Cars, by Country of Origin.' Both titles accurately describe the dataset focus on high-priced vehicles, though the candidate omits explicit mention of the grouping structure in the title itself—a minor difference that does not diminish the accurate, clear framing.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order (Car, MSRP, Drivetrain, Transmission) matches the ground truth's order exactly and logically sequences the identifying column (Car) first, followed by the price measure, then the two related specification columns. This is a natural and sensible reading order.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' is accurate and captures the core subject matter. However, it is less specific than the ground truth's 'The 10 Priciest GT Cars, by Country of Origin', which explicitly signals the grouping dimension in the title itself. The candidate relegates the grouping framing to a subtitle ('By MSRP, grouped by country of origin') rather than weaving it into the main title for maximum clarity.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's column sequence (Vehicle → Price → Drivetrain → Transmission) is sensible and closely mirrors the ground truth's logical flow. Related attributes (drivetrain and transmission) are grouped adjacent to each other, the identifying column (car name) is first, and the key measure (price) is prominently positioned second. This ordering supports natural reading of the story.

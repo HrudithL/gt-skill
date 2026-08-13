@@ -1,14 +1,15 @@
 import pandas as pd
 from great_tables import GT
 
-df = pd.read_csv("islands.csv")
+df = pd.read_csv('islands.csv')
 
 gt = (
     GT(df)
-    .tab_header(title="Islands of the World", subtitle="Land area in thousands of square miles")
-    .cols_label(name="Island", size="Size")
-    .fmt_number(columns="size", decimals=0)
-    .opt_table_font(font="system-ui")
+    .tab_header(title="Islands by Size")
+    .cols_label(name="Island Name", size="Size (1000 sq km)")
+    .fmt_integer(columns="size")
+    .cols_align(align="left", columns="name")
+    .cols_align(align="right", columns="size")
 )
 
 gt.gtsave("table.png")

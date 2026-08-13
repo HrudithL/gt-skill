@@ -1,92 +1,99 @@
 import pandas as pd
-from great_tables import GT, md
-from house_table import PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, humanize_labels
+import numpy as np
+from great_tables import GT, loc, md, style
+from house_table import PALETTE, frame, hairlines, finalize, band, \
+    stripe, stub_tint, heatmap, status_chip, summary_row, \
+    group_emphasis, humanize_labels
 
-df = pd.read_csv("gtcars.csv")
+# Read data
+df = pd.read_csv('gtcars.csv')
 
 # Get top 10 most expensive cars
-top10 = df.nlargest(10, "msrp").copy()
+df_top10 = df.nlargest(10, 'msrp').copy()
 
-# Create display columns
-top10["car"] = top10["mfr"] + " " + top10["model"]
-top10["price"] = top10["msrp"]
+# Create composite identifier for row names
+df_top10['car'] = df_top10['mfr'] + ' ' + df_top10['model']
 
-# Reorder and select columns for display
-display_cols = ["car", "ctry_origin", "price", "drivetrain", "trsmn"]
-display_df = top10[display_cols].reset_index(drop=True)
-display_df = display_df.rename(columns={
-    "car": "car",
-    "ctry_origin": "country",
-    "price": "msrp",
-    "drivetrain": "drivetrain",
-    "trsmn": "transmission"
+# Select and organize columns
+df_table = df_top10[[
+    'car',
+    'ctry_origin',
+    'msrp',
+    'drivetrain',
+    'trsmn'
+]].reset_index(drop=True)
+
+# Prepare for display
+df_table = df_table.rename(columns={
+    'car': 'car',
+    'ctry_origin': 'country',
+    'msrp': 'price',
+    'drivetrain': 'drivetrain',
+    'trsmn': 'transmission'
 })
 
-# Sort by country then price descending for better grouping
-display_df = display_df.sort_values(["country", "msrp"], ascending=[True, False]).reset_index(drop=True)
-
+# Build the table
 gt = (
-    GT(display_df, rowname_col="car", groupname_col="country")
+    GT(df_table, rowname_col='car', groupname_col='country')
     .tab_header(
-        title="Top 10 Most Expensive GT Cars",
-        subtitle=md("By price, grouped by country of origin with drivetrain and transmission details"),
+        title='Top 10 Most Expensive GT Cars',
+        subtitle=md('By MSRP, grouped by country of origin')
     )
-    .tab_stubhead(label="Car")
-    .fmt_currency(columns="msrp", decimals=0)
+    .tab_stubhead(label='Vehicle')
+    .fmt_currency(columns='price', decimals=0)
+    .sub_missing(columns=['price', 'drivetrain', 'transmission'], missing_text='—')
 )
 
+# Humanize labels with overrides
 gt = humanize_labels(
     gt,
-    display_df,
+    df_table,
     overrides={
-        "msrp": "MSRP",
-        "country": "Country",
-        "drivetrain": "Drivetrain",
-        "transmission": "Transmission"
-    },
-)
-
-# Set column widths
-gt = gt.cols_width(
-    cases={
-        "car": "180px",
-        "country": "130px",
-        "msrp": "120px",
-        "drivetrain": "100px",
-        "transmission": "100px",
+        'price': 'Price (MSRP)',
+        'drivetrain': 'Drivetrain',
+        'transmission': 'Transmission'
     }
 )
 
-# Padding
+# Column widths + padding
+gt = gt.cols_width(
+    cases={
+        'car': '180px',
+        'country': '140px',
+        'price': '130px',
+        'drivetrain': '100px',
+        'transmission': '100px',
+    }
+)
 gt = gt.tab_options(
-    heading_padding="6px",
-    column_labels_padding="6px",
-    column_labels_padding_horizontal="8px",
-    data_row_padding="5px",
-    data_row_padding_horizontal="8px",
-    source_notes_padding="6px",
+    heading_padding='6px',
+    column_labels_padding='6px',
+    column_labels_padding_horizontal='8px',
+    data_row_padding='5px',
+    data_row_padding_horizontal='8px',
+    source_notes_padding='6px',
 )
 
-# Color the price column with sequential heatmap
-from house_table import heatmap
-gt = heatmap(gt, "msrp", kind="sequential", hue="neutral")
+# Big Color: price is the hero measure (sequential, neutral/Blues)
+gt = heatmap(gt, 'price', kind='sequential', hue='neutral')
 
-# Apply house formatting
-gt = band(gt, hue="navy")
+# Branding surfaces
+gt = band(gt, hue='navy')
+
+# Small-Color polish
 gt = stripe(gt)
-gt = stub_tint(gt, hue="navy")
-
-from house_table import group_emphasis
+gt = stub_tint(gt, hue='navy')
 gt = group_emphasis(gt)
 
-# Source notes
+# Source notes: analytical caption first, then provenance
 gt = (
     gt.tab_source_note(
-        source_note="Ranked by MSRP (manufacturer's suggested retail price) in descending order."
+        source_note='Ranked by manufacturer\'s suggested retail price (MSRP) in descending order.'
     )
-    .tab_source_note(source_note="Source: gtcars.csv dataset.")
+    .tab_source_note(source_note='Source: provided dataset.')
 )
 
+# Finalize
 gt = hairlines(gt)
 gt = frame(gt)
-finalize(gt)
+finalize(gt, path='table.png')

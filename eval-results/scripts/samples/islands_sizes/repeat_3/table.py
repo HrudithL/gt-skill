@@ -1,41 +1,32 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 from great_tables import GT
-from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
+from gt_consistency import frame, finalize, heatmap, band, stripe, stub_tint
 
+# Step 1: Load and clean data
 df = pd.read_csv("islands.csv")
+df = df.dropna()
 
-# Step 1: Data cleaning — verify the data
-df["size"] = pd.to_numeric(df["size"], errors="coerce")
+# Step 2: Organize columns
+gt = GT(df, rowname_col="name")
 
-# Step 2: Organize columns — name is the stub identifier
-cols_measure = ["size"]
+# Step 3: Big Color - size is an ordered numeric magnitude with ≥49 rows, qualifies for color
+# Format the measure
+gt = gt.fmt_number(columns=["size"], decimals=0, use_seps=True)
 
-# Step 3: Big Color — ordered magnitude with >5 rows qualifies
-lo = float(np.nanmin(df[cols_measure].to_numpy()))
-hi = float(np.nanmax(df[cols_measure].to_numpy()))
+# Apply heatmap with sequential neutral palette (Blues for magnitude)
+gt = heatmap(gt, columns="size", kind="sequential", hue="neutral")
 
-# Build the table
-gt = (
-    GT(df, rowname_col="name")
-    .tab_header(
-        title="Islands and Their Sizes",
-        subtitle="Land area in thousands of km²"
-    )
-    .fmt_number(columns=cols_measure, decimals=0, use_seps=True)
-    .sub_missing(columns=cols_measure, missing_text="—")
-)
-
-# Step 3: Apply heatmap — neutral magnitude uses sequential Blues
-gt = heatmap(gt, cols_measure, kind="sequential", hue="neutral")
-
-# Step 4: Heading band
+# Step 4: Heading band (fixed navy branding)
 gt = band(gt)
 
 # Step 5: Small Color polish
 gt = stripe(gt)
 gt = stub_tint(gt)
-gt = gt.cols_width(cases={"size": "120px"})
+gt = frame(gt)
+
+# Column widths and padding
+gt = gt.cols_width(cases={"name": "140px", "size": "100px"})
 gt = gt.tab_options(
     heading_padding="6px",
     column_labels_padding="6px",
@@ -43,8 +34,19 @@ gt = gt.tab_options(
     data_row_padding="5px",
     data_row_padding_horizontal="8px",
     source_notes_padding="6px",
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#E8E8E8",
+    table_body_hlines_width="1px",
 )
 
-# Frame and render
-gt = frame(gt)
-finalize(gt, "table.png")
+# Step 6: Titles & annotations
+gt = (
+    gt.tab_header(
+        title="Islands by Size",
+        subtitle="Land area in thousands of square kilometers"
+    )
+    .tab_source_note(source_note="Source: islands.csv")
+)
+
+# Step 7: Render
+finalize(gt, path="table.png")

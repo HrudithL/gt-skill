@@ -1,24 +1,24 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260812_212011_prose_6prompts/prompts/towny_growth_trends/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_004809_prose_6prompts/prompts/towny_growth_trends/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py
 
 TOTAL: 63/91 (69.2%)
-  Data-compliance:        36/48
-  Formatting-compliance:  27/43
+  Data-compliance:        34/48
+  Formatting-compliance:  29/43
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 5/10 -- 6/13 canonical measures have a value-matching candidate column; unmatched: ['pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct', 'rank', 'total_growth_pct']
 [FAIL] [MECHANICAL] Colored-measure selection (right measure(s) colored): 3/6 -- 6/11 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 11/11 colored measures use an encoding matching their data shape
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.30 (candidate-only=['Town', 'pct_01_06', 'pct_06_11', 'pct_11_16', 'pct_16_21', 'pct_96_01'], missing=['name', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct', 'rank', 'total_growth_pct']); value-matched renamed columns: {'density_1996': 'dens_1996', 'density_2001': 'dens_2001', 'density_2006': 'dens_2006', 'density_2011': 'dens_2011', 'density_2016': 'dens_2016', 'density_2021': 'dens_2021'}
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.30 (candidate-only=['% Chg 01-06', '% Chg 06-11', '% Chg 11-16', '% Chg 16-21', '% Chg 96-01', 'Town'], missing=['name', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct', 'rank', 'total_growth_pct']); value-matched renamed columns: {'density_1996': 'Density 1996', 'density_2001': 'Density 2001', 'density_2006': 'Density 2006', 'density_2011': 'Density 2011', 'density_2016': 'Density 2016', 'density_2021': 'Density 2021'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py)
-[PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=True, truth=True
+[FAIL] [MECHANICAL] Column-group spanners existence: 0/2 -- candidate spanner_present=False, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 1/1 -- colored-measure palettes: ['Blues', 'RdYlGn']
+[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 1/1 -- colored-measure palettes: ['Blues', 'RdBu']
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py)
-[FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 4/8 -- 6/11 colored measures have a shape-appropriate domain; measure 1 (['pct_96_01', 'pct_01_06', 'pct_06_11', 'pct_11_16', 'pct_16_21']): domain '[-100, 100]' doesn't match a diverging shape; measure 2 (['pct_96_01', 'pct_01_06', 'pct_06_11', 'pct_11_16', 'pct_16_21']): domain '[-100, 100]' doesn't match a diverging shape; measure 3 (['pct_96_01', 'pct_01_06', 'pct_06_11', 'pct_11_16', 'pct_16_21']): domain '[-100, 100]' doesn't match a diverging shape; measure 8 (['pct_96_01', 'pct_01_06', 'pct_06_11', 'pct_11_16', 'pct_16_21']): domain '[-100, 100]' doesn't match a diverging shape; measure 10 (['pct_96_01', 'pct_01_06', 'pct_06_11', 'pct_11_16', 'pct_16_21']): domain '[-100, 100]' doesn't match a diverging shape
-[PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 11/11 colored measures have a shape-appropriate domain
+[FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=OK; dividers=expected=True (gated on spanners), got=False
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=15, body is 100% color-covered -> striping optional (islands_sizes-style case), actual=True
 [N/A] [MECHANICAL] Heading band hue harmonization: 0/0 -- superseded by check_header_branding (2026-08-12 -- header is now a fixed universal navy, not hue-matched per table)
 [FAIL] [MECHANICAL] Header branding (deep navy, bold, white text): 0/5 -- header background: expected #08306B, got None (MISMATCH); column_labels_font_weight: expected bold, got None (MISMATCH); column-label text color: expected white, got None (MISMATCH)

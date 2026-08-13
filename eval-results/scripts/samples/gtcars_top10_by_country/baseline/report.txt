@@ -1,4 +1,4 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260812_212019_scripts_6prompts/prompts/gtcars_top10_by_country/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_004823_scripts_6prompts/prompts/gtcars_top10_by_country/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
 TOTAL: 20/90 (22.2%)
   Data-compliance:        6/48
@@ -11,12 +11,12 @@ TOTAL: 20/90 (22.2%)
 [FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 2/5 -- 1/3 required instructions satisfied; grouping=True not satisfied; sort=('msrp', 'desc', 'within_group') not satisfied
 [FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.57 (candidate-only=['mfr', 'model'], missing=['car'])
 [FAIL] [MECHANICAL] Grouping existence: 0/3 -- candidate grouping_present=False, truth=True
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Grouping is a REQUIRED_INSTRUCTIONS mandate (grouping: true), not a discretionary editorial choice, so this dimension is not applicable per the scoring rules.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- REQUIRED_INSTRUCTIONS specifies 'grouping': true, so grouping is a mandated instruction already checked by a deterministic mechanism elsewhere in the harness, not a discretionary editorial choice being evaluated here.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The drivetrain and transmission labels are technically correct concepts, but the transmission column shows abbreviated codes like '7a' and '8am' instead of human-readable terms like '7-Speed Automatic' shown in the ground truth. The Price (USD) label is clear, but the Drivetrain column shows lowercase abbreviations ('rwd', 'awd') versus the ground truth's uppercase format, and the overall labeling clarity is compromised by the coded transmission values.
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate labels 'rwd' and 'awd' in the Drivetrain column and '7a', '8a', '8am' in the Transmission column are abbreviated/shorthand and differ significantly from the ground truth's clear, full-word labels ('RWD', 'AWD', '7-Speed Automatic', '8-Speed Automatic', '8-Speed Automated-Manual'). While the concepts are correct, the phrasing is inconsistent and less clear than it should be.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=10, body not fully color-covered -> expected striping=True, actual=False
@@ -32,5 +32,5 @@ TOTAL: 20/90 (22.2%)
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' with subtitle 'Grouped by Country of Origin' accurately captures the core framing and matches the ground truth's intent ('The 10 Priciest GT Cars, by Country of Origin'). The phrasing is clear and specific, though slightly less narrative in tone than the ground truth's title.
-[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate's column order (Manufacturer, Model, Country, Price, Drivetrain, Transmission) lacks a natural reading flow for the analytical story. The Price column is separated from the identifying car information (Manufacturer/Model), and the Country column is placed before Price, which fragments the core story (which cars are most expensive). The ground truth's order (Car name, Price, Drivetrain, Transmission) keeps the price and related drivetrain details immediately adjacent, creating a more logical sequence.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' with subtitle 'Grouped by Country of Origin' captures the core framing and subject matter of the ground truth's title 'The 10 Priciest GT Cars, by Country of Origin'. The wording is clear and accurate, though slightly less specific in character than the ground truth's phrase 'priciest' versus 'expensive'.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate's column order (Manufacturer, Model, Country, Drivetrain, Transmission, MSRP) differs problematically from the ground truth's logical structure. The candidate includes a 'Country' column that breaks the grouping already established by row headers in the ground truth, and places MSRP at the far right rather than front-and-center where it belongs as the hero measure. The Manufacturer/Model split, while potentially sensible, is not grouped efficiently with the price information that should be the primary focus.

@@ -1,7 +1,7 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260812_212019_scripts_6prompts/prompts/gtcars_hp_price/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_004823_scripts_6prompts/prompts/gtcars_hp_price/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 84/85 (98.8%)
-  Data-compliance:        42/42
+TOTAL: 82/85 (96.5%)
+  Data-compliance:        40/42
   Formatting-compliance:  42/43
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
@@ -9,7 +9,7 @@ TOTAL: 84/85 (98.8%)
 [PASS] [MECHANICAL] Colored-measure selection (right measure(s) colored): 6/6 -- 1/1 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
-[PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.50 (candidate-only=['Car'], missing=['car']); value-matched renamed columns: {'hp': 'Horsepower', 'msrp': 'Price'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py)
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False

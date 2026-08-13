@@ -2,52 +2,49 @@ import pandas as pd
 import numpy as np
 from great_tables import GT, style, loc
 
+# Load and clean data
 df = pd.read_csv("./airquality.csv")
 
-# Convert Month to month names for display
-month_map = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
-df["Month_Name"] = df["Month"].map(month_map)
+# Create monthly summary
+monthly = df.groupby("Month").agg({
+    "Temp": "mean",
+    "Wind": "mean",
+    "Ozone": "mean"
+}).reset_index()
 
-# Group by month and calculate averages
-monthly = df.groupby("Month_Name")[["Temp", "Wind", "Ozone"]].mean().reset_index()
-monthly = monthly.rename(columns={"Month_Name": "Month"})
+# Map month numbers to names
+month_names = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
+monthly["Month"] = monthly["Month"].map(month_names)
+monthly = monthly.rename(columns={"Month": "Month"})
 
-# Round to 1 decimal place
-monthly["Temp"] = monthly["Temp"].round(1)
-monthly["Wind"] = monthly["Wind"].round(1)
-monthly["Ozone"] = monthly["Ozone"].round(1)
+# Compute data ranges for color domain
+cols_color = ["Ozone", "Temp"]
+lo_o = float(np.nanmin(monthly["Ozone"]))
+hi_o = float(np.nanmax(monthly["Ozone"]))
+lo_t = float(np.nanmin(monthly["Temp"]))
+hi_t = float(np.nanmax(monthly["Temp"]))
 
-# Compute domains for data_color
-ozone_cols = ["Ozone"]
-ozone_lo = float(np.nanmin(monthly[ozone_cols].to_numpy()))
-ozone_hi = float(np.nanmax(monthly[ozone_cols].to_numpy()))
-
-temp_cols = ["Temp"]
-temp_lo = float(np.nanmin(monthly[temp_cols].to_numpy()))
-temp_hi = float(np.nanmax(monthly[temp_cols].to_numpy()))
-
+# Build table
 gt = (
     GT(monthly, rowname_col="Month")
-    .fmt_number(columns=["Temp", "Wind", "Ozone"], decimals=1, use_seps=False)
+    .fmt_number(columns=["Temp", "Wind", "Ozone"], decimals=1)
     .data_color(
         columns="Temp",
         palette="Blues",
-        domain=[temp_lo, temp_hi],
+        domain=[lo_t, hi_t],
         truncate=False,
         na_color="#808080",
     )
     .data_color(
         columns="Ozone",
-        palette="Reds",
-        domain=[ozone_lo, ozone_hi],
+        palette="Greens",
+        domain=[lo_o, hi_o],
         truncate=False,
         na_color="#808080",
     )
-    .cols_label(Temp="Temperature (°F)", Wind="Wind Speed (mph)", Ozone="Ozone (ppb)")
-    .cols_width(cases={"Temp": "130px", "Wind": "130px", "Ozone": "130px"})
     .tab_header(
-        title="Air Quality Metrics by Month",
-        subtitle="Average temperature, wind speed, and ozone levels"
+        title="Monthly Air Quality Summary",
+        subtitle="Average temperature, wind speed, and ozone levels by month"
     )
     .tab_options(
         table_body_hlines_style="solid",
@@ -79,8 +76,9 @@ gt = (
         style=style.fill(color="#EAF0F6"),
         locations=loc.stub(),
     )
-    .tab_source_note(source_note="Temperature shown in Fahrenheit, wind speed in miles per hour, and ozone in parts per billion (ppb).")
-    .tab_source_note(source_note="Source: New York air quality data.")
+    .sub_missing(columns=["Temp", "Wind", "Ozone"], missing_text="—")
+    .tab_source_note(source_note="Average values computed across all days in each month.")
+    .tab_source_note(source_note="Source: New York air quality dataset.")
 )
 
 gt.gtsave("table.png", expand=15)

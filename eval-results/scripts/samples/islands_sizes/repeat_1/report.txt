@@ -1,8 +1,8 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260812_212019_scripts_6prompts/prompts/islands_sizes/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/islands_sizes.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_004823_scripts_6prompts/prompts/islands_sizes/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/islands_sizes.py
 
-TOTAL: 85/89 (95.5%)
-  Data-compliance:        43/43
-  Formatting-compliance:  42/46
+TOTAL: 83/89 (93.3%)
+  Data-compliance:        42/43
+  Formatting-compliance:  41/46
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 1/1 canonical measures have a value-matching candidate column
@@ -11,12 +11,12 @@ TOTAL: 85/89 (95.5%)
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
 [PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The REQUIRED_INSTRUCTIONS metadata has no 'grouping' key, but neither the ground truth nor the candidate uses row grouping—both display a flat, sorted list. Since grouping is neither mandated nor discretionary (neither table employs it), this dimension is not applicable.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The ground truth uses no row grouping (it is a flat, sorted list), and the candidate also uses no row grouping. Since neither table groups, this is not a discretionary editorial choice being tested — grouping_choice_quality does not apply here.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 4/5 -- Both tables label columns as 'Landmass' and 'Size' (or variants like 'Size (1000s km²)'), which correctly represent the underlying concepts. However, the candidate uses 'km²' units in the column header, whereas the ground truth explicitly uses 'thousand sq. mi.' and the candidate's header reads '1000s km²' which may add unit ambiguity not present in the ground truth's more explicit subtitle and labeling.
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate labels the second column 'size' with no unit specification, whereas the ground truth labels it 'Size (thousand sq. mi.)' making the unit completely clear. Additionally, the candidate's subtitle states 'Land area in thousands of square kilometers' — but the actual values are in square miles, not kilometers. This is a critical factual error that misleads readers about what the numbers represent.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=48, body is 100% color-covered -> striping optional (islands_sizes-style case), actual=True
@@ -32,5 +32,5 @@ TOTAL: 85/89 (95.5%)
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Island Sizes' is accurate and clear, but differs from the ground truth's 'Islands of the World, by Size,' which explicitly names the scope ('of the World') and the sorting principle ('by Size'). The candidate's subtitle 'Area measurements for major islands worldwide' partially compensates by mentioning area and worldwide scope, but the title itself is less specific than the ground truth's.
-[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate orders rows alphabetically (Africa, Antarctica, Asia, Australia, Axel Heiberg...) rather than by descending size as the ground truth does (Asia 16988, Africa 11506, North America 9390...). This alphabetic order breaks the core analytical story—size ranking is explicitly mentioned in the CAPTION_KEYWORDS ('largest to smallest') and is fundamental to a 'sizes' table, yet the candidate's ordering forces readers to hunt for the largest islands rather than presenting them in natural descending order.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'World Islands by Size' is accurate and captures the core framing of showing islands sorted by size. The ground truth's title 'Islands of the World, by Size' is slightly more explicit and formal, and the ground truth's subtitle clarifies the ordering direction ('largest to smallest'). Both titles frame the table identically, though the ground truth is marginally more explicit about the sort direction.
+[FAIL] [JUDGE] Column order quality: 0/2 -- judge score 1/5 -- The candidate presents a single landmass-name column followed by a size column, which is the only logical order for two columns. However, the alphabetical sorting (Africa, Antarctica, Asia, Australia…) contradicts the ground truth's largest-to-smallest ordering by size. The ground truth begins with Asia (16,988), Africa (11,506), North America (9,390) — the largest values first — whereas the candidate scatters them throughout an alphabetical list. This makes it impossible to quickly identify the largest islands without scanning the entire table, fundamentally breaking the promised 'by Size' analytical story.

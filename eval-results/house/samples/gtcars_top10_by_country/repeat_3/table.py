@@ -1,5 +1,5 @@
 import pandas as pd
-from great_tables import GT, loc, md, style
+from great_tables import GT, md, loc, style
 from house_table import (
     PALETTE, frame, hairlines, finalize, band, stripe, stub_tint,
     heatmap, group_emphasis, humanize_labels
@@ -8,53 +8,67 @@ from house_table import (
 # Load the data
 df = pd.read_csv("gtcars.csv")
 
+# Create a car identifier (composite stub)
+df["car"] = df["mfr"] + " " + df["model"]
+
 # Select top 10 most expensive cars
-top_10 = df.nlargest(10, "msrp")[["mfr", "model", "year", "drivetrain", "trsmn", "ctry_origin", "msrp"]].copy()
+top_10 = df.nlargest(10, "msrp")[["car", "ctry_origin", "drivetrain", "trsmn", "msrp"]].copy()
 
-# Create a display-friendly car identifier
-top_10["car"] = top_10["mfr"] + " " + top_10["model"]
+# Rename transmission codes to human-readable format
+transmission_map = {
+    "7a": "7-Speed Automatic",
+    "6a": "6-Speed Automatic",
+    "8a": "8-Speed Automatic",
+    "8am": "8-Speed Automatic",
+    "7am": "7-Speed Automatic",
+    "6am": "6-Speed Automatic",
+    "9a": "9-Speed Automatic",
+    "1dd": "Direct Drive",
+    "6m": "6-Speed Manual",
+    "7m": "7-Speed Manual",
+}
+top_10["trsmn"] = top_10["trsmn"].map(transmission_map)
 
-# Sort by country, then by price descending for better grouping
-top_10 = top_10.sort_values(["ctry_origin", "msrp"], ascending=[True, False]).reset_index(drop=True)
+# Rename columns for display
+top_10 = top_10.rename(columns={
+    "car": "model",
+    "ctry_origin": "country",
+    "drivetrain": "drivetrain",
+    "trsmn": "transmission",
+    "msrp": "msrp"
+})
 
-# Build the GT table
+# Sort by country, then by price descending
+top_10 = top_10.sort_values(["country", "msrp"], ascending=[True, False])
+
+# Build the table
 gt = (
-    GT(top_10, rowname_col="car", groupname_col="ctry_origin")
+    GT(top_10, rowname_col="model", groupname_col="country")
     .tab_header(
         title="Top 10 Most Expensive GT Cars",
-        subtitle=md("Premium sports and luxury vehicles ranked by MSRP, grouped by country of origin")
+        subtitle=md("By country of origin, with drivetrain and transmission specifications"),
     )
-    .tab_stubhead(label="Vehicle")
-    .cols_hide(columns=["mfr", "model"])
+    .tab_stubhead(label="Model")
     .fmt_currency(columns="msrp", decimals=0)
-    .fmt_integer(columns="year")
+    .sub_missing(columns=["drivetrain", "transmission"], missing_text="—")
 )
 
-# Humanize column labels with overrides for clarity
 gt = humanize_labels(
     gt,
     top_10,
-    overrides={
-        "year": "Year",
-        "drivetrain": "Drivetrain",
-        "trsmn": "Transmission",
-        "ctry_origin": "Country",
-        "msrp": "Price (USD)"
-    }
+    overrides={"msrp": "MSRP"},
 )
 
-# Set column widths
+# Column widths and padding
 gt = gt.cols_width(
     cases={
-        "car": "180px",
-        "year": "70px",
-        "drivetrain": "100px",
-        "trsmn": "110px",
-        "msrp": "130px",
+        "model": "180px",
+        "country": "140px",
+        "drivetrain": "120px",
+        "transmission": "180px",
+        "msrp": "140px",
     }
 )
-
-# Apply padding
 gt = gt.tab_options(
     heading_padding="6px",
     column_labels_padding="6px",
@@ -64,26 +78,26 @@ gt = gt.tab_options(
     source_notes_padding="6px",
 )
 
-# Color the price column (sequential heatmap for the hero measure)
+# Apply styling: heatmap for MSRP (the hero measure)
 gt = heatmap(gt, "msrp", kind="sequential", hue="neutral")
 
-# Apply house formatting
+# Heading band, striping, stub tint, and group emphasis
 gt = band(gt, hue="navy")
 gt = stripe(gt)
 gt = stub_tint(gt, hue="navy")
 gt = group_emphasis(gt)
 
-# Add source notes: analytical caption first, then provenance
+# Add source notes
 gt = gt.tab_source_note(
-    source_note="Top 10 vehicles ranked by manufacturer suggested retail price (MSRP)."
+    source_note="Top 10 vehicles ranked by MSRP, grouped by country of origin."
 )
 gt = gt.tab_source_note(
-    source_note="Source: gtcars dataset."
+    source_note="Source: gtcars.csv dataset."
 )
 
 # Apply frame and hairlines
 gt = hairlines(gt)
 gt = frame(gt)
 
-# Finalize and render
-finalize(gt, path="table.png")
+# Finalize and save
+finalize(gt)

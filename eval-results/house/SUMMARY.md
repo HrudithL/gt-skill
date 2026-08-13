@@ -153,3 +153,28 @@ scores.)
 
 Curated candidate scripts, renders, and comparator reports for every
 invocation are under [`samples/`](samples/), organized `samples/<prompt>/<variant>/`.
+
+## Round 4 (2026-08-13) — dtype footgun + comparator blind spots fixed
+
+Fresh sweep (`runs/sweep/20260813_011158_house_6prompts`) after fixing: `RULES.md`'s
+`np.where(...)` baseline-guard snippet used `None` instead of `np.nan` (forced
+`object` dtype, broke `.nlargest()` — caused a real 2x token blowup in one repeat);
+the comparator's static AND execution-tier extractors now both recognize a
+`def build_table(): ... if __name__=="__main__":`-wrapped script as inlined
+top-level code (previously invisible to either, cratering two repeats' scores to
+~18–35% from the blind spot alone, not real quality).
+
+| Metric | This round | Round 3 |
+|---|---|---|
+| Mean score | **84.2%** | 79.4% |
+| Mean repeat spread | **10.8pp** | 18.1pp |
+| Mean cost | $0.124 | $0.134 |
+
+Per-prompt means: `gtcars_top10_by_country` 95.8%, `islands_sizes` 95.1%,
+`gtcars_hp_price` 94.1%, `airquality_monthly_summary` 87.3% (one repeat's
+28pp-below-siblings score traced to a genuine Big-Color-restraint lapse — the
+candidate heatmapped all 3 measures instead of just Ozone — not a mechanical
+bug), `towny_growth_trends` 78.2%, `sp500_monthly_performance` 54.3% (still
+the hardest — see top-level `SUMMARY.md`'s note on the sp500
+month-label-format ambiguity, a genuine ground-truth string-format
+difference, not a skill bug).

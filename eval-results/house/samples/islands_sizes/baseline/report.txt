@@ -1,25 +1,25 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260812_212028_house_6prompts/prompts/islands_sizes/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/islands_sizes.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_011158_house_6prompts/prompts/islands_sizes/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/islands_sizes.py
 
-TOTAL: 10/79 (12.7%)
-  Data-compliance:        5/42
-  Formatting-compliance:  5/37
+TOTAL: 24/85 (28.2%)
+  Data-compliance:        10/43
+  Formatting-compliance:  14/42
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- candidate failed to execute: no top-level `gt` GT instance in table.py
-[FAIL] [MECHANICAL] Colored-measure selection (right measure(s) colored): 0/6 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 1 canonical measures unverifiable
+[FAIL] [MECHANICAL] Colored-measure selection (right measure(s) colored): 0/6 -- 0/1 canonical colored measures covered by a candidate color call
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping; grouping is not a discretionary editorial choice being tested here.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- Both columns are clearly and correctly labeled. The candidate's 'Island' (matching LABEL_SYNONYMS: 'name', 'island', 'landmass') and 'Size (1000 sq mi)' (matching LABEL_SYNONYMS for size with explicit units) unambiguously name their underlying concepts.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=48, body not fully color-covered -> expected striping=True, actual=False
 [N/A] [MECHANICAL] Heading band hue harmonization: 0/0 -- superseded by check_header_branding (2026-08-12 -- header is now a fixed universal navy, not hue-matched per table)
 [FAIL] [MECHANICAL] Header branding (deep navy, bold, white text): 0/5 -- header background: expected #08306B, got None (MISMATCH); column_labels_font_weight: expected bold, got None (MISMATCH); column-label text color: expected white, got None (MISMATCH)
 [N/A] [MECHANICAL] Stub tint (washed navy): 0/0 -- candidate has no stub
@@ -29,8 +29,8 @@ TOTAL: 10/79 (12.7%)
 [FAIL] [MECHANICAL] Caption keyword coverage: 1/3 -- 1/3 caption-keyword rules satisfied; caption missing: ['largest to smallest', 'land area']
 [FAIL] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 0/4 -- ground truth requires colored measure(s) but candidate has none
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- candidate failed to execute: no top-level `gt` GT instance in table.py
+[PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: candidate failed Tier-2 execution (no top-level `gt` GT instance in table.py); its PNG (if any) can't be trusted to reflect this source
+[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'Islands and Their Sizes' captures the same core framing as the ground truth's 'Islands of the World, by Size'—both clearly identify the table's subject (islands) and organizing principle (size/ordering). The subtitle 'Land area in thousands of square miles' also aligns with the CAPTION_KEYWORDS expectation to mention 'land area'.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 4/5 -- The candidate orders Island name first (stub column, identifying information) and Size second, which is a sensible and natural reading order. However, the candidate sorts alphabetically by island name rather than by size descending as the ground truth does ('largest to smallest' per CAPTION_KEYWORDS). While the alphabetic sort does not break logical grouping of related columns, it eliminates the interpretive benefit of the size-ordered sort that would let readers immediately spot the largest islands and follow a natural data story.

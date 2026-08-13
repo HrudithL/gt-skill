@@ -1,56 +1,58 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, md, style, loc
+from great_tables import GT, style, loc
 
 # Step 1: Load and clean data
 df = pd.read_csv("islands.csv")
 
 # Step 2: Organize columns
-# 'name' is the identifier (stub), 'size' is the measure
+# name is the stub, size is the measure
+# Ensure size is numeric
+df["size"] = pd.to_numeric(df["size"], errors="coerce")
+
+# Step 3: Big Color — compute domain for size gradient
+cols_measure = ["size"]
+lo = float(np.nanmin(df[cols_measure].to_numpy()))
+hi = float(np.nanmax(df[cols_measure].to_numpy()))
+
+# Step 4 & 5 & 6: Build the table
 gt = (
     GT(df, rowname_col="name")
-    # Step 3: Big Color — size is an ordered magnitude measure (≥5 rows)
-    # Compute the domain from the data
+    # Column label
+    .cols_label(size="Size (1000 km²)")
+    # Format the size column
+    .fmt_number(columns="size", decimals=0, use_seps=True)
+    # Step 3: Big Color — gradient fill for size (neutral magnitude → Blues)
     .data_color(
         columns="size",
         palette="Blues",
-        domain=[float(np.nanmin(df["size"].to_numpy())), float(np.nanmax(df["size"].to_numpy()))],
+        domain=[lo, hi],
         truncate=False,
         na_color="#808080",
     )
     # Step 4: Heading band (fixed navy, white text)
     .tab_header(
-        title="Islands of the World",
-        subtitle="Land area in thousands of square miles",
-    )
-    .tab_options(
-        column_labels_background_color="#08306B",
-        column_labels_font_weight="bold",
+        title="World's Largest Islands",
+        subtitle="Island sizes in thousands of square kilometers",
     )
     # Step 5: Small Color polish
-    # (a) Cell borders — hairline between rows
+    # (a) Cell borders — hairlines and column-label bottom rule
     .tab_options(
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
-        row_striping_background_color="#F6F6F6",
     )
     # (c) Row striping
     .opt_row_striping()
+    .tab_options(row_striping_background_color="#F6F6F6")
     # (d) Stub tint
     .tab_style(
         style=style.fill(color="#EAF0F6"),
         locations=loc.stub(),
     )
-    # (e) Format the size column as a number
-    .fmt_number(columns="size", decimals=0, use_seps=True)
-    .sub_missing(columns="size", missing_text="—")
-    # Step 6: Titles & annotations
-    .tab_source_note(source_note="Islands are ordered by size; the measure includes only the named island or island group.")
-    .tab_source_note(source_note="Source: R datasets package.")
-    # Frame — boxed enclosing border on all four sides
+    # Frame border (all four sides)
     .tab_options(
         table_border_top_style="solid",
         table_border_top_color="#CCCCCC",
@@ -64,6 +66,10 @@ gt = (
         table_border_right_style="solid",
         table_border_right_color="#CCCCCC",
         table_border_right_width="1px",
+    )
+    # Compact layout padding
+    .cols_width(cases={"name": "200px", "size": "140px"})
+    .tab_options(
         heading_padding="6px",
         column_labels_padding="6px",
         column_labels_padding_horizontal="8px",
@@ -71,9 +77,11 @@ gt = (
         data_row_padding_horizontal="8px",
         source_notes_padding="6px",
     )
-    # Compact layout: set column widths
-    .cols_width(cases={"size": "120px"})
+    # Step 6: Titles & annotations — two footer calls
+    .tab_source_note(source_note="Data represents island land area in thousands of square kilometers.")
+    .tab_source_note(source_note="Source: islands.csv")
 )
 
 # Step 7: Render
 gt.gtsave("table.png", expand=15)
+print("Table rendered to table.png")

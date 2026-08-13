@@ -1,71 +1,124 @@
 import pandas as pd
+import numpy as np
 from great_tables import GT, style, loc
 
+# Step 1: UNDERSTAND & CLEAN DATA
 df = pd.read_csv("gtcars.csv")
 
-top10 = df.nlargest(10, "msrp")[["model", "ctry_origin", "msrp", "drivetrain", "trsmn"]].copy()
-top10 = top10.sort_values(["ctry_origin", "msrp"], ascending=[True, False]).reset_index(drop=True)
+# Get top 10 by msrp (price)
+df_top = df.nlargest(10, "msrp").copy()
 
-top10["msrp"] = top10["msrp"].astype(float)
-top10.columns = ["Model", "Country", "Price", "Drivetrain", "Transmission"]
+# Create composite stub label for readability
+df_top["vehicle"] = df_top["mfr"] + " " + df_top["model"]
 
-top10_rows = df.nlargest(10, "msrp").index.tolist()
+# Select and organize columns
+cols = ["vehicle", "ctry_origin", "drivetrain", "trsmn", "msrp"]
+df_display = df_top[cols].copy()
+df_display.columns = ["Vehicle", "Country", "Drivetrain", "Transmission", "MSRP"]
 
+# Clean transmission codes to readable format
+transmission_map = {
+    "6m": "6-speed Manual",
+    "6a": "6-speed Auto",
+    "7a": "7-speed Auto",
+    "7m": "7-speed Manual",
+    "8a": "8-speed Auto",
+    "8am": "8-speed Auto/Manual",
+    "9a": "9-speed Auto",
+    "1dd": "Dual Motor"
+}
+df_display["Transmission"] = df_display["Transmission"].map(transmission_map)
+
+# Clean drivetrain to readable format
+drivetrain_map = {
+    "rwd": "RWD",
+    "awd": "AWD",
+    "fwd": "FWD"
+}
+df_display["Drivetrain"] = df_display["Drivetrain"].map(drivetrain_map)
+
+# Sort by Country then by MSRP (descending) for grouped display
+df_display = df_display.sort_values(["Country", "MSRP"], ascending=[True, False])
+
+# Step 2: ORGANIZE COLUMNS
+# Stub: Vehicle (already created)
+# Group: Country
+# Measures: Drivetrain, Transmission, MSRP
+
+# Step 3: BIG COLOR - which measure(s) earn fill
+# MSRP qualifies (ordered numeric, 10 rows >= 5)
+# Drivetrain and Transmission are categorical, not measures
+# Color MSRP only (it's the focal measure - price range shows the "expensiveness")
+
+# Compute domain for MSRP
+cols_msrp = ["MSRP"]
+lo = float(np.nanmin(df_display[cols_msrp].to_numpy()))
+hi = float(np.nanmax(df_display[cols_msrp].to_numpy()))
+
+# Step 4: BUILD TABLE WITH HEADING BAND
 gt = (
-    GT(top10, rowname_col="Model", groupname_col="Country")
-    .tab_header(
-        title="Top 10 Most Expensive GT Cars",
-        subtitle="Grouped by Country of Origin"
-    )
-    .cols_width(cases={
-        "Price": "120px",
-        "Drivetrain": "110px",
-        "Transmission": "110px"
-    })
-    .tab_style(
-        style=[
-            style.fill(color="#9A7B33"),
-            style.text(color="#ffffff", weight="bold")
-        ],
-        locations=loc.body(rows=list(range(len(top10))))
-    )
-    .fmt_currency(columns="Price", currency="USD", decimals=0)
+    GT(df_display, rowname_col="Vehicle", groupname_col="Country")
+    # Step 5: SMALL COLOR POLISH
+    # (a) Cell borders - hairlines on all body rows
     .tab_options(
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
-        table_border_top_style="solid",
-        table_border_top_color="#CCCCCC",
-        table_border_top_width="1px",
-        table_border_bottom_style="solid",
-        table_border_bottom_color="#CCCCCC",
-        table_border_bottom_width="1px",
-        table_border_left_style="solid",
-        table_border_left_color="#CCCCCC",
-        table_border_left_width="1px",
-        table_border_right_style="solid",
-        table_border_right_color="#CCCCCC",
-        table_border_right_width="1px",
+    )
+    # Row-group emphasis: bold weight + structural rule
+    # (c) Row striping (not all body is colored, so apply by default)
+    .tab_options(
         row_group_font_weight="bold",
         row_group_border_top_color="#BDBDBD",
         row_group_border_bottom_color="#BDBDBD",
         row_group_padding="6px",
-        heading_padding="6px",
-        column_labels_padding="6px",
-        column_labels_padding_horizontal="8px",
-        data_row_padding="5px",
-        data_row_padding_horizontal="8px",
-        source_notes_padding="6px",
-    )
-    .tab_style(
-        style=style.fill(color="#EAF0F6"),
-        locations=loc.stub()
+        row_striping_background_color="#F6F6F6",
     )
     .opt_row_striping()
-    .tab_source_note(source_note="Data includes top 10 vehicles by MSRP, sorted by country and price within each country.")
-    .tab_source_note(source_note="Source: gtcars.csv")
+    # (d) Stub tint
+    .tab_style(
+        style=style.fill(color="#EAF0F6"),
+        locations=loc.stub(),
+    )
+    # (e) Formatting per column
+    .fmt_currency(columns="MSRP", currency="USD", decimals=0)
+    .sub_missing(columns=["Drivetrain", "Transmission", "MSRP"], missing_text="—")
+    # Step 4: Heading band (branding) - dark navy band with white text
+    .tab_options(
+        heading_background_color="#08306B",
+        column_labels_background_color="#08306B",
+        column_labels_font_weight="bold",
+    )
+    .tab_style(
+        style=style.text(color="white"),
+        locations=loc.column_labels(),
+    )
+    .tab_style(
+        style=style.text(color="white"),
+        locations=loc.header(),
+    )
+    # Step 3: BIG COLOR - gradient fill on MSRP
+    .data_color(
+        columns="MSRP",
+        palette="Blues",
+        domain=[lo, hi],
+        truncate=False,
+        na_color="#808080",
+    )
+    # Step 6: TITLES & ANNOTATIONS
+    .tab_header(
+        title="Top 10 Most Expensive GT Cars",
+        subtitle="Grouped by Country of Origin"
+    )
+    .tab_source_note(
+        source_note="Prices (MSRP) shown in USD; color intensity indicates relative cost within the top 10."
+    )
+    .tab_source_note(
+        source_note="Source: gtcars.csv"
+    )
 )
 
-gt.gtsave("table.png", expand=15)
+# Step 7: RENDER & VERIFY
+gt.gtsave("table.png")

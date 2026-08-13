@@ -1,55 +1,88 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, md
-from gt_consistency import heatmap, band, stripe, stub_tint, frame, finalize
+from great_tables import GT, style, loc, md
+from gt_consistency import frame, finalize, band, heatmap, stripe, stub_tint, PALETTE
 
+# Step 1: Load and clean data
 df = pd.read_csv("gtcars.csv")
 
-# Step 1: Clean data and get top 10 most expensive
-df = df.sort_values("msrp", ascending=False).head(10).reset_index(drop=True)
-df = df[["mfr", "model", "ctry_origin", "msrp", "drivetrain", "trsmn"]].copy()
+# Filter to top 10 most expensive cars
+top10 = df.nlargest(10, "msrp")[["mfr", "model", "ctry_origin", "msrp", "drivetrain", "trsmn"]].copy()
 
-# Create display name: mfr + model for stub
-df["car_name"] = df["mfr"] + " " + df["model"]
-df = df.drop(columns=["mfr", "model"])
+# Sort by country, then by price descending
+top10 = top10.sort_values(["ctry_origin", "msrp"], ascending=[True, False]).reset_index(drop=True)
 
-# Step 2: Organize columns - group by country
+# Step 2: Create stub column combining manufacturer and model
+top10["car_name"] = top10["mfr"] + " " + top10["model"]
+top10 = top10[["car_name", "ctry_origin", "msrp", "drivetrain", "trsmn"]]
+
+# Ensure numeric type for MSRP
+top10["msrp"] = pd.to_numeric(top10["msrp"], errors="coerce")
+
+# Step 3: Create the table with grouping by country
 gt = (
-    GT(df, rowname_col="car_name", groupname_col="ctry_origin")
-    .cols_move_to_end(["msrp"])
-    .cols_width(cases={
-        "car_name": "200px",
-        "drivetrain": "100px",
-        "trsmn": "100px",
-        "msrp": "120px"
-    })
-)
-
-# Step 3: Big Color - msrp is neutral magnitude → Blues
-cols = ["msrp"]
-lo = float(np.nanmin(df[cols].to_numpy()))
-hi = float(np.nanmax(df[cols].to_numpy()))
-gt = heatmap(gt, "msrp", kind="sequential", hue="neutral", domain=[lo, hi])
-
-# Step 4: Heading band
-gt = band(gt)
-
-# Step 5: Small Color polish
-gt = (
-    gt
-    .fmt_currency(columns=["msrp"], decimals=0, currency="USD")
-    .sub_missing(columns=["msrp", "drivetrain", "trsmn"], missing_text="—")
+    GT(top10, rowname_col="car_name", groupname_col="ctry_origin")
+    .cols_hide(columns=["ctry_origin"])
+    .cols_label(
+        msrp="MSRP",
+        drivetrain="Drivetrain",
+        trsmn="Transmission"
+    )
+    # Format MSRP as currency
+    .fmt_currency(columns=["msrp"], currency="USD", decimals=0)
+    # Step 3: Apply color gradient to MSRP (magnitude measure)
+    .data_color(
+        columns="msrp",
+        palette="Blues",
+        domain=[float(np.nanmin(top10["msrp"].to_numpy())), float(np.nanmax(top10["msrp"].to_numpy()))],
+        truncate=False,
+        na_color="#808080",
+    )
+    # Step 4: Apply heading band
+    .tab_options(
+        column_labels_background_color="#08306B",
+        column_labels_font_weight="bold",
+        column_labels_border_bottom_color="#CCCCCC",
+        column_labels_border_bottom_width="2px",
+    )
+    .tab_style(
+        style=style.text(color="#ffffff"),
+        locations=loc.column_labels(),
+    )
+    # Step 5: Small Color polish
     .tab_options(
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
-        row_striping_background_color="#F6F6F6",
         row_group_font_weight="bold",
         row_group_border_top_color="#BDBDBD",
         row_group_border_bottom_color="#BDBDBD",
         row_group_padding="6px",
+    )
+    .opt_row_striping()
+    .tab_options(row_striping_background_color="#F6F6F6")
+    .tab_style(
+        style=style.fill(color="#EAF0F6"),
+        locations=loc.stub(),
+    )
+    # Frame border
+    .tab_options(
+        table_border_top_style="solid",
+        table_border_top_color="#CCCCCC",
+        table_border_top_width="1px",
+        table_border_bottom_style="solid",
+        table_border_bottom_color="#CCCCCC",
+        table_border_bottom_width="1px",
+        table_border_left_style="solid",
+        table_border_left_color="#CCCCCC",
+        table_border_left_width="1px",
+        table_border_right_style="solid",
+        table_border_right_color="#CCCCCC",
+        table_border_right_width="1px",
+    )
+    # Compact layout
+    .cols_width(cases={"car_name": "200px", "msrp": "140px", "drivetrain": "110px", "trsmn": "120px"})
+    .tab_options(
         heading_padding="6px",
         column_labels_padding="6px",
         column_labels_padding_horizontal="8px",
@@ -57,22 +90,18 @@ gt = (
         data_row_padding_horizontal="8px",
         source_notes_padding="6px",
     )
-)
-
-gt = stripe(gt)
-gt = stub_tint(gt)
-gt = frame(gt)
-
-# Step 6: Titles & annotations
-gt = (
-    gt
+    # Step 6: Titles and annotations
     .tab_header(
-        title="Top 10 Most Expensive GT Cars",
-        subtitle="Grouped by Country of Origin"
+        title="Top 10 Most Expensive GT Cars by Country",
+        subtitle="MSRP, Drivetrain, and Transmission Details"
     )
-    .tab_source_note(source_note="Top 10 cars ranked by MSRP price, from highest to lowest.")
-    .tab_source_note(source_note="Source: gtcars.csv")
+    .tab_source_note(
+        source_note="MSRP values shown in USD. Gradient color represents price magnitude across all top 10 vehicles."
+    )
+    .tab_source_note(
+        source_note="Source: gtcars.csv"
+    )
 )
 
-# Step 7: Render
-finalize(gt, "table.png")
+# Step 7: Render and save
+gt.gtsave("table.png", expand=15)

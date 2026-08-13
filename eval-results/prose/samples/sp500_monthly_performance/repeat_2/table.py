@@ -1,188 +1,163 @@
-"""S&P 500 monthly performance summary, 2010-2015.
-
-Data: sp500.csv (S&P 500 daily prices, daily OHLCV)
-Story: Monthly aggregation showing opening price, closing price, percent change,
-       average daily volume, highest single-day gain, and worst single-day loss
-       for each month from 2010 through 2015.
-"""
-import numpy as np
 import pandas as pd
-from great_tables import GT, loc, style
+import numpy as np
+from great_tables import GT, md, style, loc
 
-df = pd.read_csv("sp500.csv", parse_dates=["date"]).sort_values("date")
+# Step 1: UNDERSTAND AND CLEAN DATA
+df = pd.read_csv("sp500.csv")
+df["date"] = pd.to_datetime(df["date"])
 
-# Restrict to 2010-2015.
-df = df[(df["date"].dt.year >= 2010) & (df["date"].dt.year <= 2015)].copy()
-df["month"] = df["date"].dt.to_period("M")
+# Filter for 2010-2015
+df = df[(df["date"].dt.year >= 2010) & (df["date"].dt.year <= 2015)]
+df = df.sort_values("date").reset_index(drop=True)
 
-# Compute monthly metrics.
-monthly = df.groupby("month").agg(
-    open=("open", "first"),
-    close=("close", "last"),
-    high=("high", "max"),
-    low=("low", "min"),
-    volume=("volume", "mean"),
-).reset_index()
+# Aggregate to monthly: opening (first day), closing (last day), volume stats, intraday gains/losses
+monthly = (
+    df.groupby(df["date"].dt.to_period("M"))
+    .agg({
+        "open": "first",
+        "close": "last",
+        "volume": "mean",
+        "high": "max",
+        "low": "min",
+    })
+    .reset_index()
+)
+monthly.columns = ["period", "open", "close", "avg_volume", "month_high", "month_low"]
 
-# Percent change from open to close.
-monthly["pct_change"] = monthly["close"] / monthly["open"] - 1
+# Compute percent change
+monthly["pct_change"] = (monthly["close"] - monthly["open"]) / monthly["open"]
 
-# Intraday high-low = highest single-day gain/loss within the month.
-monthly["best_day_gain"] = df.groupby("month").apply(
-    lambda x: (x["high"] - x["open"]).max()
-).values
+# Compute daily gains/losses within each month
+daily_gains_losses = []
+for period in monthly["period"]:
+    period_df = df[df["date"].dt.to_period("M") == period]
+    period_df["daily_gain"] = period_df["high"] - period_df["open"]
+    period_df["daily_loss"] = period_df["open"] - period_df["low"]
+    daily_gains_losses.append({
+        "period": period,
+        "max_daily_gain": period_df["daily_gain"].max(),
+        "max_daily_loss": period_df["daily_loss"].max(),
+    })
 
-monthly["worst_day_loss"] = df.groupby("month").apply(
-    lambda x: (x["low"] - x["close"]).min()
-).values
+gains_losses_df = pd.DataFrame(daily_gains_losses)
+monthly = monthly.merge(gains_losses_df, on="period")
 
-# Month label for the stub.
-monthly["month_label"] = monthly["month"].dt.strftime("%b %Y")
+# Format period label for display
+monthly["month_label"] = monthly["period"].astype(str)
 
-# Select and reorder columns for the table.
-monthly = monthly[[
-    "month_label",
-    "open",
-    "close",
-    "pct_change",
-    "volume",
-    "best_day_gain",
-    "worst_day_loss",
-]].reset_index(drop=True)
+# Reorder and select final columns
+monthly = monthly[["month_label", "open", "close", "pct_change", "avg_volume", "max_daily_gain", "max_daily_loss"]]
+monthly.columns = ["Month", "Open", "Close", "Pct_Change", "Avg_Volume", "Max_Daily_Gain", "Max_Daily_Loss"]
 
-# Data-driven domains for the two signed columns (both positive and negative).
-pct_m = float(np.nanmax(np.abs(monthly["pct_change"].to_numpy())))
-gain_m = float(np.nanmax(np.abs(monthly["best_day_gain"].to_numpy())))
-loss_m = float(np.nanmax(np.abs(monthly["worst_day_loss"].to_numpy())))
+# Ensure all numeric columns are float64
+for col in ["Open", "Close", "Pct_Change", "Avg_Volume", "Max_Daily_Gain", "Max_Daily_Loss"]:
+    monthly[col] = monthly[col].astype("float64")
 
-# Percent change and gain/loss are signed measures, good/bad directions.
-# Percent change: positive = good (green), negative = bad (red).
-# Gain and loss are directionally opposite: gain is positive/good, loss is negative/bad.
+# Step 2: ORGANIZE COLUMNS
+# Month is the stub; all other columns are measures
+# Percent change is signed (diverging fill), daily gains/losses and volume are magnitudes
 
+# Step 3: BIG COLOR
+# Percent change: signed measure (diverging palette RdYlGn, positive=good)
+# Max daily gain: neutral magnitude (Blues)
+# Max daily loss: neutral magnitude (Blues)
+# Avg volume: neutral magnitude (Blues)
+
+# Compute symmetric domain for percent change
+pct_cols = ["Pct_Change"]
+pct_lo = float(np.nanmin(monthly[pct_cols].to_numpy()))
+pct_hi = float(np.nanmax(monthly[pct_cols].to_numpy()))
+pct_M = max(abs(pct_lo), abs(pct_hi))
+
+# Compute domain for daily gain (magnitude, sequential)
+gain_cols = ["Max_Daily_Gain"]
+gain_lo = float(np.nanmin(monthly[gain_cols].to_numpy()))
+gain_hi = float(np.nanmax(monthly[gain_cols].to_numpy()))
+
+# Compute domain for daily loss (magnitude, sequential)
+loss_cols = ["Max_Daily_Loss"]
+loss_lo = float(np.nanmin(monthly[loss_cols].to_numpy()))
+loss_hi = float(np.nanmax(monthly[loss_cols].to_numpy()))
+
+# Compute domain for volume (magnitude, sequential)
+vol_cols = ["Avg_Volume"]
+vol_lo = float(np.nanmin(monthly[vol_cols].to_numpy()))
+vol_hi = float(np.nanmax(monthly[vol_cols].to_numpy()))
+
+# Step 4 & 5: Build the table with formatting and styling
 gt = (
-    GT(monthly, rowname_col="month_label")
-    .tab_header(
-        title="S&P 500 — Monthly Performance Summary (2010–2015)",
-        subtitle="Opening & closing prices, percent change, average daily volume, and intraday range",
-    )
-    # Column spanners to group related measures.
-    .tab_spanner(label="Price ($)", columns=["open", "close"])
-    .tab_spanner(label="Performance", columns=["pct_change", "best_day_gain", "worst_day_loss"])
-    .cols_label(
-        open="Open",
-        close="Close",
-        pct_change="% Change",
-        volume="Avg Daily Vol",
-        best_day_gain="Best Day Gain",
-        worst_day_loss="Worst Day Loss",
-    )
-    # Format prices as currency.
-    .fmt_currency(columns=["open", "close"], currency="USD", decimals=2)
-    # Format average volume as number with thousands separators.
-    .fmt_number(columns=["volume"], decimals=0, use_seps=True)
-    # Percent change with forced sign.
-    .fmt_percent(columns=["pct_change"], decimals=2, force_sign=True)
-    # Best day gain and worst day loss as price changes with forced sign.
-    .fmt_currency(columns=["best_day_gain", "worst_day_loss"], currency="USD", decimals=2, force_sign=True)
-    # Data color — percent change with diverging RdYlGn (red/bad ← → green/good).
+    GT(monthly, rowname_col="Month")
+    # Formatting per column
+    .fmt_currency(columns=["Open", "Close"], decimals=2)
+    .fmt_percent(columns=["Pct_Change"], decimals=2, force_sign=True)
+    .fmt_number(columns=["Avg_Volume"], decimals=0, use_seps=True)
+    .fmt_number(columns=["Max_Daily_Gain", "Max_Daily_Loss"], decimals=2)
+    # Big Color: percent change (signed/diverging)
     .data_color(
-        columns=["pct_change"],
+        columns="Pct_Change",
         palette="RdYlGn",
-        domain=[-pct_m, pct_m],
-        na_color="#808080",
+        domain=[-pct_M, pct_M],
+        reverse=False,
         truncate=False,
-        autocolor_text=True,
     )
-    # Data color — best day gain (green, sequential, positive is good).
+    # Big Color: daily gain (magnitude/sequential)
     .data_color(
-        columns=["best_day_gain"],
-        palette="Greens",
-        domain=[0, gain_m],
-        na_color="#808080",
+        columns="Max_Daily_Gain",
+        palette="Blues",
+        domain=[gain_lo, gain_hi],
         truncate=False,
+        na_color="#808080",
     )
-    # Data color — worst day loss (red, sequential, but inverted domain so negative is worse).
-    # Since worst_day_loss is negative, map the absolute worst to the darkest red.
+    # Big Color: daily loss (magnitude/sequential)
     .data_color(
-        columns=["worst_day_loss"],
-        palette="Reds",
-        domain=[loss_m, 0],  # inverted so most negative = darkest
-        na_color="#808080",
+        columns="Max_Daily_Loss",
+        palette="Blues",
+        domain=[loss_lo, loss_hi],
         truncate=False,
+        na_color="#808080",
     )
-    # Align numeric columns to the right.
-    .cols_align(
-        align="right",
-        columns=["open", "close", "pct_change", "volume", "best_day_gain", "worst_day_loss"],
+    # Big Color: average volume (magnitude/sequential)
+    .data_color(
+        columns="Avg_Volume",
+        palette="Blues",
+        domain=[vol_lo, vol_hi],
+        truncate=False,
+        na_color="#808080",
     )
-    # Column-group vertical dividers.
-    .tab_style(
-        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
-        locations=loc.body(columns="close"),
-    )
-    .tab_style(
-        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
-        locations=loc.column_labels(columns="close"),
-    )
-    .tab_style(
-        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
-        locations=loc.body(columns="worst_day_loss"),
-    )
-    .tab_style(
-        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
-        locations=loc.column_labels(columns="worst_day_loss"),
-    )
-    # Heading band — fixed branding navy, bold labels, white text.
+    # Step 4: Heading band (fixed branding)
     .tab_options(
         column_labels_background_color="#08306B",
         column_labels_font_weight="bold",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
     )
-    .tab_style(style=style.text(color="white"), locations=loc.column_labels())
-    # Stub tint — fixed branding hex.
-    .tab_style(style=style.fill(color="#EAF0F6"), locations=loc.stub())
-    # Row striping.
-    .opt_row_striping()
+    # Step 5a: Body row hairlines and 5c: Row striping
     .tab_options(
-        row_striping_background_color="#F6F6F6",
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
-        table_border_top_style="solid", table_border_top_color="#CCCCCC", table_border_top_width="1px",
-        table_border_bottom_style="solid", table_border_bottom_color="#CCCCCC", table_border_bottom_width="1px",
-        table_border_left_style="solid", table_border_left_color="#CCCCCC", table_border_left_width="1px",
-        table_border_right_style="solid", table_border_right_color="#CCCCCC", table_border_right_width="1px",
+        row_striping_background_color="#F6F6F6",
     )
-    # Column widths.
-    .cols_width(cases={
-        "month_label": "80px",
-        "open": "90px",
-        "close": "90px",
-        "pct_change": "90px",
-        "volume": "110px",
-        "best_day_gain": "110px",
-        "worst_day_loss": "110px",
-    })
-    # Padding.
-    .tab_options(
-        heading_padding="6px",
-        column_labels_padding="6px",
-        column_labels_padding_horizontal="8px",
-        data_row_padding="5px",
-        data_row_padding_horizontal="8px",
-        source_notes_padding="6px",
+    .opt_row_striping()
+    # Step 5d: Stub tint
+    .tab_style(
+        style=style.fill(color="#EAF0F6"),
+        locations=loc.stub(),
     )
-    # Footer notes.
+    # Step 5: Missing value handling
+    .sub_missing(columns=monthly.columns.tolist(), missing_text="—")
+    # Step 6: Titles and annotations
+    .tab_header(
+        title="S&P 500 Monthly Performance Summary (2010-2015)",
+        subtitle="Opening price, closing price, percent change, and daily volatility metrics by month",
+    )
     .tab_source_note(
-        source_note=(
-            "Percent change measures the monthly return from opening to closing price. "
-            "Best day gain is the maximum intraday high vs. open; worst day loss is the "
-            "minimum intraday low vs. close. Both reflect the largest single-day price move "
-            "within each month, not the month-long trend."
-        )
+        source_note="Percent change = (Close − Open) / Open. Max daily gain = intraday high − opening price. Max daily loss = opening price − intraday low. All data from sp500.csv."
     )
-    .tab_source_note(source_note="Source: S&P 500 daily OHLCV, 2010–2015.")
+    .tab_source_note(
+        source_note="Source: S&P 500 historical price data, 2010–2015."
+    )
 )
 
-gt.gtsave("table.png", zoom=2.0, expand=15)
+# Step 7: Render
+gt.gtsave("table.png")

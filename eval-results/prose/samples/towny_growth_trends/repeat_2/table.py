@@ -1,154 +1,156 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, md, style, loc
+from great_tables import GT, md, html, style, loc
 
-# Read the data
+# Step 1: Load and clean the data
 df = pd.read_csv("towny.csv")
 
-# Calculate overall growth rate from 1996 to 2021
-df['overall_growth'] = (df['population_2021'] - df['population_1996']) / df['population_1996']
+# Calculate overall population growth rate from 1996 to 2021 to identify fastest-growing towns
+df["pop_growth_1996_2021"] = (df["population_2021"] - df["population_1996"]) / df["population_1996"]
 
-# Sort by overall growth and get top 15
-top_15 = df.nlargest(15, 'overall_growth').copy()
+# Filter to top 15 fastest-growing towns
+top_15 = df.nlargest(15, "pop_growth_1996_2021").copy()
 
-# Select and organize columns for the table
-# We'll show: name, density for each year, percent change between periods
-table_df = top_15[[
-    'name',
-    'density_1996', 'density_2001', 'density_2006', 'density_2011', 'density_2016', 'density_2021',
-    'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct',
-    'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct'
-]].reset_index(drop=True)
-
-# Rename columns for display
-table_df.columns = [
-    'Town',
-    'Density 1996', 'Density 2001', 'Density 2006', 'Density 2011', 'Density 2016', 'Density 2021',
-    '1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021'
+# Select and reorder columns for the table
+# Stub: town name
+# Density columns across all years: 1996, 2001, 2006, 2011, 2016, 2021
+# Percentage change columns for each period
+display_cols = ["name"] + [
+    "density_1996", "pop_change_1996_2001_pct",
+    "density_2001", "pop_change_2001_2006_pct",
+    "density_2006", "pop_change_2006_2011_pct",
+    "density_2011", "pop_change_2011_2016_pct",
+    "density_2016", "pop_change_2016_2021_pct",
+    "density_2021"
 ]
 
-# Create the GT object with town names as stub
-gt = GT(table_df, rowname_col='Town')
+table_data = top_15[display_cols].copy()
 
-# Add column spanners for logical grouping
-gt = (gt
-    .tab_spanner(label='Population Density (persons/km²)', columns=[
-        'Density 1996', 'Density 2001', 'Density 2006', 'Density 2011', 'Density 2016', 'Density 2021'
-    ])
-    .tab_spanner(label='Growth Rate Between Census Periods (%)', columns=[
-        '1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021'
-    ])
-)
+# Rename columns for display
+rename_map = {
+    "name": "Town",
+    "density_1996": "Density 1996",
+    "density_2001": "Density 2001",
+    "density_2006": "Density 2006",
+    "density_2011": "Density 2011",
+    "density_2016": "Density 2016",
+    "density_2021": "Density 2021",
+    "pop_change_1996_2001_pct": "% Change 1996-2001",
+    "pop_change_2001_2006_pct": "% Change 2001-2006",
+    "pop_change_2006_2011_pct": "% Change 2006-2011",
+    "pop_change_2011_2016_pct": "% Change 2011-2016",
+    "pop_change_2016_2021_pct": "% Change 2016-2021",
+}
 
-# Format density columns as numbers
-density_cols = ['Density 1996', 'Density 2001', 'Density 2006', 'Density 2011', 'Density 2016', 'Density 2021']
-gt = gt.fmt_number(columns=density_cols, decimals=1, use_seps=True)
+table_data = table_data.rename(columns=rename_map)
 
-# Format percent change columns
-pct_cols = ['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']
-gt = gt.fmt_percent(columns=pct_cols, decimals=1, force_sign=True, scale_values=False)
+# Step 2: Organize columns - set town name as stub
+# Reorder for better readability: density first, then % changes interspersed
+# This creates a natural pairing of density before each period's change
 
-# Compute domain for gradient fill on percent changes
-pct_data = table_df[pct_cols].to_numpy()
-pct_min = float(np.nanmin(pct_data))
-pct_max = float(np.nanmax(pct_data))
+# Step 3: Identify measures for Big Color
+# Density columns are magnitudes (levels) - they earn gradient fill
+# Percentage change columns are rates - they represent growth trends
+density_cols = ["Density 1996", "Density 2001", "Density 2006", "Density 2011", "Density 2016", "Density 2021"]
+pct_cols = ["% Change 1996-2001", "% Change 2001-2006", "% Change 2006-2011", "% Change 2011-2016", "% Change 2016-2021"]
 
-# Apply data_color to growth rates - use Greens since growth is positive direction
-gt = (gt
+# Data-driven domains for density gradient
+lo_density = float(np.nanmin(table_data[density_cols].to_numpy()))
+hi_density = float(np.nanmax(table_data[density_cols].to_numpy()))
+
+# Data-driven domains for percentage change gradient
+lo_pct = float(np.nanmin(table_data[pct_cols].to_numpy()))
+hi_pct = float(np.nanmax(table_data[pct_cols].to_numpy()))
+
+# Create the GT table
+gt = (
+    GT(table_data, rowname_col="Town")
+    # Step 2: Organize - format numeric columns
+    .fmt_number(columns=density_cols, decimals=1)
+    .fmt_percent(columns=pct_cols, decimals=1, scale_values=True)
+    # Step 3: Big Color - gradient fill for density (primary hero measure - magnitude)
+    .data_color(
+        columns=density_cols,
+        palette="Blues",
+        domain=[lo_density, hi_density],
+        truncate=False,
+        na_color="#808080",
+    )
+    # Second measure: percentage change (distinct dimension - rate of change)
     .data_color(
         columns=pct_cols,
         palette="Greens",
-        domain=[pct_min, pct_max],
+        domain=[lo_pct, hi_pct],
         truncate=False,
-        na_color="#808080"
+        na_color="#808080",
     )
-)
-
-# Apply heading band styling
-gt = (gt
+    # Step 4: Heading band (fixed branding constants)
+    .tab_header(
+        title="Population Growth Trends in Fast-Growing Ontario Towns",
+        subtitle="Density changes and growth rates across census years, 1996–2021"
+    )
+    # Step 5: Small Color polish - headings, borders, striping, frame
+    .tab_stubhead(label="Town")
+    # Column label styling (heading band) and table options
     .tab_options(
-        table_font_size="11px",
-        heading_background_color="#08306B",
-        heading_align="center",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px"
-    )
-)
-
-# Style the header text to white for visibility on dark background
-gt = gt.tab_style(
-    style=style.text(color="white"),
-    locations=loc.column_labels()
-)
-
-# Add stub tint
-gt = (gt
-    .tab_style(
-        style=style.fill(color="#EAF0F6"),
-        locations=loc.stub()
-    )
-)
-
-# Add cell borders and row striping
-gt = (gt
-    .tab_options(
+        column_labels_background_color="#08306B",
+        column_labels_font_weight="bold",
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
-        table_body_hlines_width="1px"
+        table_body_hlines_width="1px",
+        row_striping_background_color="#F6F6F6",
+        data_row_padding="8px",
     )
+    # Column label text color (white on dark band)
+    .tab_style(
+        style.text(color="white"),
+        loc.column_labels()
+    )
+    # Apply row striping (since we have both Big Color treatments, confirm striping applies)
     .opt_row_striping()
-)
-
-# Add column group dividers
-gt = (gt
+    # Stub tint (pale blue)
     .tab_style(
-        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
-        locations=loc.body(columns="Density 2021")
+        style.fill(color="#EAF0F6"),
+        loc.stub()
     )
+    # Frame border with margin
     .tab_style(
-        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
-        locations=loc.column_labels(columns="Density 2021")
+        style.borders(
+            sides="all",
+            color="#CCCCCC",
+            weight="1px"
+        ),
+        loc.body()
     )
-)
-
-# Add title, subtitle and footer notes
-gt = (gt
-    .tab_header(
-        title="Ontario's 15 Fastest-Growing Towns: Population Density and Growth Rates",
-        subtitle="Comparison of population density and intercensal growth across six Census periods (1996–2021)"
+    # Column group dividers for better visual grouping of density/change pairs
+    .tab_spanner(
+        label="1996–2001",
+        columns=["Density 1996", "% Change 1996-2001"]
+    )
+    .tab_spanner(
+        label="2001–2006",
+        columns=["Density 2001", "% Change 2001-2006"]
+    )
+    .tab_spanner(
+        label="2006–2011",
+        columns=["Density 2006", "% Change 2006-2011"]
+    )
+    .tab_spanner(
+        label="2011–2016",
+        columns=["Density 2011", "% Change 2011-2016"]
+    )
+    .tab_spanner(
+        label="2016–2021",
+        columns=["Density 2016", "% Change 2016-2021", "Density 2021"]
+    )
+    # Step 6: Titles & annotations
+    .tab_source_note(
+        md("**Density** measured in persons per square kilometer; **growth rate** represents percentage population change between consecutive census periods.")
     )
     .tab_source_note(
-        source_note="Fastest-growing towns ranked by total population growth from 1996 to 2021. Growth rates show percent change between consecutive Census periods."
-    )
-    .tab_source_note(
-        source_note="Source: Statistics Canada Census subdivisions, 1996–2021."
+        "Data source: Statistics Canada, Census of Population (1996–2021)"
     )
 )
 
-# Set frame and container options
-gt = (gt
-    .tab_options(
-        table_border_top_style="solid",
-        table_border_top_color="#CCCCCC",
-        table_border_top_width="1px",
-        table_border_bottom_style="solid",
-        table_border_bottom_color="#CCCCCC",
-        table_border_bottom_width="1px",
-        table_border_left_style="solid",
-        table_border_left_color="#CCCCCC",
-        table_border_left_width="1px",
-        table_border_right_style="solid",
-        table_border_right_color="#CCCCCC",
-        table_border_right_width="1px",
-        heading_padding="6px",
-        column_labels_padding="6px",
-        column_labels_padding_horizontal="8px",
-        data_row_padding="5px",
-        data_row_padding_horizontal="8px",
-        source_notes_padding="6px"
-    )
-)
-
-# Render to PNG with margins
-gt.gtsave("table.png", expand=15)
-print("Table saved to table.png")
+# Step 7: Render and verify
+gt.gtsave("table.png", zoom=2)
