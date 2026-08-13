@@ -294,8 +294,24 @@ def _comment_ranges(source: str) -> tuple[tuple[int, int], ...]:
     `heatmap`, ...), and re-tokenizing the same source string each time
     would be wasted work.
     """
+    # NB: built via `source.split("\n")` (NOT `str.splitlines(keepends=True)`).
+    # `tokenize.generate_tokens` reads `source` through `io.StringIO(source)
+    # .readline`, which only ever splits on `"\n"`. `str.splitlines()` ALSO
+    # splits on several characters `readline` does NOT treat as line breaks
+    # (form feed `\x0c`, vertical tab `\x0b`, `\x1c`-`\x1e`, `\x85`, line/
+    # paragraph separators, a lone `\r`), any of which can legitimately
+    # appear inside a string literal in arbitrary model-generated source. If
+    # `source` contains one, `splitlines(keepends=True)` would count more
+    # "lines" than `tokenize` does, desyncing this row-offset table from
+    # `tokenize`'s actual row numbering and shifting every comment range's
+    # computed character offset — a silent-drop failure mode where a real
+    # call's match could appear to fall "inside" a shifted comment range and
+    # get wrongly excluded. Splitting on `"\n"` only keeps this table's
+    # notion of "line" identical to `readline`'s.
+    parts = source.split("\n")
+    lines = [p + "\n" for p in parts[:-1]] + [parts[-1]]
     line_starts = [0]
-    for line in source.splitlines(keepends=True):
+    for line in lines:
         line_starts.append(line_starts[-1] + len(line))
 
     def _offset(row: int, col: int) -> int:
@@ -2067,24 +2083,28 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
     elif band_helper:
         heading_band_shade, heading_band_hue = band_helper
         # A helper-only call (no literal hex in source) still renders a real
-        # color. 2026-08-12 ground-truth redesign: `gt_consistency.band()`'s
-        # `shade="dark"` branch (the default) is now a FIXED branding
-        # surface -- it renders the identical navy regardless of what `hue`
-        # was passed (omitted, "navy", or anything else; see `band()`'s own
-        # docstring: "no-op-for-branding escape hatch"). So resolve the
-        # fixed accent hex UNCONDITIONALLY here rather than keying off
-        # `heading_band_hue` -- a dict lookup keyed by hue (the previous
-        # behavior) stayed wrongly `None` for any hue but the one `"navy"`
-        # entry in `_HELPER_HUE_TO_ACCENT_HEX` (Bug 3), e.g. a bare
-        # `band(gt)` call with no `hue=` kwarg at all.
-        # `house_table.py`'s OWN separate `band()` still genuinely varies by
-        # hue under `shade="dark"` (a different file's convention), but this
-        # parser can't tell which skill's helper a candidate is using from
-        # source text alone -- so this fixed-hex resolution is deliberately
-        # scoped to `shade == "dark"` only, never `"light"` (house's real,
-        # still hue-varying escape hatch; not something this fix models).
+        # color for the omitted/"navy" hue case: `_find_band_helper` now
+        # defaults an omitted `hue=` to `"navy"` (that signature's own
+        # default), so the plain hue-keyed lookup below already resolves
+        # `band(gt)` and `band(gt, hue="navy")` to the fixed accent hex
+        # without any extra shade-based override (Bug 3 fixed).
+        #
+        # An unconditional `if heading_band_shade == "dark": band_hex =
+        # _HELPER_HUE_TO_ACCENT_HEX["navy"]` override was tried here and
+        # reverted: `house_table.py`'s OWN separate `band()` genuinely
+        # varies by hue under `shade="dark"` (its non-navy hues are NOT a
+        # no-op the way `gt_consistency.band()`'s are), so forcing every
+        # dark-shade call to navy regardless of hue fabricated a false
+        # positive for a real, valid `band(gt, shade="dark", hue="forest")`
+        # call — this parser can't tell which skill's helper convention a
+        # candidate is using from source text alone, so any hue OTHER than
+        # the omitted/"navy" case is deliberately left exactly as it was
+        # before this PR: unresolved (`None`) via the plain `.get()` lookup,
+        # scoped to `shade == "dark"` only (unchanged from before this PR)
+        # -- `shade == "light"` is house's real, still hue-varying escape
+        # hatch and stays unresolved regardless of hue, same as always.
         if heading_band_shade == "dark":
-            band_hex = _HELPER_HUE_TO_ACCENT_HEX["navy"]
+            band_hex = _HELPER_HUE_TO_ACCENT_HEX.get(heading_band_hue)
     else:
         heading_band_shade = heading_band_hue = "none"
 
