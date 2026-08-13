@@ -1,41 +1,60 @@
 import pandas as pd
 from great_tables import GT, md
+from house_table import PALETTE, frame, hairlines, finalize, band, stripe, heatmap, humanize_labels
 
-# Import helpers from the house-format skill
-import sys
-sys.path.insert(0, './.claude/skills/great-tables-house/scripts')
-from house_table import PALETTE, frame, hairlines, finalize, band, heatmap
+# Read the islands data
+islands = pd.read_csv("islands.csv")
 
-# Load data
-df = pd.read_csv('islands.csv')
-
-# Sort by size descending for better readability
-df = df.sort_values('size', ascending=False).reset_index(drop=True)
-
-# Build the table
-gt = GT(df, rowname_col='name')
-gt = gt.tab_header(
-    title='World Islands by Size',
-    subtitle=md('Total area in thousands of square kilometers'),
+gt = (
+    GT(islands, rowname_col="name")
+    .tab_header(
+        title="Island Sizes",
+        subtitle=md("Land area by island, in thousands of square kilometers"),
+    )
+    .fmt_number(columns="size", decimals=0)
 )
-gt = gt.tab_stubhead(label='Island')
 
-# Format the size column as thousands with no decimals
-gt = gt.fmt_number(columns='size', decimals=0, use_seps=True)
+# Humanize the column label
+gt = humanize_labels(gt, islands)
 
-# Relabel the size column
-gt = gt.cols_label(size='Size (1000 km²)')
+# Set column widths
+gt = gt.cols_width(
+    cases={
+        "name": "180px",
+        "size": "110px",
+    }
+)
 
-# Apply the sequential heatmap for the size magnitude (Blues is neutral for a plain magnitude)
-gt = heatmap(gt, 'size', kind='sequential', hue='neutral')
+# Set padding
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
 
-# Apply the house-format styling
-gt = band(gt, hue='navy')
+# Apply heatmap to the size column
+gt = heatmap(gt, "size", kind="sequential", hue="neutral")
+
+# Apply heading band
+gt = band(gt, hue="navy")
+
+# Apply striping and tinting
+gt = stripe(gt)
+
+# Apply the frame and hairlines
 gt = hairlines(gt)
 gt = frame(gt)
 
-# Source note
-gt = gt.tab_source_note(source_note='Source: provided dataset.')
+# Add source notes
+gt = gt.tab_source_note(
+    source_note="Size represents land area in thousands of square kilometers."
+)
+gt = gt.tab_source_note(
+    source_note="Source: provided dataset."
+)
 
-# Save with the mandatory renderer
-finalize(gt, path='table.png')
+# Finalize and render
+finalize(gt, path="table.png")

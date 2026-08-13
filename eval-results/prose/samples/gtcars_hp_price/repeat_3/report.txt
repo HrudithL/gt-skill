@@ -1,30 +1,36 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124545_prose_6prompts/prompts/gtcars_hp_price/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/easy/ground_truth/gtcars_hp_price.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260812_212011_prose_6prompts/prompts/gtcars_hp_price/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 55/83 (66.3%)
-  Data-compliance:        22/44
-  Formatting-compliance:  33/39
+TOTAL: 77/85 (90.6%)
+  Data-compliance:        42/42
+  Formatting-compliance:  35/43
 
-[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- ground truth has per-entity row identity (a stub) but candidate has none -- value-matching would only prove the same VALUES appear somewhere, not that they're attached to the correct entities; all 2 canonical measures unverifiable
-[PASS] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 6/6 -- ≤2 measures OK; 1/1 canonical colored measures covered by a candidate color call
-[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 2/2 colored measures use an encoding matching their data shape
+[PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
+[PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 2/2 canonical measures have a value-matching candidate column
+[PASS] [MECHANICAL] Colored-measure selection (right measure(s) colored): 6/6 -- 1/1 canonical colored measures covered by a candidate color call
+[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
 [PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping. Grouping was not mandated by REQUIRED_INSTRUCTIONS, and since no grouping is present in either rendering, this discretionary editorial choice dimension does not apply.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py)
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
-[FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
-[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 1/1 -- colored-measure palettes: ['Blues', 'Greens']
+[PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
+[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- All three column labels are clear and conceptually correct. 'car' identifies the vehicle, 'hp' unambiguously names horsepower (matching LABEL_SYNONYMS), and 'msrp' correctly labels the price column as MSRP (also matching LABEL_SYNONYMS), directly matching the ground truth's framing.
-[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 2/2 colored measures have a shape-appropriate domain
+[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py)
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=47, fully_filled=False -> expected striping=True, actual=False
-[PASS] [MECHANICAL] Heading band hue harmonization: 5/5 -- shade expected=light actual=light; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
-[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 2/2, truncate=False correct 2/2, autocolor_text=True correct 2/2, reverse orientation matches truth 1/1
+[PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=47, body not fully color-covered -> expected striping=True, actual=True
+[N/A] [MECHANICAL] Heading band hue harmonization: 0/0 -- superseded by check_header_branding (2026-08-12 -- header is now a fixed universal navy, not hue-matched per table)
+[FAIL] [MECHANICAL] Header branding (deep navy, bold, white text): 0/5 -- header background: expected #08306B, got None (MISMATCH); column_labels_font_weight: expected bold, got None (MISMATCH); column-label text color: expected white, got None (MISMATCH)
+[PASS] [MECHANICAL] Stub tint (washed navy): 2/2 -- expected #EAF0F6, got '#EAF0F6'
+[FAIL] [MECHANICAL] Stripe color (neutral grey): 0/2 -- expected #F6F6F6, got None
+[PASS] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 2/2 -- 1/1 hero-uncolored measures are plain text
+[N/A] [MECHANICAL] Signed-percent force_sign correctness: 0/0 -- ground truth declares no percent-semantic columns
+[FAIL] [MECHANICAL] Caption keyword coverage: 2/3 -- 3/6 caption-keyword rules satisfied; caption missing: ['bentley', 'corvette', "don't move together"]
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'GT Cars Performance & Price' captures the core subject (GT cars, horsepower, price) and is clear and accurate. However, it frames the story as 'Performance & Price' rather than the ground truth's emphasis on 'Horsepower and Price' and the key insight that all 47 makes and models are shown sorted by MSRP, so it is slightly less comprehensive in scope than the ground truth's framing.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The left-to-right order—car name (stub), horsepower, then price—follows a logical narrative: identify the vehicle, then see its performance (hp), then its cost (msrp). This matches the ground truth's sensible ordering and reads naturally for the analytical story.
+[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py)
+[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py)

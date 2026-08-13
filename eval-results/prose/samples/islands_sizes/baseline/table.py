@@ -3,15 +3,15 @@ from great_tables import GT
 
 df = pd.read_csv("islands.csv")
 
-gt = (
+gt_tbl = (
     GT(df)
     .tab_header(
-        title="Islands and Their Sizes",
-        subtitle="Size in thousands of square kilometers"
+        title="World Islands by Size",
+        subtitle="Land area in thousands of square miles"
     )
-    .cols_label(name="Island", size="Size (1000 km²)")
+    .cols_label(name="Island", size="Size")
     .fmt_number(columns="size", decimals=0)
-    .cols_align(align="center", columns="size")
+    .opt_align_table_header("left")
 )
 
-gt.gtsave("table.png")
+gt_tbl.gtsave("table.png")

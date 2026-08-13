@@ -1,60 +1,50 @@
-import numpy as np
 import pandas as pd
-from great_tables import GT, style, loc
-from gt_consistency import heatmap, band, frame, stripe, finalize
+import numpy as np
+from great_tables import GT
+from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
 
-# Step 1: UNDERSTAND THE DATA
 df = pd.read_csv("islands.csv")
-# Data is clean: name (string), size (numeric in thousands of km²)
-# 49 islands, no missing values, correctly typed
 
-# Step 2: ORGANIZE COLUMNS
-# name → stub (row identifiers), size → hero measure
-gt = GT(df, rowname_col="name")
+# Step 1: Data cleaning — verify the data
+df["size"] = pd.to_numeric(df["size"], errors="coerce")
 
-# Step 3: BIG COLOR — size is an ordered numeric magnitude (neutral quantity → Blues)
+# Step 2: Organize columns — name is the stub identifier
 cols_measure = ["size"]
+
+# Step 3: Big Color — ordered magnitude with >5 rows qualifies
 lo = float(np.nanmin(df[cols_measure].to_numpy()))
 hi = float(np.nanmax(df[cols_measure].to_numpy()))
 
-# Apply heatmap coloring (size is a neutral magnitude → Blues via "neutral" semantic)
-gt = heatmap(gt, cols_measure, kind="sequential", hue="neutral", domain=[lo, hi])
-
-# Step 4: HEADING BAND — with Big Color present, use light band
-gt = band(gt, shade="light", hue="navy")
-
-# Step 5: SMALL COLOR — apply the polish checklist
-# (a) Cell borders — hairline between rows (default) + column-label bottom rule
-gt = gt.tab_options(
-    table_body_hlines_style="solid",
-    table_body_hlines_color="#E8E8E8",
-    table_body_hlines_width="1px",
-    column_labels_border_bottom_color="#CCCCCC",
-    column_labels_border_bottom_width="2px",
+# Build the table
+gt = (
+    GT(df, rowname_col="name")
+    .tab_header(
+        title="Islands and Their Sizes",
+        subtitle="Land area in thousands of km²"
+    )
+    .fmt_number(columns=cols_measure, decimals=0, use_seps=True)
+    .sub_missing(columns=cols_measure, missing_text="—")
 )
 
-# (c) Row striping — ≥10 rows and not fully filled by Big Color → stripe
+# Step 3: Apply heatmap — neutral magnitude uses sequential Blues
+gt = heatmap(gt, cols_measure, kind="sequential", hue="neutral")
+
+# Step 4: Heading band
+gt = band(gt)
+
+# Step 5: Small Color polish
 gt = stripe(gt)
-
-# (d) Stub tint — use light grey (grey budget not strained here)
-gt = gt.tab_style(
-    style=style.fill(color="#F0F0F0"),
-    locations=loc.stub(),
+gt = stub_tint(gt)
+gt = gt.cols_width(cases={"size": "120px"})
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
 )
 
-# (e) Format the size column as a plain number with thousands separator
-gt = gt.fmt_number(columns="size", decimals=0, use_seps=True)
-
-# Step 6: TITLES & ANNOTATIONS
-gt = gt.tab_header(
-    title="Island Sizes",
-    subtitle="Land area in thousands of square kilometers"
-)
-
-# Footer: analytical caption (defines the data) + source note
-gt = gt.tab_source_note(source_note="Data represents the largest islands worldwide, with areas measured in thousands of square kilometers.")
-gt = gt.tab_source_note(source_note="Source: islands.csv")
-
-# Step 7: FRAME & RENDER
+# Frame and render
 gt = frame(gt)
-finalize(gt)
+finalize(gt, "table.png")

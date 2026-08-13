@@ -1,47 +1,66 @@
 import pandas as pd
-from great_tables import GT
-from house_table import PALETTE, frame, hairlines, finalize, band, heatmap, humanize_labels
+from great_tables import GT, md
+from house_table import PALETTE, frame, hairlines, finalize, band, stripe, heatmap
 
+# Read the data
 df = pd.read_csv("gtcars.csv")
 
-# Create composite car identifier (mfr + model)
+# Create a display-ready dataframe with the columns we need
+# Compose the car identifier from manufacturer and model
 df["car"] = df["mfr"] + " " + df["model"]
+display_df = df[["car", "hp", "msrp"]].copy()
+display_df.columns = ["car", "hp", "msrp"]
+display_df = display_df.sort_values("hp", ascending=False).reset_index(drop=True)
 
-# Select and sort by horsepower descending
-display_df = df[["car", "hp", "msrp"]].sort_values("hp", ascending=False).reset_index(drop=True)
-
+# Build the table
 gt = (
     GT(display_df, rowname_col="car")
     .tab_header(
         title="GT Cars: Horsepower and Price",
-        subtitle="High-performance vehicles ranked by engine output"
+        subtitle=md("Performance specifications sorted by horsepower")
     )
     .fmt_number(columns="hp", decimals=0)
     .fmt_currency(columns="msrp", decimals=0)
 )
 
-gt = humanize_labels(
-    gt,
-    display_df,
-    overrides={"hp": "Horsepower", "msrp": "Price (MSRP)"}
+# Apply humanized labels
+gt = gt.cols_label(hp="Horsepower", msrp="Price (MSRP)")
+
+# Set column widths
+gt = gt.cols_width(
+    cases={
+        "car": "180px",
+        "hp": "120px",
+        "msrp": "120px",
+    }
 )
 
-# Big Color: horsepower as the sequential hero (Blues/neutral — a plain magnitude)
-gt = heatmap(gt, "hp", kind="sequential", hue="neutral")
+# Apply house formatting
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
 
-# Heading band: navy to match the Blues heatmap
+# Big Color: highlight price with sequential Blues (neutral magnitude)
+gt = heatmap(gt, "msrp", kind="sequential", hue="neutral")
+
+# Heading band with navy (house default)
 gt = band(gt, hue="navy")
 
-# No striping gate check: 48 rows > 10, and only 1 column is colored (hp),
-# so body is not "essentially fully covered" — stripe applies.
-from house_table import stripe
+# Small-color polish
 gt = stripe(gt)
 
-# Stub tint harmonizes to navy
-from house_table import stub_tint
-gt = stub_tint(gt, hue="navy")
+# Source notes
+gt = gt.tab_source_note(
+    source_note="Data includes vehicles from multiple manufacturers across various model years."
+)
+gt = gt.tab_source_note(source_note="Source: gtcars dataset.")
 
-gt = gt.tab_source_note(source_note="Source: provided dataset.")
+# Final touches
 gt = hairlines(gt)
 gt = frame(gt)
 finalize(gt, path="table.png")

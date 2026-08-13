@@ -1,33 +1,59 @@
 import pandas as pd
-from great_tables import GT, loc, style
+from great_tables import GT, md, style, loc
+from house_table import PALETTE, frame, hairlines, finalize, band, stripe, heatmap, humanize_labels
 
-from pathlib import Path
-skill_path = Path(__file__).parent / ".claude/skills/great-tables-house/scripts"
-import sys
-sys.path.insert(0, str(skill_path))
-from house_table import PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap
+# Load the islands data
+islands = pd.read_csv("islands.csv")
 
-df = pd.read_csv("islands.csv")
-
+# Create the GT table
 gt = (
-    GT(df, rowname_col="name")
+    GT(islands, rowname_col="name")
     .tab_header(
-        title="Island Sizes",
-        subtitle="Area in thousands of square kilometers"
+        title="World Islands by Size",
+        subtitle="Land area in thousands of square kilometers"
     )
-    .tab_stubhead(label="Island")
     .fmt_number(columns="size", decimals=0, use_seps=True)
-    .cols_label(size="Area (1000 km²)")
 )
 
+# Humanize labels
+gt = humanize_labels(gt, islands)
+
+# Apply column width and padding
+gt = gt.cols_width(cases={
+    "name": "150px",
+    "size": "120px",
+})
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
+
+# Apply heatmap coloring to size (sequential, neutral = Blues)
 gt = heatmap(gt, "size", kind="sequential", hue="neutral")
+
+# Apply heading band styling
 gt = band(gt, hue="navy")
 
-if len(df) >= 10:
-    gt = stripe(gt)
-gt = stub_tint(gt, hue="navy")
+# Apply striping since not all cells are heatmap-covered
+gt = stripe(gt)
 
-gt = gt.tab_source_note(source_note="Source: provided dataset.")
+# Add analytical and provenance notes
+gt = (
+    gt.tab_source_note(
+        source_note="Size represents land area in thousands of square kilometers."
+    )
+    .tab_source_note(
+        source_note="Source: provided dataset."
+    )
+)
+
+# Apply hairlines and frame
 gt = hairlines(gt)
 gt = frame(gt)
-finalize(gt)
+
+# Finalize and save
+finalize(gt, path="table.png")

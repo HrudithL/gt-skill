@@ -2,69 +2,63 @@ import pandas as pd
 from great_tables import GT
 from datetime import datetime
 
+# Read the S&P 500 data
 df = pd.read_csv('sp500.csv')
 df['date'] = pd.to_datetime(df['date'])
 
-df = df.sort_values('date')
+# Filter for 2010-2015
 df = df[(df['date'].dt.year >= 2010) & (df['date'].dt.year <= 2015)]
 
+# Extract year and month
+df['year_month'] = df['date'].dt.to_period('M')
+
+# Group by month and calculate metrics
 monthly_data = []
 
-for year_month, group in df.groupby(df['date'].dt.to_period('M')):
+for period, group in df.groupby('year_month'):
     group = group.sort_values('date')
 
     opening_price = group.iloc[0]['open']
     closing_price = group.iloc[-1]['close']
+
+    # Percent change from open to close
     percent_change = ((closing_price - opening_price) / opening_price) * 100
+
+    # Average daily volume
     avg_volume = group['volume'].mean()
 
-    daily_changes = group['close'] - group['open']
-    highest_gain = daily_changes.max()
-    highest_loss = daily_changes.min()
+    # Daily gains/losses
+    group['daily_change'] = group['close'].diff()
+
+    # Highest single-day gain
+    max_gain = group['daily_change'].max()
+
+    # Highest single-day loss (most negative)
+    max_loss = group['daily_change'].min()
 
     monthly_data.append({
-        'Month': str(year_month),
+        'Month': period.strftime('%B %Y'),
         'Opening Price': opening_price,
         'Closing Price': closing_price,
         'Percent Change': percent_change,
         'Avg Daily Volume': avg_volume,
-        'Highest Daily Gain': highest_gain,
-        'Highest Daily Loss': highest_loss,
+        'Highest Single-Day Gain': max_gain,
+        'Highest Single-Day Loss': max_loss
     })
 
-summary_df = pd.DataFrame(monthly_data)
+result_df = pd.DataFrame(monthly_data)
 
-gt = GT(summary_df)
-
-gt = gt.fmt_currency(
-    columns=['Opening Price', 'Closing Price', 'Highest Daily Gain', 'Highest Daily Loss'],
-    currency='USD'
-)
-
-gt = gt.fmt_number(
-    columns=['Percent Change'],
-    decimals=2
-)
-
-gt = gt.fmt_integer(
-    columns=['Avg Daily Volume']
-)
-
-gt = gt.tab_header(
-    title='S&P 500 Monthly Performance Summary',
-    subtitle='2010–2015'
-)
-
-gt = gt.cols_label(
-    **{
-        'Month': 'Month',
-        'Opening Price': 'Open',
-        'Closing Price': 'Close',
-        'Percent Change': 'Change %',
-        'Avg Daily Volume': 'Avg Volume',
-        'Highest Daily Gain': 'Best Day',
-        'Highest Daily Loss': 'Worst Day',
-    }
+# Create the GT table
+gt = (
+    GT(result_df)
+    .fmt_currency(columns=['Opening Price', 'Closing Price'], currency='USD')
+    .fmt_currency(columns=['Highest Single-Day Gain', 'Highest Single-Day Loss'], currency='USD')
+    .fmt_number(columns=['Percent Change'], decimals=2, pattern='{x}%')
+    .fmt_number(columns=['Avg Daily Volume'], decimals=0)
+    .tab_header(
+        title='S&P 500 Monthly Performance (2010-2015)',
+        subtitle='Opening/closing prices, monthly percent change, average daily volume, and daily extremes'
+    )
 )
 
 gt.gtsave('table.png')

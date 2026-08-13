@@ -1,30 +1,36 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/runs/sweep/20260809_124540_house_6prompts/prompts/sp500_monthly_performance/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/consensus-tuning/prompts/hard/ground_truth/sp500_monthly_performance.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260812_212028_house_6prompts/prompts/sp500_monthly_performance/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py
 
-TOTAL: 41/87 (47.1%)
-  Data-compliance:        18/48
-  Formatting-compliance:  23/39
+TOTAL: 46/87 (52.9%)
+  Data-compliance:        13/44
+  Formatting-compliance:  33/43
 
-[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[(None, 'apr 2010'), (None, 'apr 2011'), (None, 'apr 2012'), (None, 'apr 2013'), (None, 'apr 2014')], extra=[(None, '2010-01'), (None, '2010-02'), (None, '2010-03'), (None, '2010-04'), (None, '2010-05')]
-[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/6 canonical measures have a value-matching candidate column; unmatched: ['pct_change', 'best_day_gain', 'worst_day_loss', 'monthly_open', 'monthly_close', 'avg_volume']
-[FAIL] [MECHANICAL] Colored-measure selection (≤2 ceiling + right measure(s)): 2/6 -- ≤2 measures OK; 0/3 canonical colored measures covered by a candidate color call
+[FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[(None, 'apr 2010'), (None, 'apr 2011'), (None, 'apr 2012'), (None, 'apr 2013'), (None, 'apr 2014')], extra=[(None, '2010-apr'), (None, '2010-aug'), (None, '2010-dec'), (None, '2010-feb'), (None, '2010-jan')]
+[FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/6 canonical measures have a value-matching candidate column; unmatched: ['pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss', 'monthly_open', 'monthly_close']
+[FAIL] [MECHANICAL] Colored-measure selection (right measure(s) colored): 0/6 -- 0/4 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- visible-column overlap 0.00 (candidate-only=['Avg Volume', 'Closing', 'Highest Gain', 'Highest Loss', 'Opening', 'Pct Change', 'Period'], missing=['avg_volume', 'best_day_gain', 'month_label', 'monthly_close', 'monthly_open', 'pct_change', 'worst_day_loss', 'year'])
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.15 (candidate-only=['close', 'highest_gain', 'largest_loss', 'open', 'period'], missing=['best_day_gain', 'month_label', 'monthly_close', 'monthly_open', 'worst_day_loss', 'year'])
 [N/A] [MECHANICAL] Grouping existence: 0/0 -- grouping is a discretionary editorial choice here (ground truth groups, but REQUIRED_INSTRUCTIONS has no 'grouping' key) -- judged separately by grouping_choice_quality, not scored as a strict presence match
-[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The ground truth visibly groups rows by year (2010, 2011, etc.), and REQUIRED_INSTRUCTIONS has no 'grouping' key, making this a discretionary editorial choice. The candidate uses a date column (2010-01, 2010-02, etc.) format and does NOT group by year. Both choices are sensible for the analytical goal—year-grouping makes temporal patterns clear, while a flat chronological list is also valid. The candidate's choice to omit grouping is not illogical; it simply reflects a different but equally defensible structural approach, so it scores well on reasoned merit.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py)
 [FAIL] [MECHANICAL] Column-group spanners existence: 0/2 -- candidate spanner_present=False, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 4/5 -- The candidate labels all six columns correctly: Opening, Closing, Pct Change, Avg Volume, Highest Gain, and Highest Loss each name their underlying concept accurately. However, 'Highest Gain' and 'Highest Loss' are slightly less precise than the ground truth's 'Best Day (gain)' and 'Worst Day (loss)'—the ground truth more clearly signals these are single-day extremes within the month. The candidate's phrasing is clear but marginally less explicit about the 'day' scope.
+[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py)
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
-[FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=OK; hairlines=MISSING (Step 5a, always required); dividers=expected=True (gated on spanners), got=False
-[FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=72, fully_filled=False -> expected striping=True, actual=False
-[FAIL] [MECHANICAL] Heading band hue harmonization: 3/5 -- shade expected=light actual=unknown; hue harmonization not strictly verifiable for this color configuration (benefit of the doubt)
+[FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=OK; dividers=expected=True (gated on spanners), got=False
+[PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=72, body not fully color-covered -> expected striping=True, actual=True
+[N/A] [MECHANICAL] Heading band hue harmonization: 0/0 -- superseded by check_header_branding (2026-08-12 -- header is now a fixed universal navy, not hue-matched per table)
+[PASS] [MECHANICAL] Header branding (deep navy, bold, white text): 5/5 -- header background: expected #08306B, got '#08306B' (OK); column_labels_font_weight: expected bold, got 'bold' (OK); column-label text color: expected white, got 'white' (OK)
+[PASS] [MECHANICAL] Stub tint (washed navy): 2/2 -- expected #EAF0F6, got '#EAF0F6'
+[PASS] [MECHANICAL] Stripe color (neutral grey): 2/2 -- expected #F6F6F6, got '#F6F6F6'
+[N/A] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 0/0 -- no hero_uncolored measure value-matched a candidate column
+[FAIL] [MECHANICAL] Signed-percent force_sign correctness: 0/2 -- 0/1 signed percent columns use force_sign=True; missing/wrong on: ['pct_change']
+[FAIL] [MECHANICAL] Caption keyword coverage: 1/3 -- 2/5 caption-keyword rules satisfied; caption missing: ['continuous', 'day-over-day', 'not reset']
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/6 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['monthly_open', 'monthly_close', 'pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss']
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title is 'S&P 500 Monthly Performance Summary' vs. the ground truth's 'S&P 500 Monthly Performance, 2010–2015'. Both accurately name the core subject and are clear. The ground truth's title includes the date range explicitly in the title, while the candidate relegates it to a subtitle. The candidate's subtitle accurately specifies the content, but the title itself is slightly more generic; a score of 4 reflects accurate framing without the same level of completeness the ground truth achieves.
-[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- The candidate's left-to-right order is: Month, Opening, Closing, Pct Change, Avg Volume, Highest Gain, Highest Loss. The ground truth's order is: Month, Open, Close, Monthly % Change, Avg Daily Volume (B sh), Best Day (gain), Worst Day (loss). Both orders are sensible: they start with the date identifier, then pair open/close prices, follow with the derived metric (percent change), then volume, then the single-day extremes. The candidate's order reads as logically as the ground truth's, with no orphaned or poorly-sequenced columns.
+[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py)
+[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py)

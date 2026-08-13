@@ -1,76 +1,97 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, style, loc
+from great_tables import GT, md
+from gt_consistency import heatmap, band, stripe, stub_tint, frame, finalize
 
 df = pd.read_csv("airquality.csv")
 
+# Step 1: Clean and prepare data
+# Convert to numeric, dropping NaN values per measure
 df["Ozone"] = pd.to_numeric(df["Ozone"], errors="coerce")
 df["Wind"] = pd.to_numeric(df["Wind"], errors="coerce")
 df["Temp"] = pd.to_numeric(df["Temp"], errors="coerce")
 
-monthly = df.groupby("Month").agg({
-    "Temp": "mean",
+# Group by month and compute averages
+monthly = df.groupby("Month", as_index=False).agg({
+    "Ozone": "mean",
     "Wind": "mean",
-    "Ozone": "mean"
-}).reset_index()
+    "Temp": "mean"
+}).round(1)
 
+# Map month numbers to names for the stub
 month_names = {
-    5: "May",
-    6: "June",
-    7: "July",
-    8: "August",
-    9: "September"
+    5: "May", 6: "June", 7: "July", 8: "August", 9: "September"
 }
-monthly["Month"] = monthly["Month"].map(month_names)
-monthly = monthly.rename(columns={"Month": "Month", "Temp": "Avg Temp (°F)", "Wind": "Avg Wind (mph)", "Ozone": "Avg Ozone (ppb)"})
+monthly["Month_Name"] = monthly["Month"].map(month_names)
 
-lo_temp = float(np.nanmin(monthly[["Avg Temp (°F)"]].to_numpy()))
-hi_temp = float(np.nanmax(monthly[["Avg Temp (°F)"]].to_numpy()))
+# Reorder and select columns
+monthly = monthly[["Month_Name", "Ozone", "Wind", "Temp"]]
+monthly = monthly.rename(columns={"Month_Name": "Month"})
 
+# Step 2: Organize columns with stub
+gt = GT(monthly, rowname_col="Month")
+
+# Step 3: Add color fills for Ozone (ordered magnitude) and Temperature
+# Both are distinct physical measurements
+ozone_cols = ["Ozone"]
+temp_cols = ["Temp"]
+
+# Ozone gradient (neutral magnitude → Blues)
+oz_min = float(np.nanmin(monthly[ozone_cols].to_numpy()))
+oz_max = float(np.nanmax(monthly[ozone_cols].to_numpy()))
+gt = heatmap(gt, ozone_cols, kind="sequential", hue="neutral", domain=[oz_min, oz_max])
+
+# Temperature gradient (neutral magnitude, distinct measure → Greens as secondary)
+temp_min = float(np.nanmin(monthly[temp_cols].to_numpy()))
+temp_max = float(np.nanmax(monthly[temp_cols].to_numpy()))
+gt = heatmap(gt, temp_cols, kind="sequential", hue="positive", domain=[temp_min, temp_max])
+
+# Step 4: Apply heading band
+gt = band(gt)
+
+# Step 5: Small-color polish
+# Format numbers
 gt = (
-    GT(monthly, rowname_col="Month")
-    .fmt_number(columns=["Avg Temp (°F)", "Avg Wind (mph)", "Avg Ozone (ppb)"], decimals=1, use_seps=True)
-    .data_color(
-        columns=["Avg Temp (°F)"],
-        palette="Blues",
-        domain=[lo_temp, hi_temp],
-        truncate=False,
-        na_color="#808080",
-    )
-    .tab_style(
-        style=style.borders(sides="top", color="#BDBDBD", weight="1.5px"),
-        locations=loc.body(rows=[]),
-    )
-    .tab_options(
-        table_body_hlines_style="solid",
-        table_body_hlines_color="#E8E8E8",
-        table_body_hlines_width="1px",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
-        table_border_top_style="solid",
-        table_border_top_color="#CCCCCC",
-        table_border_top_width="1px",
-        table_border_bottom_style="solid",
-        table_border_bottom_color="#CCCCCC",
-        table_border_bottom_width="1px",
-        table_border_left_style="solid",
-        table_border_left_color="#CCCCCC",
-        table_border_left_width="1px",
-        table_border_right_style="solid",
-        table_border_right_color="#CCCCCC",
-        table_border_right_width="1px",
-    )
-    .tab_style(
-        style=style.fill(color="#F0F0F0"),
-        locations=loc.stub(),
-    )
-    .opt_row_striping()
+    gt
+    .fmt_number(columns=["Ozone", "Wind", "Temp"], decimals=1, use_seps=False)
+    .sub_missing(columns=["Ozone", "Wind", "Temp"], missing_text="—")
+)
+
+# Row striping
+gt = stripe(gt)
+
+# Stub tint
+gt = stub_tint(gt)
+
+# Frame (boxed border)
+gt = frame(gt)
+
+# Compact layout
+gt = gt.cols_width(cases={
+    "Ozone": "100px",
+    "Wind": "100px",
+    "Temp": "100px",
+})
+
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
+
+# Step 6: Titles and annotations
+gt = (
+    gt
     .tab_header(
-        title="Air Quality Monthly Summary",
-        subtitle="Average Temperature, Wind Speed, and Ozone Levels by Month"
+        title="Air Quality Measurements by Month",
+        subtitle="Average Monthly Temperature, Wind Speed, and Ozone Levels"
     )
-    .tab_source_note(source_note="Temperature is colored by magnitude to show seasonal variation.")
+    .tab_source_note(source_note="Ozone measured in ppb; Temperature in °F; Wind speed in mph.")
     .tab_source_note(source_note="Source: airquality.csv")
 )
 
-gt.gtsave("table.png", expand=15)
+# Step 7: Render
+finalize(gt, "table.png")
