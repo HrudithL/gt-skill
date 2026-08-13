@@ -1205,7 +1205,7 @@ def _render_call_present(source: str) -> bool:
     if _blocks_target_table_png(gtsave_blocks, "file", 0, var_literals):
         return True
     finalize_blocks = _ast_call_blocks(source, tree, "finalize", allow_bare=True)
-    return _blocks_target_table_png(finalize_blocks, "path", 1, var_literals)
+    return _blocks_target_table_png(finalize_blocks, "path", 1, var_literals, default_path="table.png")
 
 
 def _render_params_local(source: str) -> dict:
@@ -1246,6 +1246,19 @@ def _render_params_local(source: str) -> dict:
     merged into ONE chronologically-ordered pool and the effective call
     is selected from that combined set, matching `_render_call_present`'s
     own "check both mechanisms together" semantics exactly.
+
+    Fresh-sweep finding (2026-08-12, same gap as `_blocks_target_table_
+    png`'s own `default_path` fix): this function's own nested `_call_
+    targets_table_png` had the identical "path argument absent entirely
+    -> not recognized" hole -- a bare `finalize(gt)` call (no explicit
+    `path`) genuinely targets `table.png` via `finalize`'s own documented
+    default, but was invisible to this selector, so its zoom/expand
+    params were skipped over in favor of the LAST call overall (which
+    could be an unrelated `gtsave("backup.png", ...)`) or simply
+    excluded from ever being `chosen`. `_call_targets_table_png` now
+    takes the same `default_path` (only ever supplied for `finalize`
+    items, never `gtsave` items, matching `_blocks_target_table_png`'s
+    own reasoning for why only `finalize` -- not `gtsave` -- gets one).
     """
     try:
         tree = ast.parse(source)
@@ -1253,7 +1266,9 @@ def _render_params_local(source: str) -> dict:
         return {}
     var_literals = _render_target_var_literals(source, tree)
 
-    def _call_targets_table_png(pos: tuple[int, int], block: str, path_kwarg: str, path_index: int) -> bool:
+    def _call_targets_table_png(
+        pos: tuple[int, int], block: str, path_kwarg: str, path_index: int, default_path: str | None = None
+    ) -> bool:
         path_val = convergence._kwarg_value(block, path_kwarg)
         if path_val is None:
             positionals = [
@@ -1261,7 +1276,7 @@ def _render_params_local(source: str) -> dict:
             ]
             path_val = positionals[path_index] if len(positionals) > path_index else None
         if path_val is None:
-            return False
+            return default_path is not None and convergence._targets_table_png(default_path)
         stripped = path_val.strip()
         if re.fullmatch(r"[A-Za-z_]\w*", stripped) and pos in var_literals:
             return convergence._targets_table_png(var_literals[pos])
@@ -1307,11 +1322,11 @@ def _render_params_local(source: str) -> dict:
     # them resolve to `table.png` does this fall back to the overall
     # last call from either mechanism.
     gtsave_items = [
-        (pos, block, "file", 0, {"zoom": "2.0", "expand": "5"})
+        (pos, block, "file", 0, {"zoom": "2.0", "expand": "5"}, None)
         for pos, block in _ast_call_blocks(source, tree, "gtsave", allow_bare=False)
     ]
     finalize_items = [
-        (pos, block, "path", 1, {"expand": "15", "zoom": "2.0"})
+        (pos, block, "path", 1, {"expand": "15", "zoom": "2.0"}, "table.png")
         for pos, block in _ast_call_blocks(source, tree, "finalize", allow_bare=True)
     ]
     combined = sorted(gtsave_items + finalize_items, key=lambda item: item[0])
@@ -1319,10 +1334,10 @@ def _render_params_local(source: str) -> dict:
         return {}
     chosen = combined[-1]  # last-wins default when none resolves to table.png
     for item in combined:
-        pos, block, path_kwarg, path_index, _defaults = item
-        if _call_targets_table_png(pos, block, path_kwarg, path_index):
+        pos, block, path_kwarg, path_index, _defaults, default_path = item
+        if _call_targets_table_png(pos, block, path_kwarg, path_index, default_path):
             chosen = item  # keep scanning -- a LATER table.png write (either mechanism) wins
-    _, chosen_block, _, _, chosen_defaults = chosen
+    _, chosen_block, _, _, chosen_defaults, _chosen_default_path = chosen
     return _extract_params(chosen_block, chosen_defaults)
 
 
