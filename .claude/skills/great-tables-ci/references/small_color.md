@@ -46,13 +46,19 @@ is a computable condition, not a judgment call: if it fires, the action is manda
 **requires** that the stub already exist — **no orphan label** (setting a stubhead
 when there is no `rowname_col` is wrong, PP-25).
 
-Never rely on `df.set_index('col')` for the stub — `great_tables` never reads
-the pandas index. The stub is a real column named by `rowname_col=`. `set_index`
-also moves that column out of the frame (`drop=True` by default), so `GT(...)`
-renders no stub and the identifier's values vanish from the table entirely, not
-just demote to a plain column. If the frame is already indexed (straight out of
-`groupby().agg()`, say), reset it first: `GT(df.reset_index(), rowname_col='col')`.
-Passing `rowname_col='col'` while `col` is still the index raises `KeyError`.
+Never rely on `df.set_index("col")` for the stub — `great_tables` never reads
+the pandas index; the stub is a real column named via `rowname_col=`.
+`set_index()` defaults to `drop=True`, which removes that column from the
+frame entirely, so `GT(...)` renders without it — the identifier's values
+vanish, rather than merely being demoted to a plain column. The simplest fix
+is to never call `set_index()` in the first place: pass
+`GT(df, rowname_col="col")` on the original frame. If the identifier is
+already the frame's index (e.g. straight out of `df.groupby("col").agg(...)`),
+restore it as a column first with `.reset_index()` — but only when
+`df.index.name == "col"`; calling `.reset_index()` on a frame that's still on
+its default integer index instead adds a spurious `index` column. Passing
+`rowname_col="col"` while `col` isn't an actual column (whether or not it's
+currently the index) raises `KeyError`.
 
 ### Grouping — a computable trigger (PP-1)
 
