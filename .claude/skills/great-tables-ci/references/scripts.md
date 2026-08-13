@@ -125,6 +125,22 @@ execution of a decision you already made; every hex/palette NAME comes from
 (source of truth; `tests/test_palette_parity.py` fails CI on drift). When a
 value changes: edit `palettes.md`, then this module — never the reverse.
 
+### Every helper's real parameters, at a glance
+
+Six similarly-shaped helpers, each with a *different* parameter list — do not
+reconstruct these from memory. This is the complete list; nothing else is
+accepted (an unlisted kwarg raises `TypeError`, not a silent no-op):
+
+| Helper | Real signature | Common wrong guess |
+| --- | --- | --- |
+| `frame` | `frame(gt, color=None, width="1px", style="solid")` | `zoom=`/`expand=` — those belong to `finalize()`, not `frame()`. |
+| `hairlines` | `hairlines(gt, color=None, width="1px", style="solid")` | — |
+| `heatmap` | `heatmap(gt, columns, *, kind, hue, domain=None)` | `palette=` — there is no `palette` kwarg; the color choice is always `hue=`. Also see the `hue` disjointness warning below `heatmap`'s own section. |
+| `band` | `band(gt, *, shade="dark", hue="navy")` | `columns=`, `header_color=` — `band()` takes only `shade`/`hue`; there is no column selector or a raw-color kwarg. |
+| `stripe` | `stripe(gt)` | Any kwarg — `stripe()` takes no parameters besides `gt`. |
+| `stub_tint` | `stub_tint(gt, *, hue="navy")` | `columns=`, `header_color=` — same confusion as `band()`; only `hue` exists. |
+| `finalize` | `finalize(gt, path="table.png", **overrides)` | `zoom=`/`expand=` ARE valid here (via `**overrides`, e.g. `finalize(gt, "table.png", zoom=3)`) — this is the one that actually takes them. Do **not** reassign its return value to `gt`; see the callout below. |
+
 ### `PALETTE`
 
 A nested dict mirroring `palettes.md`:
@@ -166,6 +182,18 @@ bare `data_color(...)` only).
 gt = heatmap(gt, ["q1", "q2", "q3", "q4"], kind="sequential", hue="neutral")
 gt = heatmap(gt, "net_change", kind="diverging", hue="default")   # → [-M, M]
 ```
+
+**`hue`'s valid values are DIFFERENT per `kind` — the two sets do not
+overlap.** `kind="sequential"` only resolves `PALETTE["sequential"]`'s keys
+(`positive` / `warning` / `warning_alt` / `neutral`); `kind="diverging"` only
+resolves `PALETTE["diverging"]`'s keys (`default` / `colorblind_safe`). A key
+from the wrong set (e.g. `heatmap(gt, "col", kind="sequential", hue="default")`
+— `"default"` is a diverging-only key) is not caught by this function: it
+falls through unresolved and is passed straight to `great_tables` as a literal
+palette/color name, which then fails with an opaque, unhelpful error (e.g.
+`ValueError: Invalid color name provided (default)`) instead of a clear
+"unknown hue for this kind" message. Match `hue` to `kind` — don't reuse a
+`hue` value across the two.
 
 ### `band(gt, *, shade="dark", hue="navy")` — Step 4
 
@@ -218,8 +246,16 @@ gt = stub_tint(gt)                 # or stub_tint(gt, hue="forest") — same #EA
   satisfy the `render-params` check. You may instead call `gt.gtsave(...)`
   directly with `expand`/`zoom` at or above those defaults.
 
+**Do NOT write `gt = finalize(gt, ...)`.** Unlike `frame`/`hairlines`/`band`/
+`stripe`/`stub_tint` above — whose docstrings each explicitly say "Returns the
+GT object" because they wrap a chainable `tab_options`/`tab_style` call —
+`finalize()` wraps `gt.gtsave()`, a save-to-disk action that is meant to be
+the LAST call in the script, with nothing chained after it. Call it as a bare
+statement:
+
 ```python
 gt = frame(gt)
 gt = hairlines(gt)
-finalize(gt, "table.png")            # or: gt.gtsave("table.png", expand=15, zoom=2.0)
+finalize(gt, "table.png")            # NOT `gt = finalize(gt, "table.png")`
+                                      # or: gt.gtsave("table.png", expand=15, zoom=2.0)
 ```
