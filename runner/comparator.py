@@ -569,15 +569,41 @@ def _walk_top_level(tree: ast.AST):
     place of the `if` statement, as if inlined there -- one level of
     unwrapping only. A `def`/`class` nested inside the unwrapped
     function's own body is still excluded, same as ever.
+
+    2026-08-13 review finding: the unwrap must be gated to ONLY the
+    guard statement sitting directly in `tree.body` -- checking every
+    popped node unconditionally (the first cut of this fix) let an
+    unwrapped function's OWN body re-trigger the same special case if it
+    happened to contain another (or the same) `__main__`-guard shape,
+    which is not "one level" as claimed and, for a self-referential
+    shape (`def build(): if __name__=="__main__": build()`), never
+    terminates -- confirmed to push >200k nodes without returning.
+    `guard_ids` (the `id()` of every statement literally in `tree.body`)
+    restricts the special case to exactly those; anything reached BY an
+    unwrap is walked normally, with no second chance to unwrap again.
     """
     main_guard_defs = _module_level_functions(tree) if isinstance(tree, ast.Module) else {}
+    if isinstance(tree, ast.Module):
+        guard_ids = {id(n) for n in tree.body}
+        body_index = {id(n): i for i, n in enumerate(tree.body)}
+    else:
+        guard_ids = set()
+        body_index = {}
     stack = [tree]
     while stack:
         node = stack.pop()
-        target_name = _main_guard_call_target(node)
-        if target_name in main_guard_defs:
+        target_def = None
+        if id(node) in guard_ids:
+            target_name = _main_guard_call_target(node)
+            candidate = main_guard_defs.get(target_name)
+            # The def must appear BEFORE the guard -- calling it any earlier
+            # is a real `NameError` at runtime (2026-08-13 review finding),
+            # not an inlined-equivalent script.
+            if candidate is not None and body_index[id(candidate)] < body_index[id(node)]:
+                target_def = candidate
+        if target_def is not None:
             yield node
-            stack.extend(reversed(main_guard_defs[target_name].body))
+            stack.extend(reversed(target_def.body))
             continue
         yield node
         for child in ast.iter_child_nodes(node):
@@ -740,10 +766,15 @@ def _walk_exported_scope(tree: ast.AST):
         yield from _walk_top_level(tree)
         return
     main_guard_defs = _module_level_functions(tree)
-    for node in tree.body:
+    body_index = {id(n): i for i, n in enumerate(tree.body)}
+    for guard_index, node in enumerate(tree.body):
         target_name = _main_guard_call_target(node)
-        if target_name in main_guard_defs:
-            for inner in main_guard_defs[target_name].body:
+        target_def = main_guard_defs.get(target_name)
+        # Same "def must appear before the guard" rule as `_walk_top_level`
+        # (2026-08-13 review finding) -- calling it any earlier is a real
+        # `NameError` at runtime, not an inlined-equivalent script.
+        if target_def is not None and body_index[id(target_def)] < guard_index:
+            for inner in target_def.body:
                 if not _stmt_targets_name(inner, exported_name):
                     continue
                 yield from _walk_top_level(inner)
