@@ -38,6 +38,7 @@ from plotnine import (
     position_dodge,
     scale_color_manual,
     scale_fill_manual,
+    scale_shape_manual,
     scale_x_discrete,
     theme,
     theme_minimal,
@@ -232,11 +233,15 @@ def plot_consistency(
                 inherit_aes=False,
             ),
         )
-        # shape (in addition to color) distinguishes the two series even
-        # when a tied score would otherwise let one point fully hide the
-        # other.
+        # shape (in addition to color), pinned explicitly rather than left
+        # to plotnine's default positional assignment -- otherwise, if one
+        # group is entirely absent from a prompt's data, the surviving
+        # group can silently inherit the other's shape. baseline uses "x"
+        # (an open cross with no fill) rather than a second filled circle
+        # so a tied score can't let one point fully hide the other.
         + geom_point(aes(color="group", shape="group"), size=3.2)
         + scale_color_manual(values=GROUP_COLORS)
+        + scale_shape_manual(values={SKILL_LABEL: "o", BASELINE_LABEL: "x"})
         + scale_x_discrete(limits=order)
         + ylim(0, 100)
         + labs(
