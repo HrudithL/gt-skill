@@ -47,7 +47,7 @@ _GT_VERSION_PINNED = "0.22.0"
 # (fresh subprocess, redirected stdout, exceptions never escape) but returns
 # full row/column values instead of a single hash.
 _EXEC_RUNNER = r'''
-import ast, sys, types, io, json, contextlib, math
+import ast, copy, sys, types, io, json, contextlib, math
 
 path = sys.argv[1]
 _PINNED_GT_VERSION = "0.22.0"
@@ -110,26 +110,21 @@ def _json_safe(v):
     return str(v)
 
 
-class _StripReturns(ast.NodeTransformer):
-    """Replace a bare `return`/`return expr` with `pass`/an expression
-    statement -- `return` is only legal inside a `def`, and the whole
-    point of `_inline_main_guard` below is running a function's body
-    OUTSIDE of one. Common in practice (`return gt` as the function's own
-    last line). Does NOT descend into a nested `def`/`async def`/
-    `lambda`, where a `return` is still legal and unrelated to the guard
-    target's own top-level control flow."""
-
-    def visit_FunctionDef(self, node):
-        return node
-
-    def visit_AsyncFunctionDef(self, node):
-        return node
-
-    def visit_Lambda(self, node):
-        return node
-
-    def visit_Return(self, node):
-        return ast.Pass() if node.value is None else ast.Expr(value=node.value)
+def _returns_outside_defs(stmts):
+    """Every `ast.Return` reachable from `stmts` without descending into a
+    nested `def`/`async def`/`lambda`/`class` (where `return` is legal and
+    unrelated to the guard target's own top-level control flow)."""
+    found = []
+    stack = list(stmts)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, ast.Return):
+            found.append(node)
+            continue
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+            continue
+        stack.extend(ast.iter_child_nodes(node))
+    return found
 
 
 def _inline_main_guard(src):
@@ -175,11 +170,14 @@ def _inline_main_guard(src):
             a.posonlyargs or a.args or a.kwonlyargs or a.vararg or a.kwarg
         )
 
-    defs = {
-        n.name: n
-        for n in tree.body
-        if isinstance(n, ast.FunctionDef) and _has_no_params(n)
-    }
+    # Resolve name -> LAST `def` with that name first (matching real Python
+    # rebinding semantics -- a later same-name `def` shadows an earlier
+    # one), THEN filter by arity. Filtering during the same pass (round-4
+    # review finding) let an earlier zero-param `def` survive in the dict
+    # even when a later, same-name, parameterized `def` is the one that
+    # actually runs -- resolving to the wrong (shadowed) function's body.
+    all_defs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    defs = {name: node for name, node in all_defs.items() if _has_no_params(node)}
     for i, node in enumerate(tree.body):
         if not (isinstance(node, ast.If) and not node.orelse):
             continue
@@ -205,8 +203,28 @@ def _inline_main_guard(src):
         target = defs.get(call.func.id)
         if target is None or tree.body.index(target) >= i:
             continue  # unresolved, or the def doesn't come before the guard
+        # Only handle a `return` shaped as the body's own single, LAST
+        # statement (round-4 review finding: rewriting EVERY `return`
+        # silently discards real control flow -- an early `return` before
+        # later code, or a guard-clause `return` before the real work,
+        # both produced fabricated data instead of the real run's values).
+        # Anything else -- more than one `return`, or one that isn't
+        # literally the last top-level statement -- declines to inline at
+        # all, falling back to the existing safe "no top-level gt" result.
+        body = target.body
+        returns = _returns_outside_defs(body)
+        if len(returns) > 1 or (returns and returns[0] is not body[-1]):
+            continue
+        # Deep-copy before splicing (round-4 review finding): `target` is
+        # still the actual `def` node sitting (now unused) in `tree.body`,
+        # and mutating its statements in place would corrupt that `def`
+        # too if anything else ever called it (recursion, a helper, code
+        # after the guard).
+        stripped_body = copy.deepcopy(body)
+        if returns:
+            last = stripped_body[-1]
+            stripped_body[-1] = ast.Pass() if last.value is None else ast.Expr(value=last.value)
         new_body = list(tree.body)
-        stripped_body = [_StripReturns().visit(stmt) for stmt in target.body]
         new_body[i : i + 1] = stripped_body
         tree.body = new_body
         ast.fix_missing_locations(tree)
