@@ -146,10 +146,13 @@ Per-prompt means: `gtcars_top10_by_country` 94.0%, `islands_sizes` 94.0%,
 85.9%, `sp500_monthly_performance` 50.4% (still the hardest — same ground-truth
 month-label-format ambiguity noted in the top-level `SUMMARY.md`).
 
-Two individual repeats scored far below their siblings, both traced to the same
-one-off mistake — forgetting `rowname_col=` in the `GT(...)` constructor entirely, so
-no stub was ever created: `gtcars_hp_price/repeat_3` (60.2% vs. 98.8% siblings) and
-`airquality_monthly_summary/repeat_1` (56.3% vs. ~96% siblings, which also added an
-unwanted column-group spanner the prompt never asked for). Both are places
-`gt_consistency.py`'s own worked pattern is unambiguous and the sibling repeats on the
-same prompt got it right — haiku-tier sampling variance, not a skill or checker gap.
+Two individual repeats scored far below their siblings, each from a stub-related
+mistake: `gtcars_hp_price/repeat_3` (60.2% vs. 98.8% siblings) created a stub using
+`rowname_col="mfr"`, but `mfr` alone is non-unique in gtcars (multiple cars share
+the same manufacturer), so the stub rows didn't match the ground truth's composite
+`mfr`+`model` identifiers. `airquality_monthly_summary/repeat_1` (56.3% vs. ~96%
+siblings, which also added an unwanted column-group spanner the prompt never asked
+for) forgot `rowname_col=` in the `GT(...)` constructor entirely, so no stub was
+created. Both are places `gt_consistency.py`'s own worked pattern is unambiguous and
+the sibling repeats on the same prompt got it right — haiku-tier sampling variance,
+not a skill or checker gap.
