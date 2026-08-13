@@ -211,6 +211,46 @@ if __name__ == "__main__":
         assert _hairlines_present(src) is True, params
 
 
+def test_decorated_guard_target_is_not_unwrapped():
+    # Round-5 review finding: a decorator can replace the function
+    # entirely (or wrap it requiring an argument) -- calling the bare
+    # name then runs the decorator's wrapper, not the plain body, so
+    # crediting the undecorated body is the same fabricated-execution bug
+    # the async/arity/ordering checks above exist to prevent.
+    src = """\
+def tag(fn):
+    return "not a function"
+
+@tag
+def build_table():
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+
+if __name__ == "__main__":
+    build_table()
+"""
+    assert _hairlines_present(src) is False
+
+
+def test_class_shadowed_def_is_not_unwrapped():
+    # Round-5 review finding: a LATER `class build_table: ...` shadows an
+    # earlier `def build_table(): ...` at real runtime exactly like a
+    # later same-name `def` already does -- generalizes that resolution
+    # to every kind of rebinding, not just def-vs-def.
+    src = """\
+def build_table():
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+
+class build_table:
+    pass
+
+if __name__ == "__main__":
+    build_table()
+"""
+    assert _hairlines_present(src) is False
+
+
 def test_plain_unwrapped_script_is_unaffected():
     # A normal, already-linear top-level script (no wrapper function at
     # all) must keep working exactly as before.

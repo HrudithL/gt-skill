@@ -170,13 +170,40 @@ def _inline_main_guard(src):
             a.posonlyargs or a.args or a.kwonlyargs or a.vararg or a.kwarg
         )
 
-    # Resolve name -> LAST `def` with that name first (matching real Python
-    # rebinding semantics -- a later same-name `def` shadows an earlier
-    # one), THEN filter by arity. Filtering during the same pass (round-4
-    # review finding) let an earlier zero-param `def` survive in the dict
-    # even when a later, same-name, parameterized `def` is the one that
-    # actually runs -- resolving to the wrong (shadowed) function's body.
-    all_defs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    def _rebound_names(node):
+        # Every module-level NAME `node` rebinds -- mirrors
+        # runner/comparator.py::_rebound_names exactly (duplicated, not
+        # imported, for the same standalone-subprocess reason as the rest
+        # of this function).
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            return [node.name]
+        if isinstance(node, ast.Assign):
+            return [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            return [node.target.id]
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            return [a.asname or a.name.split(".")[0] for a in node.names]
+        return []
+
+    # Resolve name -> LAST *undecorated* `def` with that name (matching real
+    # Python rebinding semantics), poisoning (excluding) any name later
+    # rebound by ANYTHING else -- a decorated def, a class, a plain
+    # assignment, an import (round-5 review finding: a decorator can
+    # replace the function entirely, and any other rebinding shadows an
+    # earlier plain def exactly like a later same-name def already does;
+    # both generalize the round-4 same-name-def fix below to every kind of
+    # rebinding). THEN filter by arity: filtering during the same pass
+    # (round-4 review finding) let an earlier zero-param `def` survive even
+    # when a later, same-name, parameterized `def` is the one that actually
+    # runs -- resolving to the wrong (shadowed) function's body.
+    resolved = {}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and not node.decorator_list:
+            resolved[node.name] = node
+            continue
+        for name in _rebound_names(node):
+            resolved[name] = None
+    all_defs = {name: node for name, node in resolved.items() if node is not None}
     defs = {name: node for name, node in all_defs.items() if _has_no_params(node)}
     for i, node in enumerate(tree.body):
         if not (isinstance(node, ast.If) and not node.orelse):

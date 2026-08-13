@@ -187,6 +187,76 @@ def test_guard_before_def_is_not_inlined(tmp_path):
     assert "NameError" in result["error"] and "build_table" in result["error"]
 
 
+_DECORATED_TARGET_SRC = """\
+import pandas as pd
+from great_tables import GT
+
+def tag(fn):
+    return "not a function"
+
+@tag
+def build_table():
+    gt = GT(pd.DataFrame({"x": [1, 2, 3]}))
+
+if __name__ == "__main__":
+    build_table()
+"""
+
+_CLASS_SHADOWED_SRC = """\
+import pandas as pd
+from great_tables import GT
+
+def build_table():
+    gt = GT(pd.DataFrame({"x": [1, 2, 3]}))
+
+class build_table:
+    pass
+
+if __name__ == "__main__":
+    build_table()
+"""
+
+_REASSIGNED_SRC = """\
+import pandas as pd
+from great_tables import GT
+
+def build_table():
+    gt = GT(pd.DataFrame({"x": [1, 2, 3]}))
+
+build_table = None
+
+if __name__ == "__main__":
+    build_table()
+"""
+
+
+def test_decorated_guard_target_is_not_inlined(tmp_path):
+    # Round-5 review finding: a decorator can replace the function
+    # entirely -- calling the bare name runs the decorator's wrapper, not
+    # the plain body. The real script raises TypeError and renders
+    # nothing; must not be scored as if it ran.
+    result = exec_table(_write(tmp_path, _DECORATED_TARGET_SRC))
+    assert result["ok"] is False
+    assert "TypeError" in result["error"]
+
+
+def test_class_shadowed_def_is_not_inlined(tmp_path):
+    # Round-5 review finding: a LATER `class build_table: ...` shadows an
+    # earlier `def build_table(): ...` at real runtime -- the real script
+    # constructs an instance and never assigns a top-level `gt`.
+    result = exec_table(_write(tmp_path, _CLASS_SHADOWED_SRC))
+    assert result["ok"] is False
+
+
+def test_reassigned_def_is_not_inlined(tmp_path):
+    # Same shadowing class as the class-def case, via a plain reassignment
+    # instead -- the real script's bare `build_table()` call raises
+    # TypeError (`None` is not callable), not a rendered table.
+    result = exec_table(_write(tmp_path, _REASSIGNED_SRC))
+    assert result["ok"] is False
+    assert "TypeError" in result["error"]
+
+
 def test_shadowed_def_resolves_to_the_last_one(tmp_path):
     # Round-4 review finding: a LATER same-name `def` with a required
     # parameter shadows an earlier zero-param one at real runtime (plain
