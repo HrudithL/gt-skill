@@ -31,6 +31,16 @@ column) before you call `rowname_col=`. A table with no stub at all is
 only correct when the request's own subject genuinely has no natural row
 identity (e.g. "compare these 3 named metrics side by side").
 
+Never rely on `df.set_index("col")` for the stub — `great_tables` never
+reads the pandas index; the stub is a real column set via
+`rowname_col=`. `set_index()` defaults to `drop=True`, which removes
+that column from the frame entirely, so `GT(...)` renders without it —
+the identifier's values vanish, rather than merely being demoted to a
+plain column. Pass `GT(df, rowname_col="col")` on the frame while `col`
+is still a real column (i.e. before any `set_index()` call) — passing
+`rowname_col="col"` once `col` is only the pandas index raises a
+`KeyError`, since it's no longer a column at all.
+
 ## 2. Name every derived measure explicitly, BEFORE deciding its color kind
 
 A request often names a comparison that isn't a literal column — "gain,"
