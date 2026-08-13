@@ -148,9 +148,15 @@ gt = gt.tab_options(column_labels_border_bottom_color="#CCCCCC",
                     column_labels_border_bottom_width="2px")
 ```
 
-**Column-label text is white — the mechanism is `tab_style`, not `tab_options`.** The
-heading band (Step 4) requires white column-label text over the dark navy fill, but
-`tab_options()` has no parameter that sets it — set it with a `tab_style` call instead:
+**Column-label text is white — pin it explicitly via `tab_style`.** The heading band
+(Step 4) requires white column-label text over the dark navy fill. As
+`big_color/column_label_emphasis.md` explains, `great_tables` actually
+**auto-contrasts** column-label text to white by default whenever the band is dark
+enough — a bare `tab_options(column_labels_background_color=...)` band with no
+`tab_style` call at all already renders white label text. This project's convention is
+to pin it explicitly anyway, matching every worked example in this project's corpus
+(e.g. `assets/examples/ranking/ranking.py`) rather than relying on the auto-contrast
+default:
 
 ```python
 from great_tables import GT, style, loc
@@ -160,9 +166,12 @@ gt = gt.tab_style(style=style.text(color="white"), locations=loc.column_labels()
 
 `tab_options()` has **no** `column_labels_font_color` or `column_labels_text_color`
 parameter — confirmed via `inspect.signature(GT.tab_options)` (great_tables 0.22.0):
-none of its 141 parameters matches either name. White column-label text is only ever
-set via `tab_style(style.text(color="white"), loc.column_labels())`, as in
-`assets/examples/ranking/ranking.py`.
+none of its 141 parameters matches either name — so this explicit pin has to go
+through `tab_style`, not a same-call `tab_options()` kwarg.
+
+If you're also touching heading-band `tab_options(...)` kwargs (background color,
+padding, alignment), see the `heading_*` hallucinated-kwarg guardrail under item (c)
+below — it lists the invented names to avoid and the real ones to use.
 
 ---
 
