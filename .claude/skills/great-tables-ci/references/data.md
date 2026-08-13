@@ -7,12 +7,18 @@ column silently breaks `fmt_*`/`data_color` downstream.
 
 **Anti-pattern: don't cast a numeric identifier column to string to suppress
 thousands-separators.** A column like `Year` or an ID renders `1,996` instead of
-`1996` and it's tempting to fix that with `df["Year"] = df["Year"].astype(str)` —
-don't. That silently converts the column to `object` dtype, and any later
-formatter or `data_color`/heatmap pass that touches that column crashes
-(`TypeError: '<' not supported between instances of 'str' and 'int'`) or silently
-mis-sorts it. The column stays numeric; suppress the separators at format time
-instead: `gt.fmt_integer(columns="Year", use_seps=False)`.
+`1996` once a broader `fmt_integer`/`fmt_number` pass (default `use_seps=True`)
+touches it — not by default, and not until that pass runs — and it's tempting to
+fix that with `df["Year"] = df["Year"].astype(str)` — don't. That silently converts
+the column to `object` dtype: any later `fmt_*` call on it raises
+`TypeError: '<' not supported between instances of 'str' and 'int'`, and a
+`data_color`/heatmap pass on it doesn't crash but silently produces a different,
+wrong color mapping (and `.sort_values()` on it mis-sorts as strings). The column
+stays numeric; suppress the separators at format time instead —
+`gt.fmt_integer(columns="Year", use_seps=False)` — and apply that call *after* any
+broader `fmt_integer`/`fmt_number` pass over multiple columns (or exclude this
+column from it): the later matching format call wins, so a broader pass's default
+`use_seps=True` would otherwise silently re-add the separators.
 
 ## The checklist — run it before you organize columns
 
@@ -113,22 +119,26 @@ grain, not just present.
     A column can pass the uniqueness test below and still be worth combining for
     this reason alone.
 
-  A concrete uniqueness case: `mfr` + `model` in a car dataset — `"Toyota"` alone
-  isn't a row identity (many rows share it), but `"Toyota Camry"` is. Build the
-  stub column yourself before stubbing:
+  A concrete case combining both motivations: `mfr` + `model` in a car dataset —
+  `mfr` alone isn't unique (only 19 distinct manufacturers across 47 rows, e.g.
+  multiple Aston Martins), so a composite is required just to disambiguate. And even
+  where `model` alone already happens to be unique in a given dataset, it isn't
+  reliably recognizable by itself: "GT" alone is not a known car, "Ford GT" is.
+  Combining both gives a stub that's unique *and* readable. Build the stub column
+  yourself before stubbing:
   ```python
   df["car"] = df["mfr"] + " " + df["model"]
   ```
   then `rowname_col="car"`. Do this whenever the request's own language refers to
-  rows by the combination ("the Bentley Continental GT," not "the Bentley") — a
-  bare `mfr` or a bare `model` column is not a valid stub on its own.
+  rows by the combination ("the Bentley Continental GT," not "the Bentley").
 
-  A hypothetical product-catalog dataset illustrates the readability case instead: suppose
-  `sku_name` (e.g. "Trail Runner 3") is already unique across every row on its own
-  (verified directly against the data), so uniqueness alone would not require a
-  composite. A stub can still combine `brand + " " + sku_name` into one label
-  anyway, because "Trail Runner 3" read alone doesn't say which brand makes it,
-  while "Summit Trail Runner 3" is self-describing without a separate brand column:
+  A hypothetical product-catalog dataset illustrates the readability motivation with
+  no uniqueness requirement at all: suppose `sku_name` (e.g. "Trail Runner 3") is
+  already unique across every row on its own (verified directly against the data),
+  so uniqueness alone would not require a composite. A stub can still combine
+  `brand + " " + sku_name` into one label anyway, because "Trail Runner 3" read
+  alone doesn't say which brand makes it, while "Summit Trail Runner 3" is
+  self-describing without a separate brand column:
   ```python
   df["display_name"] = df["brand"] + " " + df["sku_name"]
   ```
