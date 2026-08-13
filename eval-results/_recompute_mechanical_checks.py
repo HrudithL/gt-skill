@@ -5,6 +5,26 @@ auditability, not meant to be re-run (it's already applied; running it
 again would be a no-op since every mechanical check already reflects the
 fixed logic).
 
+UPDATE (2026-08-13, `fix/comparator-date-aware-row-matching`, PR #108):
+the "running it again would be a no-op" claim above is NO LONGER TRUE.
+That PR changed `execution_tier.normalize_id` to be date-format-aware (plus
+a round-4 zero-padding/sentinel-safety hardening pass), which changes the
+row/entity identity result -- and therefore the MECHANICAL checks this
+script recomputes -- for any prompt whose stub is a date label rendered in
+different formats by ground truth vs. candidate scripts. Confirmed by
+direct measurement: `sp500_monthly_performance`'s "Row/entity selection
+identity" check flips from 0/10 (FAIL, complete row-set mismatch) to 10/10
+(PASS) for `prose` repeat_1/repeat_3 and all 3 `scripts` repeats, because
+those candidates render the month stub as `"2010-01"`/`.dt.to_period("M")`
+while the ground truth uses `"%b %Y"` (e.g. `"Jan 2010"`); `house`'s
+candidates already happened to match the ground truth's format, so it's
+unaffected. This script would need to be re-run (or an equivalent fresh
+recompute performed) against `sp500_monthly_performance` -- and possibly
+other date-labeled prompts -- before `eval-results/**` can be trusted as
+current again. That recompute is deliberately deferred to a separate,
+small follow-up PR; it is NOT done as part of #108, to keep that PR's diff
+focused on the comparator code fix alone.
+
 Recomputes every MECHANICAL check fresh (via the fixed
 `_stmt_targets_name`) against each already-committed candidate table.py,
 while preserving the 4 judge-backed checks' stored values byte-identical
