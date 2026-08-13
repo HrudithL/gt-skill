@@ -131,6 +131,7 @@ RULE_REFS: dict[str, str] = {
     "domain-symmetry": "big_color/diverging_fill.md",
     "domain-present": "big_color/column_gradient_fill.md",
     "frame-missing": "small_color.md",
+    "hairlines-missing": "small_color.md",
     "heading-band": "palettes.md",
     "render-params": "small_color.md",
     "striping-gate": "small_color.md",
@@ -1046,6 +1047,35 @@ def check_frame(source: str, exec_res: "ExecResult") -> list[Finding]:
     ]
 
 
+def check_hairlines(source: str) -> list[Finding]:
+    """Step 5a: the body-row hairline must be pinned to the palette's neutral
+    hex (``NEUTRAL["hairline"]``, ``#E8E8E8``), not left at Great Tables' own
+    raw default gray -- unconditional, every table gets it, same as
+    ``check_frame`` above, and a genuinely different option family from that
+    check (the outer table border vs. the rule BETWEEN body rows).
+
+    Source-only, no DOM signal (unlike ``check_frame`` above): accepts either
+    the ``hairlines(gt)`` helper call, or an explicit
+    ``table_body_hlines_color=...`` tab_options call whose value matches the
+    palette hex. Setting only ``_style``/``_width`` without the matching
+    ``_color`` does not count -- color is the part that actually differs from
+    the library default.
+    """
+    if re.search(r"\bhairlines\s*\(", source):
+        return []
+    m = re.search(r"table_body_hlines_color\s*=\s*['\"]([^'\"]+)['\"]", source)
+    if m and m.group(1).strip().upper() == NEUTRAL["hairline"].upper():
+        return []
+    return [
+        Finding(
+            "hairlines-missing",
+            FAIL,
+            "no body-row hairline pinned to the palette neutral hairline color",
+            f'call hairlines(gt) or set table_body_hlines_color="{NEUTRAL["hairline"]}" (with matching style/width)',
+        )
+    ]
+
+
 def check_heading_band(
     source: str,
     band_hex: Optional[str],
@@ -1712,6 +1742,7 @@ def run_checks(path: Path) -> tuple[list[Finding], dict[str, Any]]:
     # --- Rule checks (each isolated). ---
     findings += _run_safe("palettes-domains", lambda: check_palettes_and_domains(source, calls))
     findings += _run_safe("frame-missing", lambda: check_frame(source, exec_res))
+    findings += _run_safe("hairlines-missing", lambda: check_hairlines(source))
     findings += _run_safe("heading-band", lambda: check_heading_band(source, band_hex, exec_res))
     findings += _run_safe("render-params", lambda: check_render_params(source, exec_res.gtsave_kwargs))
     findings += _run_safe("striping-gate", lambda: check_striping_gate(source, exec_res))
