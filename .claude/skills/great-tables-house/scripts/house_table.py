@@ -477,7 +477,7 @@ def heatmap(gt, columns, *, kind, hue, domain=None, reverse=False):
     diverging gets a **symmetric** ``[-M, M]`` with ``M = max(abs(min),
     abs(max))``. Pass an explicit ``domain`` to override (e.g. to exclude a
     summary/total row from the color scale so it doesn't compress the real
-    data's range — see ``revenue`` in the demo below for
+    data's range — see ``revenue`` in ``build_house_table`` below for
     exactly this case).
 
     ``reverse``: for a **diverging** measure where positive genuinely means
@@ -610,7 +610,7 @@ def summary_row(gt, row_index, *, bold=True):
 
     For a **whole-table grand total**, prefer ``gt.grand_summary_rows(...)``
     (native to `great_tables`) + ``tab_style(..., locations=loc.grand_summary())``
-    — see the "Total" row in the demo below. That native
+    — see the "Total" row in ``build_house_table()`` below. That native
     mechanism keeps the total structurally separate from any
     ``groupname_col`` section (no fake group label needed) and it's excluded
     from `data_color`'s domain automatically. Reach for THIS helper only for
@@ -665,211 +665,204 @@ def group_emphasis(gt):
 # groups of 4, exercising every helper above at once. This is the ONE worked
 # example the whole skill points at; pattern-match the piece of it (and the
 # matching row in references/RULES.md) that fits your actual data.
-#
-# Written as a flat, top-level script (no `def build_...():` / `if __name__
-# == "__main__":` wrapper) DELIBERATELY, not by oversight — an earlier,
-# function-wrapped version of this exact demo was the confirmed root cause
-# of two separate cross-round comparator false negatives (`house`'s eval
-# score cratering to ~18% on one repeat each of `towny_growth_trends` and
-# `airquality_monthly_summary`, both times because the model imitated this
-# file's own wrapping and `runner/comparator.py`'s static top-level-only
-# walk can't see calls made inside a function body — a deliberate, bounded
-# scope choice there, not a bug, but one this file was needlessly triggering
-# for itself). Wrapping in a function is good general Python style, but the
-# one worked example this whole skill points at should not be the thing
-# that teaches the model the one shape its own eval can't score. If you
-# want a function/`__main__` guard in your own script, that's fine — this
-# file just isn't the place recommending it by example.
-#
-# Column roles (walk through references/RULES.md alongside this):
-#
-# - ``product``    -> stub (rowname_col) — a row identifier.
-# - ``region``     -> groupname_col — the organizing category.
-# - ``units_sold`` -> plain magnitude, thousands separator, UNCOLORED.
-# - ``revenue``    -> the sequential heatmap HERO measure (Blues/neutral).
-# - ``yoy_change`` -> the diverging heatmap measure (RdYlGn/default) — the
-#                     2nd full-heatmap measure in this demo (Big Color
-#                     stays restrained, not capped at a fixed count).
-# - ``status``     -> categorical good/bad/neutral via status_chip, NOT a
-#                     heatmap — it is 3 discrete states, not a magnitude.
-# - ``rank``       -> plain integer, no color, no decimals — a rank's
-#                     information is its order, not its size.
-#
-# Column order: `revenue`, the primary heatmapped measure, sits in the
-# first value column or two — right after its lone context column
-# (`units_sold`), not literally the very first column — never buried
-# among trailing categorical/rank columns; this demo already satisfies
-# that, no reordering needed.
 # ---------------------------------------------------------------------------
 
-products = pd.DataFrame(
-    [
-        # product,           region,          units_sold, revenue, yoy_change, status,      rank
-        ("Alpha Widget",     "North America",  1240,      482000,   0.18,      "On Track",  1),
-        ("Beta Gadget",      "North America",   860,      305000,  -0.07,      "Watch",      4),
-        ("Gamma Tool",       "North America",   430,      178500,   0.05,      "On Track",   7),
-        ("Delta Device",     "North America",   210,       64000,  -0.22,      "At Risk",   11),
-        ("Epsilon Unit",     "Europe",           980,      410000,   0.12,      "On Track",  2),
-        ("Zeta Kit",         "Europe",           560,      239000,   None,      "Watch",      6),
-        ("Eta Module",       "Europe",           340,      142000,  -0.15,      "At Risk",    9),
-        ("Theta Part",       "Europe",           125,       38500,   0.02,      "Watch",     12),
-        ("Iota Component",   "Asia-Pacific",     915,      396000,   0.27,      "On Track",  3),
-        ("Kappa Assembly",   "Asia-Pacific",     705,      298000,   0.09,      "On Track",  5),
-        ("Lambda System",    "Asia-Pacific",     388,      165000,  -0.11,      "At Risk",    8),
-        ("Mu Product",       "Asia-Pacific",     245,       71500,  -0.04,      "Watch",     10),
-    ],
-    columns=["product", "region", "units_sold", "revenue", "yoy_change", "status", "rank"],
-)
 
-kappa_row_index = products.index[products["product"] == "Kappa Assembly"][0]  # footnote target
+def build_house_table():
+    """Build and render the house-format reference table.
 
-gt = (
-    GT(products, rowname_col="product", groupname_col="region")
-    .tab_header(
-        title="Regional Product Line Performance",
-        subtitle=md("Full-year revenue, volume, and trend by product — grouped by region"),
+    Column roles (walk through references/RULES.md alongside this):
+
+    - ``product``    -> stub (rowname_col) — a row identifier.
+    - ``region``     -> groupname_col — the organizing category.
+    - ``units_sold`` -> plain magnitude, thousands separator, UNCOLORED.
+    - ``revenue``    -> the sequential heatmap HERO measure (Blues/neutral).
+    - ``yoy_change`` -> the diverging heatmap measure (RdYlGn/default) — the
+                        2nd full-heatmap measure in this demo (Big Color
+                        stays restrained, not capped at a fixed count).
+    - ``status``     -> categorical good/bad/neutral via status_chip, NOT a
+                        heatmap — it is 3 discrete states, not a magnitude.
+    - ``rank``       -> plain integer, no color, no decimals — a rank's
+                        information is its order, not its size.
+
+    Column order: `revenue`, the primary heatmapped measure, sits in the
+    first value column or two — right after its lone context column
+    (`units_sold`), not literally the very first column — never buried
+    among trailing categorical/rank columns; this demo already satisfies
+    that, no reordering needed.
+    """
+    products = pd.DataFrame(
+        [
+            # product,           region,          units_sold, revenue, yoy_change, status,      rank
+            ("Alpha Widget",     "North America",  1240,      482000,   0.18,      "On Track",  1),
+            ("Beta Gadget",      "North America",   860,      305000,  -0.07,      "Watch",      4),
+            ("Gamma Tool",       "North America",   430,      178500,   0.05,      "On Track",   7),
+            ("Delta Device",     "North America",   210,       64000,  -0.22,      "At Risk",   11),
+            ("Epsilon Unit",     "Europe",           980,      410000,   0.12,      "On Track",  2),
+            ("Zeta Kit",         "Europe",           560,      239000,   None,      "Watch",      6),
+            ("Eta Module",       "Europe",           340,      142000,  -0.15,      "At Risk",    9),
+            ("Theta Part",       "Europe",           125,       38500,   0.02,      "Watch",     12),
+            ("Iota Component",   "Asia-Pacific",     915,      396000,   0.27,      "On Track",  3),
+            ("Kappa Assembly",   "Asia-Pacific",     705,      298000,   0.09,      "On Track",  5),
+            ("Lambda System",    "Asia-Pacific",     388,      165000,  -0.11,      "At Risk",    8),
+            ("Mu Product",       "Asia-Pacific",     245,       71500,  -0.04,      "Watch",     10),
+        ],
+        columns=["product", "region", "units_sold", "revenue", "yoy_change", "status", "rank"],
     )
-    .tab_stubhead(label="Product")
-    .tab_spanner(label="Volume & Revenue", columns=["units_sold", "revenue"])
-    .tab_spanner(label="Trend", columns=["yoy_change", "status"])
-    # spanner-seam vertical divider — right edge of the LAST column in the
-    # first group, applied to both the body and the column-labels row so
-    # the seam runs the full height of the table (small_color.md (b)).
-    .tab_style(
-        style=style.borders(sides="right", color=PALETTE["neutral"]["vertical_divider"], weight="1px"),
-        locations=loc.body(columns="revenue"),
+
+    kappa_row_index = products.index[products["product"] == "Kappa Assembly"][0]  # footnote target
+
+    gt = (
+        GT(products, rowname_col="product", groupname_col="region")
+        .tab_header(
+            title="Regional Product Line Performance",
+            subtitle=md("Full-year revenue, volume, and trend by product — grouped by region"),
+        )
+        .tab_stubhead(label="Product")
+        .tab_spanner(label="Volume & Revenue", columns=["units_sold", "revenue"])
+        .tab_spanner(label="Trend", columns=["yoy_change", "status"])
+        # spanner-seam vertical divider — right edge of the LAST column in the
+        # first group, applied to both the body and the column-labels row so
+        # the seam runs the full height of the table (small_color.md (b)).
+        .tab_style(
+            style=style.borders(sides="right", color=PALETTE["neutral"]["vertical_divider"], weight="1px"),
+            locations=loc.body(columns="revenue"),
+        )
+        .tab_style(
+            style=style.borders(sides="right", color=PALETTE["neutral"]["vertical_divider"], weight="1px"),
+            locations=loc.column_labels(columns="revenue"),
+        )
+        .fmt_number(columns="units_sold", decimals=0, use_seps=True)
+        .fmt_currency(columns="revenue", decimals=0)
+        .fmt_percent(columns="yoy_change", decimals=1, force_sign=True)
+        .fmt_integer(columns="rank")
+        .sub_missing(columns=["yoy_change", "status", "rank"], missing_text="—")
     )
-    .tab_style(
-        style=style.borders(sides="right", color=PALETTE["neutral"]["vertical_divider"], weight="1px"),
-        locations=loc.column_labels(columns="revenue"),
+    gt = humanize_labels(
+        gt,
+        products,
+        overrides={"units_sold": "Units Sold", "yoy_change": "YoY Change"},
     )
-    .fmt_number(columns="units_sold", decimals=0, use_seps=True)
-    .fmt_currency(columns="revenue", decimals=0)
-    .fmt_percent(columns="yoy_change", decimals=1, force_sign=True)
-    .fmt_integer(columns="rank")
-    .sub_missing(columns=["yoy_change", "status", "rank"], missing_text="—")
-)
-gt = humanize_labels(
-    gt,
-    products,
-    overrides={"units_sold": "Units Sold", "yoy_change": "YoY Change"},
-)
 
-# Column widths + padding: size each column to its content plus a
-# small buffer; don't let auto-layout stretch narrow columns (`rank`)
-# to match the widest label elsewhere. Padding values are the six
-# pinned house constants (see references/RULES.md's "Global constants").
-gt = gt.cols_width(
-    cases={
-        "product": "150px",
-        "units_sold": "110px",
-        "revenue": "110px",
-        "yoy_change": "110px",
-        "status": "100px",
-        "rank": "70px",
-    }
-)
-gt = gt.tab_options(
-    heading_padding="6px",
-    column_labels_padding="6px",
-    column_labels_padding_horizontal="8px",
-    data_row_padding="5px",
-    data_row_padding_horizontal="8px",
-    source_notes_padding="6px",
-)
-
-# Big Color, kept restrained: 2 full heatmaps in this demo (no fixed
-# cap — see references/RULES.md's "Color restraint"). `revenue` is the
-# sequential hero (a neutral magnitude -> Blues); `yoy_change` is the
-# diverging 2nd measure (signed, positive=good -> RdYlGn default
-# orientation, no reverse). `status` is a categorical good/bad/
-# neutral column, NOT a heatmap — status_chip, not data_color. The
-# domain for each is computed from `products` alone (heatmap()'s default
-# when domain=None) — safe because the grand-summary Total added below
-# is NOT part of `gt._tbl_data`; unlike a manually appended total ROW, it
-# can never stretch/compress the color scale.
-gt = heatmap(gt, "revenue", kind="sequential", hue="neutral")
-gt = heatmap(gt, "yoy_change", kind="diverging", hue="default")
-gt = status_chip(gt, "status", {"On Track": "good", "At Risk": "bad", "Watch": "neutral"})
-
-# Heading band: the house DEFAULT (shade="dark") is a solid, branded
-# navy fill (`accent["navy"]`, #08306B) with bold white text. Branding
-# surfaces are fixed to this navy/Blues family always — navy here is
-# NOT re-derived by matching the heatmap's own hue elsewhere in the
-# table (a heatmap could be Blues, Reds, or RdYlGn and the band stays
-# navy regardless); see references/RULES.md's "Unified color theme".
-gt = band(gt, hue="navy")
-
-# Small-Color polish: striping applies by DEFAULT regardless of row
-# count — the real gate is whether the body's visible cells are
-# already 100% heatmap-covered. Only 2 of 6 columns here carry
-# continuous color (revenue, yoy_change), so plenty of plain cells
-# remain for a stripe to show through on. Stub tint harmonizes to the
-# same navy family as the band, at the quieter "washed" tier (the band
-# is the louder of the two). The stripe is always flat grey, never
-# tinted — an alternating fill reads as busy in a way a single flat
-# surface doesn't. Group headers get bold + a rule ONLY (no fill) —
-# the one row that earns its own distinct highlight is the
-# summary/total row below, not a section break.
-gt = stripe(gt)
-gt = stub_tint(gt, hue="navy")
-gt = group_emphasis(gt)
-
-# Grand summary "Total" row — the NATIVE mechanism for a whole-table
-# total (great_tables' own `grand_summary_rows`), not a manually
-# appended data row. This is deliberately NOT the `summary_row()`
-# helper above: grand_summary_rows() places the total in its own
-# structural section below every groupname_col group, with no fake
-# group label required (a manually appended row needs SOME value in
-# the `region` column, and `None`/NaN renders as the literal text
-# "nan" — grand_summary_rows sidesteps the whole problem). Only
-# `units_sold`/`revenue` are meaningfully summable — `yoy_change`,
-# `status`, and `rank` have no sensible total, so the aggregation
-# function only returns the two summable columns and the rest render
-# via `missing_text="—"` (overriding the `"---"` default so it matches
-# this table's `sub_missing` em dash elsewhere).
-#
-# `fns` values must return a `pandas.Series`; `grand_summary_rows`
-# applies at most ONE `fmt=` formatter to every summarized column, so
-# with two columns needing different formats (thousands-separated
-# integer vs. currency) the values are pre-formatted as display
-# strings inside the function itself instead of using `fmt=`.
-def _totals(d):
-    return pd.Series(
-        {
-            "units_sold": f"{int(d['units_sold'].sum()):,}",
-            "revenue": f"${int(d['revenue'].sum()):,}",
+    # Column widths + padding: size each column to its content plus a
+    # small buffer; don't let auto-layout stretch narrow columns (`rank`)
+    # to match the widest label elsewhere. Padding values are the six
+    # pinned house constants (see references/RULES.md's "Global constants").
+    gt = gt.cols_width(
+        cases={
+            "product": "150px",
+            "units_sold": "110px",
+            "revenue": "110px",
+            "yoy_change": "110px",
+            "status": "100px",
+            "rank": "70px",
         }
     )
-
-gt = gt.grand_summary_rows(fns={"Total": _totals}, missing_text="—")
-gt = gt.tab_style(
-    style=[
-        style.text(weight="bold"),
-        style.borders(sides="top", color=PALETTE["neutral"]["structural_rule"], weight="1.5px"),
-    ],
-    locations=loc.grand_summary(),
-)
-gt = gt.tab_style(
-    style=style.text(weight="bold"),
-    locations=loc.grand_summary_stub(),
-)
-
-gt = (
-    gt.tab_footnote(
-        footnote="Restated to include a distributor rebate posted in Q4.",
-        locations=loc.body(columns="revenue", rows=[kappa_row_index]),
+    gt = gt.tab_options(
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
     )
-    # Two source notes, analytical caption FIRST: "YoY Change" is a
-    # derived, potentially ambiguous measure (revenue growth vs. unit
-    # growth) — state the chosen definition here, not in the subtitle.
-    .tab_source_note(
-        source_note="YoY Change is the year-over-year percent change in revenue, not unit volume."
+
+    # Big Color, kept restrained: 2 full heatmaps in this demo (no fixed
+    # cap — see references/RULES.md's "Color restraint"). `revenue` is the
+    # sequential hero (a neutral magnitude -> Blues); `yoy_change` is the
+    # diverging 2nd measure (signed, positive=good -> RdYlGn default
+    # orientation, no reverse). `status` is a categorical good/bad/
+    # neutral column, NOT a heatmap — status_chip, not data_color. The
+    # domain for each is computed from `products` alone (heatmap()'s default
+    # when domain=None) — safe because the grand-summary Total added below
+    # is NOT part of `gt._tbl_data`; unlike a manually appended total ROW, it
+    # can never stretch/compress the color scale.
+    gt = heatmap(gt, "revenue", kind="sequential", hue="neutral")
+    gt = heatmap(gt, "yoy_change", kind="diverging", hue="default")
+    gt = status_chip(gt, "status", {"On Track": "good", "At Risk": "bad", "Watch": "neutral"})
+
+    # Heading band: the house DEFAULT (shade="dark") is a solid, branded
+    # navy fill (`accent["navy"]`, #08306B) with bold white text. Branding
+    # surfaces are fixed to this navy/Blues family always — navy here is
+    # NOT re-derived by matching the heatmap's own hue elsewhere in the
+    # table (a heatmap could be Blues, Reds, or RdYlGn and the band stays
+    # navy regardless); see references/RULES.md's "Unified color theme".
+    gt = band(gt, hue="navy")
+
+    # Small-Color polish: striping applies by DEFAULT regardless of row
+    # count — the real gate is whether the body's visible cells are
+    # already 100% heatmap-covered. Only 2 of 6 columns here carry
+    # continuous color (revenue, yoy_change), so plenty of plain cells
+    # remain for a stripe to show through on. Stub tint harmonizes to the
+    # same navy family as the band, at the quieter "washed" tier (the band
+    # is the louder of the two). The stripe is always flat grey, never
+    # tinted — an alternating fill reads as busy in a way a single flat
+    # surface doesn't. Group headers get bold + a rule ONLY (no fill) —
+    # the one row that earns its own distinct highlight is the
+    # summary/total row below, not a section break.
+    gt = stripe(gt)
+    gt = stub_tint(gt, hue="navy")
+    gt = group_emphasis(gt)
+
+    # Grand summary "Total" row — the NATIVE mechanism for a whole-table
+    # total (great_tables' own `grand_summary_rows`), not a manually
+    # appended data row. This is deliberately NOT the `summary_row()`
+    # helper above: grand_summary_rows() places the total in its own
+    # structural section below every groupname_col group, with no fake
+    # group label required (a manually appended row needs SOME value in
+    # the `region` column, and `None`/NaN renders as the literal text
+    # "nan" — grand_summary_rows sidesteps the whole problem). Only
+    # `units_sold`/`revenue` are meaningfully summable — `yoy_change`,
+    # `status`, and `rank` have no sensible total, so the aggregation
+    # function only returns the two summable columns and the rest render
+    # via `missing_text="—"` (overriding the `"---"` default so it matches
+    # this table's `sub_missing` em dash elsewhere).
+    #
+    # `fns` values must return a `pandas.Series`; `grand_summary_rows`
+    # applies at most ONE `fmt=` formatter to every summarized column, so
+    # with two columns needing different formats (thousands-separated
+    # integer vs. currency) the values are pre-formatted as display
+    # strings inside the function itself instead of using `fmt=`.
+    def _totals(d):
+        return pd.Series(
+            {
+                "units_sold": f"{int(d['units_sold'].sum()):,}",
+                "revenue": f"${int(d['revenue'].sum()):,}",
+            }
+        )
+
+    gt = gt.grand_summary_rows(fns={"Total": _totals}, missing_text="—")
+    gt = gt.tab_style(
+        style=[
+            style.text(weight="bold"),
+            style.borders(sides="top", color=PALETTE["neutral"]["structural_rule"], weight="1.5px"),
+        ],
+        locations=loc.grand_summary(),
     )
-    .tab_source_note(source_note="Source: internal sales ledger, FY close. Figures in USD.")
-)
+    gt = gt.tab_style(
+        style=style.text(weight="bold"),
+        locations=loc.grand_summary_stub(),
+    )
 
-gt = hairlines(gt)
-gt = frame(gt)
-finalize(gt, path="house_table.png")
+    gt = (
+        gt.tab_footnote(
+            footnote="Restated to include a distributor rebate posted in Q4.",
+            locations=loc.body(columns="revenue", rows=[kappa_row_index]),
+        )
+        # Two source notes, analytical caption FIRST: "YoY Change" is a
+        # derived, potentially ambiguous measure (revenue growth vs. unit
+        # growth) — state the chosen definition here, not in the subtitle.
+        .tab_source_note(
+            source_note="YoY Change is the year-over-year percent change in revenue, not unit volume."
+        )
+        .tab_source_note(source_note="Source: internal sales ledger, FY close. Figures in USD.")
+    )
 
+    gt = hairlines(gt)
+    gt = frame(gt)
+    finalize(gt, path="house_table.png")
+    return gt
+
+
+if __name__ == "__main__":
+    build_house_table()
