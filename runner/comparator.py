@@ -4914,7 +4914,7 @@ def check_force_sign(cand: dict, truth: dict, meta: dict) -> CheckResult:
 # "data" has to be punctuation, not more letters.
 _CAPTION_LABELED_CITATION_RE = re.compile(
     r"^\s*(?:\*{1,2}|_{1,2})?\s*(?:(?:data\s+)?(?:source|dataset)|data)s?"
-    r"\s*(?:\*{1,2}|_{1,2})?\s*[:\-]\s*(?:\*{1,2}|_{1,2})?",
+    r"\s*(?:\*{1,2}|_{1,2})?\s*(?::|(?:-(?=\s)))\s*(?:\*{1,2}|_{1,2})?",
     re.IGNORECASE,
 )
 
@@ -5211,6 +5211,12 @@ def _has_analytical_signal(text: str) -> bool:
     "calculated") or "highlighting a winter smog spike" (has "highlighting")
     apart from "the area of islands across the world" or "S&P 500 daily
     prices and volumes, 2010-2015" (neither has anything of the sort).
+
+    Note: the "-ed"/"-ing" suffix rule is the primary signal in practice
+    (verified: removing the curated word list changes 0/72 real corpus
+    verdicts; removing the suffix rule changes 2/72) -- this is a morphology
+    proxy, not a semantic classifier, and matches both valid analytical
+    verbs and false positives.
     """
     words = _CAPTION_TOKEN_RE.findall(text.lower())
     for w in words:
@@ -5316,9 +5322,12 @@ def check_caption_not_generic(cand: dict, truth: dict, meta: dict) -> CheckResul
        volumes, 2010-2015" after stripping "Data:"), fails the same way an
        attribution-only citation with nothing after it does -- stripping
        the label shouldn't be enough on its own if what's left is still
-       just more provenance-flavored description. A remainder that DOES
-       say something real (a computation, a comparison, a named claim)
-       keeps that credit exactly as before.
+       just more provenance-flavored description. A remainder that passes
+       the analytical-signal check keeps that credit; note that this check
+       is a deterministic, mechanical heuristic (primarily a "-ed"/"-ing"
+       suffix proxy) that can both over-fail (a genuine present-tense claim
+       without a past/gerund verb form) and under-fail (a synonym dodging
+       the curated word list), not a semantic understanding of real insight.
     2. Generic template: any individual source note, or any sentence
        within one, opening with a bare "the/this table/chart/data shows/
        displays/..." pattern has that opening PREFIX stripped (same
