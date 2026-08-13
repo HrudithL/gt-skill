@@ -17,11 +17,14 @@ consistency metric. A baseline (no-skill) run is parsed too, for contrast.
 from __future__ import annotations
 
 import ast
+import functools
+import io
 import json
 import os
 import re
 import subprocess
 import sys
+import tokenize
 from collections import Counter
 from pathlib import Path
 
@@ -263,6 +266,73 @@ def _gt_constructor_blocks(source: str) -> list[str]:
     return blocks
 
 
+@functools.lru_cache(maxsize=64)
+def _comment_ranges(source: str) -> tuple[tuple[int, int], ...]:
+    """Character-offset `(start, end)` ranges of every `#`-comment token in
+    `source`, via the standard library `tokenize` module.
+
+    Shared by `_bare_call_blocks`/`_bare_call_blocks_pos` so a `func(...)`-
+    shaped span of text inside a COMMENT (e.g. `# Branding: band (dark
+    navy)`, or `# Step 4: Heading band (branding tier)`) is never misread as
+    a real call — a raw regex scan over the full source string has no
+    comment-awareness at all otherwise. `tokenize` (not a naive "strip
+    everything after `#` on each line") is required for correctness: a `#`
+    can legitimately appear INSIDE a string literal in the source being
+    scanned (a hex color string `"#08306B"`, or free text that happens to
+    contain a literal `#`), and only a real tokenizer reliably tells that
+    apart from a genuine comment.
+
+    Falls back to an EMPTY tuple (no ranges masked — the original,
+    comment-blind matching behavior) if `tokenize` itself raises on
+    malformed/partial source. This parser must never crash the whole
+    comparator run on one bad candidate script, so a tokenize failure is a
+    silent no-op, not a propagated exception.
+
+    `@lru_cache`d on the source text itself: every helper below
+    (`_bare_call_blocks`/`_bare_call_blocks_pos`) is invoked several times
+    per script (once per function name — `band`, `stub_tint`, `stripe`,
+    `heatmap`, ...), and re-tokenizing the same source string each time
+    would be wasted work.
+    """
+    # NB: built via `source.split("\n")` (NOT `str.splitlines(keepends=True)`).
+    # `tokenize.generate_tokens` reads `source` through `io.StringIO(source)
+    # .readline`, which only ever splits on `"\n"`. `str.splitlines()` ALSO
+    # splits on several characters `readline` does NOT treat as line breaks
+    # (form feed `\x0c`, vertical tab `\x0b`, `\x1c`-`\x1e`, `\x85`, line/
+    # paragraph separators, a lone `\r`), any of which can legitimately
+    # appear inside a string literal in arbitrary model-generated source. If
+    # `source` contains one, `splitlines(keepends=True)` would count more
+    # "lines" than `tokenize` does, desyncing this row-offset table from
+    # `tokenize`'s actual row numbering and shifting every comment range's
+    # computed character offset — a silent-drop failure mode where a real
+    # call's match could appear to fall "inside" a shifted comment range and
+    # get wrongly excluded. Splitting on `"\n"` only keeps this table's
+    # notion of "line" identical to `readline`'s.
+    parts = source.split("\n")
+    lines = [p + "\n" for p in parts[:-1]] + [parts[-1]]
+    line_starts = [0]
+    for line in lines:
+        line_starts.append(line_starts[-1] + len(line))
+
+    def _offset(row: int, col: int) -> int:
+        return line_starts[row - 1] + col
+
+    ranges: list[tuple[int, int]] = []
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+            if tok.type == tokenize.COMMENT:
+                ranges.append((_offset(*tok.start), _offset(*tok.end)))
+    except Exception:
+        return ()
+    return tuple(ranges)
+
+
+def _in_comment(idx: int, ranges: tuple[tuple[int, int], ...]) -> bool:
+    """True if source offset `idx` falls inside one of `ranges` (see
+    `_comment_ranges`)."""
+    return any(start <= idx < end for start, end in ranges)
+
+
 def _bare_call_blocks(source: str, func: str) -> list[str]:
     """Return the argument text of every bare `func(...)` call in `source`.
 
@@ -277,9 +347,19 @@ def _bare_call_blocks(source: str, func: str) -> list[str]:
     `add_heatmap` (a longer identifier), and the qualifier is a single level so a
     chained `df.x.stripe(` is not caught. `(?<!def )` excludes a script's own
     `def heatmap(...):` declaration of the same name from being read as a call.
+
+    Comment-aware (`_comment_ranges`): a match whose `func(` text starts
+    inside a `#` comment (e.g. a comment describing what the code below it
+    does, `# Branding: band (dark navy), ...`) is skipped — it is not a real
+    call, and letting it through used to fabricate a fake match that could
+    outrank (or, pre-Bug-2-fix, simply precede) the real call later in the
+    source.
     """
+    ranges = _comment_ranges(source)
     blocks: list[str] = []
     for m in re.finditer(rf"(?<!def )(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
+        if _in_comment(m.start(), ranges):
+            continue
         open_idx = m.end() - 1
         close_idx = _scan_balanced_paren(source, open_idx)
         if close_idx is not None:
@@ -702,31 +782,59 @@ def _color_signature(source: str) -> str:
 
 
 def _find_band_helper(source: str) -> tuple[str, str] | None:
-    """(shade, hue) of a runtime `band(gt, *, shade, hue)` heading-band call.
+    """(shade, hue) of the LAST runtime `band(gt, *, shade, hue)` heading-band
+    call, else None when there is no `band(...)` call.
 
-    None when there is no `band(...)` call. Lets a helper-based run score the
-    heading band the SAME as the literal `column_labels_background_color=`.
-    An omitted `shade` kwarg defaults to `"dark"` here, mirroring
-    `house_table.py`'s own `band(gt, *, shade="dark", hue)` signature -- a
+    Lets a helper-based run score the heading band the SAME as the literal
+    `column_labels_background_color=`. An omitted `shade` kwarg defaults to
+    `"dark"` here, mirroring `gt_consistency.band(gt, *, shade="dark",
+    hue="navy")`'s (and `house_table.py`'s identical) own signature -- a
     candidate that calls the helper with no explicit `shade` gets the
     SAME effective shade the helper itself would actually render, not an
     "unknown" that silently escapes every shade-dependent check below.
+    Likewise an omitted `hue` now defaults to `"navy"` -- that signature's
+    own default -- rather than the generic "unknown" it used to fall back
+    to; see `parse_design_choices`'s `band_hex` resolution for why this
+    matters: per the 2026-08-12 ground-truth redesign,
+    `gt_consistency.band()`'s `shade="dark"` branch (the default) renders
+    the SAME fixed branding hex regardless of `hue` (omitted, `"navy"`, or
+    anything else), so the hue returned here is informational for the
+    default shade -- it no longer gates whether a branding color resolves.
+
+    Last block wins (not the first): a LATER `band(...)` call/reassignment
+    is what actually takes effect at runtime, same "last call wins" policy
+    `_find_stub_fill_hex`'s docstring already documents for the sibling
+    literal-hex path.
     """
     blocks = _bare_call_blocks(source, "band")
     if not blocks:
         return None
-    b = blocks[0]
+    b = blocks[-1]
     shade = _unquote(_kwarg_value(b, "shade")) or "dark"
-    hue = _unquote(_kwarg_value(b, "hue")) or "unknown"
+    hue = _unquote(_kwarg_value(b, "hue")) or "navy"
     return shade, hue
 
 
 def _find_stub_tint_hue(source: str) -> str | None:
-    """`hue` of a runtime `stub_tint(gt, *, hue)` call, else None."""
+    """`hue` of the LAST runtime `stub_tint(gt, *, hue)` call, else None when
+    there is no `stub_tint(...)` call at all.
+
+    An omitted `hue` kwarg now defaults to `"navy"` -- `gt_consistency.
+    stub_tint(gt, *, hue="navy")`'s own documented default -- rather than the
+    generic "unknown" it used to fall back to (which isn't a key in
+    `_HELPER_HUE_TO_WASHED_HEX` and so always resolved to `None` downstream,
+    per `_find_stub_fill_hex`). An omitted hue is a real, known value (the
+    default), not an unresolvable one.
+
+    Last block wins (not the first), matching `_find_band_helper`'s
+    identical fix and `_find_stub_fill_hex`'s own already-documented
+    "last matching literal call wins" policy for the sibling literal-hex
+    path -- a LATER `stub_tint(...)` call is the one that actually renders.
+    """
     blocks = _bare_call_blocks(source, "stub_tint")
     if not blocks:
         return None
-    return _unquote(_kwarg_value(blocks[0], "hue")) or "unknown"
+    return _unquote(_kwarg_value(blocks[-1], "hue")) or "navy"
 
 
 # Hue -> hex for the two literal surfaces the universal branding rule pins
@@ -752,6 +860,24 @@ def _find_stub_fill_hex(source: str) -> str | None:
     literal-first precedence for the heading band). Last matching literal
     call wins when there are several (a later `tab_style` call overriding
     an earlier one is what actually renders).
+
+    2026-08-12 ground-truth redesign: `gt_consistency.stub_tint(gt, *,
+    hue="navy")` now ALWAYS renders the fixed washed-navy tint
+    (`PALETTE["branding"]["stub_tint"]`, == `_HELPER_HUE_TO_WASHED_HEX
+    ["navy"]`) regardless of what `hue` is passed -- `hue` is a
+    no-op-for-branding escape hatch kept only so an existing caller's
+    signature doesn't need to change (see `stub_tint()`'s own docstring).
+    `_find_stub_tint_hue` already resolves an OMITTED hue to `"navy"` (its
+    real default), so looking that up in `_HELPER_HUE_TO_WASHED_HEX` here
+    naturally covers both "omitted" and "explicit `hue=\"navy\"`" the same
+    way, with no special-casing needed below. `house_table.py`'s OWN
+    separate `stub_tint(gt, *, hue)` (a different file) is still genuinely
+    hue-dependent for any hue OTHER than `"navy"` (and has no default at
+    all) -- this parser can't tell which skill's helper convention a
+    candidate is using from source text alone, so any other explicit hue
+    is left exactly as before: looked up in `_HELPER_HUE_TO_WASHED_HEX`,
+    which intentionally has only the one `"navy"` entry (expanding it to
+    cover more hues is out of scope for this fix).
     """
     match_color: str | None = None
     for block in _call_arg_blocks(source, "tab_style"):
@@ -1486,9 +1612,17 @@ def _call_arg_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
 
 
 def _bare_call_blocks_pos(source: str, func: str) -> list[tuple[int, str]]:
-    """Position-paired variant of `_bare_call_blocks` (see `_call_arg_blocks_pos`)."""
+    """Position-paired variant of `_bare_call_blocks` (see `_call_arg_blocks_pos`).
+
+    Shares `_bare_call_blocks`'s comment-awareness (`_comment_ranges`) rather
+    than duplicating the regex-vs-comment logic — a match inside a `#`
+    comment is skipped here too.
+    """
+    ranges = _comment_ranges(source)
     out: list[tuple[int, str]] = []
     for m in re.finditer(rf"(?<!def )(?<![\w.])(?:[A-Za-z_]\w*\.)?{re.escape(func)}\s*\(", source):
+        if _in_comment(m.start(), ranges):
+            continue
         open_idx = m.end() - 1
         close_idx = _scan_balanced_paren(source, open_idx)
         if close_idx is not None:
@@ -1949,10 +2083,26 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
     elif band_helper:
         heading_band_shade, heading_band_hue = band_helper
         # A helper-only call (no literal hex in source) still renders a real
-        # color -- resolve it through the same hue->hex table
-        # `_find_stub_fill_hex` uses, so `heading_band_hex` isn't silently
-        # None for a candidate who correctly used `band(gt, hue="navy")`
-        # instead of a literal `column_labels_background_color=`.
+        # color for the omitted/"navy" hue case: `_find_band_helper` now
+        # defaults an omitted `hue=` to `"navy"` (that signature's own
+        # default), so the plain hue-keyed lookup below already resolves
+        # `band(gt)` and `band(gt, hue="navy")` to the fixed accent hex
+        # without any extra shade-based override (Bug 3 fixed).
+        #
+        # An unconditional `if heading_band_shade == "dark": band_hex =
+        # _HELPER_HUE_TO_ACCENT_HEX["navy"]` override was tried here and
+        # reverted: `house_table.py`'s OWN separate `band()` genuinely
+        # varies by hue under `shade="dark"` (its non-navy hues are NOT a
+        # no-op the way `gt_consistency.band()`'s are), so forcing every
+        # dark-shade call to navy regardless of hue fabricated a false
+        # positive for a real, valid `band(gt, shade="dark", hue="forest")`
+        # call — this parser can't tell which skill's helper convention a
+        # candidate is using from source text alone, so any hue OTHER than
+        # the omitted/"navy" case is deliberately left exactly as it was
+        # before this PR: unresolved (`None`) via the plain `.get()` lookup,
+        # scoped to `shade == "dark"` only (unchanged from before this PR)
+        # -- `shade == "light"` is house's real, still hue-varying escape
+        # hatch and stays unresolved regardless of hue, same as always.
         if heading_band_shade == "dark":
             band_hex = _HELPER_HUE_TO_ACCENT_HEX.get(heading_band_hue)
     else:
