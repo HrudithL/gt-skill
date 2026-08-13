@@ -483,6 +483,44 @@ def test_bare_hyphen_is_deliberately_not_a_citation_terminator():
     assert "data-source citation" in result.detail
 
 
+def test_data_hyphenated_compound_is_not_a_citation_label():
+    # Fix 2 (round-5 polish): the regex for recognizing a bare "Data:" label
+    # incorrectly also matched "Data-" when directly attached to more letters
+    # (e.g. "Data-driven ranking..."), because the separator pattern `[:\-]`
+    # allowed a bare hyphen with no surrounding whitespace. This treated
+    # "Data-driven ranking of the fastest cars." as if it started with a
+    # citation label, wrongly stripping "Data-" and leaving only "driven
+    # ranking..." as the caption -- a false narrowing of what should be
+    # graded as a full, distinctive caption. The fix requires the hyphen
+    # separator to be followed by whitespace (i.e. only treat "Data -" with
+    # surrounding whitespace as a citation label, not "Data-" directly
+    # attached to more letters). Verify that "Data-driven ranking..." is now
+    # graded as a normal caption (not citation-stripped) and passes because
+    # "driven" is an analytical signal.
+    cand = _cand(
+        ["Data-driven ranking of the fastest cars."],
+        title="X", subtitle="Y",
+    )
+    result = check_caption_not_generic(cand, _TRUTH_WITH_CAPTION, {})
+    assert result.passed is True
+    assert result.points_earned == 3
+
+
+def test_data_with_whitespace_delimited_hyphen_is_still_a_citation_label():
+    # Sanity check for Fix 2: "Data -" (hyphen with surrounding whitespace)
+    # must still be correctly recognized and stripped as a citation label
+    # (just like "Data:" and "Data :" are). The remainder after stripping
+    # ("provided by the client.") is just attribution with no analytical
+    # signal, so it still fails correctly as a citation-only caption.
+    cand = _cand(
+        ["Data - provided by the client."],
+        title="X", subtitle="Y",
+    )
+    result = check_caption_not_generic(cand, _TRUTH_WITH_CAPTION, {})
+    assert result.passed is False
+    assert "data-source citation" in result.detail
+
+
 # --- round-4 (2026-08-13): Bug D, word-length filter + stemming/stopword order ---
 
 def test_short_caption_with_domain_abbreviations_now_passes():
