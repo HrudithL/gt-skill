@@ -4,7 +4,7 @@ Apply a background fill (optionally with bold text) to one or a small number of 
 
 ## When to use
 
-- A ranking or leaderboard where the top 1–3 rows are the message (top-N).
+- A ranking or leaderboard where the top 1–3 rows are the message, WITHIN a larger table that also shows other, non-winning rows (top-N-among-many) — or the request already pre-filtered to fewer than 5 rows total, too few for `column_gradient_fill.md`'s own gradient to read as anything but random pastel (see that file's `≥5 rows` gate — this is its documented fallback, not a `≤30%`-cap exception).
 - A single "current" or "featured" row (this quarter, this user, selected item) needs to be found instantly.
 - The number of highlighted rows is **small relative to the total** — roughly ≤30% of body rows. Any more and the highlight becomes the norm.
 

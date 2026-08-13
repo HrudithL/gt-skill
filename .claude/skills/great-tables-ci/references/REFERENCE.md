@@ -71,7 +71,11 @@ only the top N" (`nlargest(10, ...)`, "the 10 most expensive X"). Once the displ
 table's whole row set already IS the winners, there's no larger context left to stand
 out from (every row would get the fill, blowing past that file's own `≤30%` cap), and
 the ranking measure itself still needs its magnitude shown row-to-row — that's **Ordered
-magnitude** above, regardless of the request's own "top N" wording.
+magnitude** above, regardless of the request's own "top N" wording. Exception: under 5
+rows, `column_gradient_fill.md`'s own `≥5 rows` gate rules it out too (a 3-row gradient
+reads as random pastel, its own text says to fall back to a targeted highlight) — so
+`full_row_highlight.md` on the whole (small) table is correct there, `≤30%` cap
+notwithstanding.
 
 Which measures earn fill: one qualifying measure ⇒ it's the hero and gets
 colored. When several qualify, `big_color/column_gradient_fill.md`'s priority

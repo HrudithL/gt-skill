@@ -4,7 +4,7 @@ Background fill (optionally bold text) on entire "winner" rows to dominate visua
 
 ## When to use
 
-- Ranking/leaderboard where the top 1–3 rows are the message (top-N).
+- Ranking/leaderboard where the top 1–3 rows are the message, WITHIN a larger table (top-N-among-many) — or the request already pre-filtered to <5 rows total, too few for `column_gradient_fill.md`'s gradient to read as anything but random pastel (its own `≥5 rows` gate's documented fallback, not a `≤30%`-cap exception).
 - A single "current"/"featured" row (this quarter, this user, selected item) must be found instantly.
 - Highlighted rows are **≤30% of body rows** — any more and the highlight becomes the norm.
 
