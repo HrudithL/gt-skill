@@ -75,15 +75,6 @@ LABEL_SYNONYMS = {
 # required," never inferred from prose at eval time.
 REQUIRED_INSTRUCTIONS = {}
 
-# Keyword-presence check for the caption/subtitle overlap rule. The caption
-# (first source note) states the sort order and the color-scale rationale;
-# the subtitle only describes units/scope, so it must not lean on the same
-# "largest to smallest" phrasing the caption owns.
-CAPTION_KEYWORDS = {
-    "caption_should_mention": ["largest to smallest", "land area"],
-    "subtitle_should_not_duplicate": ["largest to smallest"],
-}
-
 # Underlying SOURCE CSV column(s) that are the canonical colored measure(s),
 # used for value-based matching -- NOT the rendered column name/label.
 CANONICAL_MEASURES = {

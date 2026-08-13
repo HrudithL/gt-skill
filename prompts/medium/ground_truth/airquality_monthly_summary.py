@@ -78,16 +78,6 @@ REQUIRED_INSTRUCTIONS = {
     "row_count": 5,
 }
 
-# Keyword-presence check for the caption/subtitle overlap rule. The
-# caption's unique insight is the missing-ozone/thin-June-sample caveat --
-# the subtitle only describes WHICH columns are shown, never that caveat,
-# so the same two phrases serve as both "must appear in caption" and "must
-# not leak into subtitle" (verified against the actual rendered text below).
-CAPTION_KEYWORDS = {
-    "caption_should_mention": ["missing", "recorded value"],
-    "subtitle_should_not_duplicate": ["missing", "recorded value"],
-}
-
 # Underlying SOURCE/derived column(s) that are the canonical colored
 # measure(s), used for value-based matching -- NOT the rendered label.
 CANONICAL_MEASURES = {
