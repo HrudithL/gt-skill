@@ -4,6 +4,8 @@
 
 Detailed method signatures and parameters for the `great_tables` Python package.
 
+> Verified against the installed `great_tables` package: only `GT, md, html, style, loc` (plus `style.text`/`style.fill`) are top-level importable from `great_tables`. Every `fmt_*` function (`fmt_number`, `fmt_integer`, `fmt_percent`, `fmt_currency`, etc.) is a `GT` instance method only — call it as `gt.fmt_number(...)`, never `from great_tables import fmt_number`.
+
 ## GT Constructor
 
 ```python
@@ -146,6 +148,7 @@ All `fmt_*` methods share common parameters:
     columns=None,
     rows=None,
     currency=None,           # "USD", "EUR", "GBP", etc. (3-letter ISO code)
+                             # case-sensitive: must be uppercase (e.g. "USD" — "usd" raises ValueError)
     use_subunits=True,       # show cents/pence
     decimals=None,           # override default decimal places
     use_seps=True,
