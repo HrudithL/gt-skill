@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Three plots for the `scripts` skill's full sweep, built from `../metrics.json`
+"""Two plots for the `scripts` skill's full sweep, built from `../metrics.json`
 (see `eval-results/_lib.py` for how that file was produced, and
 `eval-results/_plots.py` for the actual plot-drawing logic shared by all 4
 skills' copies of this script).
@@ -8,7 +8,7 @@ Run with the repo's venv active:
 
     python eval-results/scripts/plots/make_plots.py
 
-Regenerates `usage.png`, `consistency.png`, `comparator_score.png` next to
+Regenerates `usage.png` and `comparator_score.png` next to
 this script and refreshes `../metrics.json` from the latest
 `runs/sweep/*_scripts_6prompts` sweep first.
 """
@@ -46,12 +46,9 @@ def _load_metrics() -> dict:
 def main() -> None:
     metrics = _load_metrics()
     written = {
-        "usage.png": plots.plot_usage(metrics, PROMPT_IDS, PROMPT_LABELS, SKILL, HERE / "usage.png"),
-        "consistency.png": plots.plot_consistency(
-            metrics, PROMPT_IDS, PROMPT_LABELS, SKILL, HERE / "consistency.png"
-        ),
+        "usage.png": plots.plot_usage(metrics, PROMPT_IDS, PROMPT_LABELS, HERE / "usage.png"),
         "comparator_score.png": plots.plot_comparator_score(
-            metrics, PROMPT_IDS, PROMPT_LABELS, SKILL, HERE / "comparator_score.png"
+            metrics, PROMPT_IDS, PROMPT_LABELS, HERE / "comparator_score.png"
         ),
     }
     lib.curate_runs(metrics, SKILL_DIR / "samples")

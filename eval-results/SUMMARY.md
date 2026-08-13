@@ -518,10 +518,11 @@ eval-results/
     progressive_disclosure.md real transcript excerpt showing the skill being read progressively
     plots/
       make_plots.py           re-scores the LATEST local runs/sweep/*_<skill>_6prompts and regenerates
-                               the 3 PNGs below -- see the warning below before running this
-      usage.png                 token usage per prompt (bar), each bar's USD cost labeled above it
-      consistency.png           min-mean-max comparator score across 3 repeats (range/dumbbell)
-      comparator_score.png      comparator score distribution: 3 repeats vs. baseline (box)
+                               the 2 PNGs below -- see the warning below before running this
+      usage.png                 tokens (x) vs. cost (y) per prompt, baseline -> skill as a connected
+                                 arrow, faceted by difficulty tier
+      comparator_score.png      comparator score: 3 repeats (box, height = consistency) vs. baseline
+                                 (point), faceted by difficulty tier, with a computed mean-lift subtitle
     samples/<prompt>/<variant>/  curated table.py + table.png + comparator report.txt
 ```
 

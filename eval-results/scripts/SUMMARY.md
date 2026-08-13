@@ -45,8 +45,7 @@ was not touched).
 | Cost per invocation | $0.184 | $0.068 |
 | Repeat-to-repeat spread (mean across 6 prompts) | 20.2 points | n/a (1 run) |
 
-See [`plots/usage.png`](plots/usage.png),
-[`plots/consistency.png`](plots/consistency.png),
+See [`plots/usage.png`](plots/usage.png) and
 [`plots/comparator_score.png`](plots/comparator_score.png).
 
 `scripts` again scores highest of the three real skills on this sweep
