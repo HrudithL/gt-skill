@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080331_prose_6prompts/prompts/towny_growth_trends/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 81/93 (87.1%)
+TOTAL: 82/93 (88.2%)
   Data-compliance:        45/48
-  Formatting-compliance:  36/45
+  Formatting-compliance:  37/45
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 9/10 -- 12/13 canonical measures have a value-matching candidate column; unmatched: ['rank']
@@ -26,7 +26,7 @@ TOTAL: 81/93 (87.1%)
 [FAIL] [MECHANICAL] Stripe color (neutral grey): 0/2 -- expected #F6F6F6, got None
 [PASS] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 2/2 -- 1/1 hero-uncolored measures are plain text
 [PASS] [MECHANICAL] Signed-percent force_sign correctness: 2/2 -- 1/1 signed percent columns use force_sign=True
-[FAIL] [MECHANICAL] Caption keyword coverage: 2/3 -- 4/5 caption-keyword rules satisfied; caption missing: ['not the average']
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 6 word(s) beyond the title/subtitle (overlap 45%): 'Fastest-growing defined as highest overall population growth from 1996–2021. Density measured as population per square kilometre.'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 11/11, truncate=False correct 11/11, autocolor_text=True correct 11/11, reverse orientation matches truth 11/11
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 3/4 -- 12/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank']

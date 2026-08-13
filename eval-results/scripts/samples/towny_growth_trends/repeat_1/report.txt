@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080340_scripts_6prompts/prompts/towny_growth_trends/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 71/89 (79.8%)
+TOTAL: 72/89 (80.9%)
   Data-compliance:        44/48
-  Formatting-compliance:  27/41
+  Formatting-compliance:  28/41
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
@@ -26,7 +26,7 @@ TOTAL: 71/89 (79.8%)
 [N/A] [MECHANICAL] Stripe color (neutral grey): 0/0 -- candidate has no row striping
 [N/A] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 0/0 -- no hero_uncolored measure value-matched a candidate column
 [FAIL] [MECHANICAL] Signed-percent force_sign correctness: 0/2 -- 0/1 signed percent columns use force_sign=True; missing/wrong on: ['pop_change_1996_2001_pct']
-[FAIL] [MECHANICAL] Caption keyword coverage: 2/3 -- 3/5 caption-keyword rules satisfied; caption missing: ['fastest-growing', 'not the average']
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 13 word(s) beyond the title/subtitle (overlap 35%): 'Population density shows the trend of residential intensity (per km²) across all six census years from 1996 to 2021. Percentage changes represent the intercensal population growth rate for each five-year period. Towns are ranked by total population growth from 1996 to 2021.'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 11/11, truncate=False correct 11/11, autocolor_text=True correct 11/11, reverse orientation matches truth 11/11
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 2/4 -- 6/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']

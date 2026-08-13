@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080340_scripts_6prompts/prompts/towny_growth_trends/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 77/91 (84.6%)
+TOTAL: 78/91 (85.7%)
   Data-compliance:        42/48
-  Formatting-compliance:  35/43
+  Formatting-compliance:  36/43
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
@@ -17,7 +17,7 @@ TOTAL: 77/91 (84.6%)
 [PASS] [MECHANICAL] No same-family hue collision across 2 measures: 1/1 -- colored-measure palettes: ['Blues', 'Greens']
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py)
-[FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 4/8 -- 6/11 colored measures have a shape-appropriate domain; measure 1 (['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']): heatmap() kind='sequential' doesn't match diverging data; measure 2 (['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']): heatmap() kind='sequential' doesn't match diverging data; measure 3 (['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']): heatmap() kind='sequential' doesn't match diverging data; measure 5 (['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']): heatmap() kind='sequential' doesn't match diverging data; measure 8 (['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']): heatmap() kind='sequential' doesn't match diverging data
+[FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 4/8 -- 6/11 colored measures have a shape-appropriate domain; measure 0 (['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']): heatmap() kind='sequential' doesn't match diverging data; measure 4 (['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']): heatmap() kind='sequential' doesn't match diverging data; measure 5 (['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']): heatmap() kind='sequential' doesn't match diverging data; measure 7 (['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']): heatmap() kind='sequential' doesn't match diverging data; measure 8 (['1996-2001', '2001-2006', '2006-2011', '2011-2016', '2016-2021']): heatmap() kind='sequential' doesn't match diverging data
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=15, body is 100% color-covered -> striping optional (islands_sizes-style case), actual=True
 [N/A] [MECHANICAL] Heading band hue harmonization: 0/0 -- superseded by check_header_branding (2026-08-12 -- header is now a fixed universal navy, not hue-matched per table)
@@ -26,7 +26,7 @@ TOTAL: 77/91 (84.6%)
 [PASS] [MECHANICAL] Stripe color (neutral grey): 2/2 -- expected #F6F6F6, got '#F6F6F6'
 [N/A] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 0/0 -- no hero_uncolored measure value-matched a candidate column
 [FAIL] [MECHANICAL] Signed-percent force_sign correctness: 0/2 -- 0/1 signed percent columns use force_sign=True; missing/wrong on: ['pop_change_1996_2001_pct']
-[FAIL] [MECHANICAL] Caption keyword coverage: 2/3 -- 4/5 caption-keyword rules satisfied; caption missing: ['not the average']
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 12 word(s) beyond the title/subtitle (overlap 40%): '**Finding:** Fastest-growing means highest percent change across the full 1996–2021 span, not averaged across periods. Density in persons per square kilometre; percent change calculated as (end − start) / start for each inter-census period'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 11/11, truncate=False correct 11/11, autocolor_text=True correct 11/11, reverse orientation matches truth 11/11
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 3/4 -- 11/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct']

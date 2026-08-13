@@ -131,14 +131,29 @@ most expensive" table and filled 100% of rows, violating that file's own cap);
 
 | Metric | This round | Round 3 |
 |---|---|---|
-| Mean score | **81.7%** | 79.0% |
-| Mean repeat spread | 10.3pp | 23.5pp |
+| Mean score | **84.7%** | 79.0% |
+| Mean repeat spread | 8.2pp | 23.5pp |
 | Mean cost | $0.190 | $0.182 |
 
-Per-prompt means: `gtcars_hp_price` 93.7%, `airquality_monthly_summary` 93.4%,
-`islands_sizes` 92.5%, `towny_growth_trends` 86.5%, `gtcars_top10_by_country` 70.9%,
-`sp500_monthly_performance` 53.1% (still the hardest — same ground-truth
-month-label-format ambiguity noted in the top-level `SUMMARY.md`).
+**RESOLVED (2026-08-13, `chore/recompute-eval-results-post-fixes`):** the
+figures above (84.7% / 8.2pp) are the final, fully-recomputed numbers,
+after the deferred `normalize_id` date-matching fix and the
+`check_caption_not_generic` redesign were both applied to this round's
+actual committed candidates. They supersede an earlier, briefly-committed
+81.7% / 10.3pp reading of this same sweep that predated that recompute —
+most of the +3.0pp gain comes from `sp500_monthly_performance`'s
+`repeat_1`/`repeat_3` row-identity check flipping from a full miss to a
+full pass (their candidates rendered month labels as `"2010-01"`, which
+`normalize_id` previously couldn't reconcile with the ground truth's `"Jan
+2010"`), plus a smaller, broader gain from the caption-check fix across
+several other prompts. See the top-level `SUMMARY.md` for the full
+three-skill picture and the ranking this settles (`prose` now sits between
+`scripts`, the new top scorer, and `house`).
+
+Per-prompt means: `gtcars_hp_price` 94.9%, `airquality_monthly_summary` 94.5%,
+`islands_sizes` 93.6%, `towny_growth_trends` 87.6%, `gtcars_top10_by_country` 70.9%,
+`sp500_monthly_performance` 66.5% (still the hardest, though no longer by as wide a
+margin now that the `normalize_id` fix has landed — see "RESOLVED" above).
 
 `gtcars_top10_by_country` had the widest single-prompt spread (28.9pp: 57.7%, 86.6%,
 68.4%) — the 57.7% repeat used the bare `model` column as the stub instead of the

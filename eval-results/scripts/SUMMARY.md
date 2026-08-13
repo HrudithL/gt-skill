@@ -137,14 +137,30 @@ Also fixed: the `≤30%`-cap-vs-Top-N routing gap this skill shared with `great-
 
 | Metric | This round | Round 3 |
 |---|---|---|
-| Mean score | **81.5%** | 82.3% |
-| Mean repeat spread | 16.2pp | 20.2pp |
+| Mean score | **86.0%** | 82.3% |
+| Mean repeat spread | 16.4pp | 20.2pp |
 | Mean cost | $0.189 | $0.184 |
 
-Per-prompt means: `gtcars_top10_by_country` 94.0%, `islands_sizes` 94.0%,
-`airquality_monthly_summary` 82.9%, `towny_growth_trends` 81.9%, `gtcars_hp_price`
-85.9%, `sp500_monthly_performance` 50.4% (still the hardest — same ground-truth
-month-label-format ambiguity noted in the top-level `SUMMARY.md`).
+**RESOLVED (2026-08-13, `chore/recompute-eval-results-post-fixes`):** the
+figures above (86.0% / 16.4pp) are the final, fully-recomputed numbers,
+after the deferred `normalize_id` date-matching fix and the
+`check_caption_not_generic` redesign were both applied to this round's
+actual committed candidates. They supersede an earlier, briefly-committed
+81.5% / 16.2pp reading of this same sweep that predated that recompute —
+`scripts` gained the most of the three skills (+4.5pp), since ALL 3
+`sp500_monthly_performance` repeats had rendered month labels as
+`"2010-01"`-style strings that `normalize_id` previously couldn't
+reconcile with the ground truth's `"Jan 2010"`, flipping row-identity
+(and downstream value-correctness) from a full miss to a full pass across
+the board, plus a smaller, broader gain from the caption-check fix across
+several other prompts. See the top-level `SUMMARY.md` for the full
+three-skill picture: **`scripts` is now the top-scoring skill of the
+three**, ahead of `prose` and `house`.
+
+Per-prompt means: `gtcars_top10_by_country` 94.0%, `islands_sizes` 94.4%,
+`gtcars_hp_price` 86.0%, `airquality_monthly_summary` 84.0%, `towny_growth_trends`
+83.0%, `sp500_monthly_performance` 74.8% (still the hardest prompt, but no longer by
+as wide a margin now that the `normalize_id` fix has landed — see "RESOLVED" above).
 
 Two individual repeats scored far below their siblings, each from a stub-related
 mistake: `gtcars_hp_price/repeat_3` (60.2% vs. 98.8% siblings) created a stub using

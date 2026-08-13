@@ -561,9 +561,17 @@ guard target no longer being wrongly inlined. `creator` not re-swept
 
 | Skill | Mean score | Mean spread (was, round 3) | Max spread (was) | Mean cost |
 |---|---|---|---|---|
-| `house` | 82.4% | 10.8pp (18.1pp) | 51.7pp | **$0.131** (cheapest) |
-| `prose` | 81.7% | 10.3pp (23.5pp) | 28.9pp | $0.190 |
-| `scripts` | 81.5% | 16.2pp (20.2pp) | 40.4pp | $0.189 |
+| `house` | 83.3% | 16.4pp (18.1pp) | 51.7pp | **$0.131** (cheapest) |
+| `prose` | 84.7% | 8.2pp (23.5pp) | 28.9pp | $0.190 |
+| `scripts` | 86.0% | 16.4pp (20.2pp) | 40.3pp | $0.189 |
+
+(Mean-score and mean-spread columns updated 2026-08-13 in
+`chore/recompute-eval-results-post-fixes` — see "RESOLVED" below. Original
+round-4 figures, before the `normalize_id` date-matching and
+`check_caption_not_generic` fixes were recomputed into these files, were
+`house` 82.4% / 10.8pp, `prose` 81.7% / 10.3pp, `scripts` 81.5% / 16.2pp.
+Max-spread figures are essentially unchanged, since they're driven by the
+same outlier repeats as before.)
 
 All three land in a tight band, similar to round 3's own "tight band"
 finding. Several single-prompt spreads are WIDER than the mid-fix-cycle
@@ -582,7 +590,29 @@ restraint lapses, towny's spanner/ranking-metric ambiguity), this round's
 remaining spread has no fixable mechanical cause left that this effort's
 deep-dive could find.
 
-**CAVEAT (2026-08-13, added after this round's numbers above were
+**RESOLVED (2026-08-13, `chore/recompute-eval-results-post-fixes`):** the
+CAVEAT below was left open pending a deferred recompute. That recompute has
+now been run for real — via `eval-results/_recompute_mechanical_checks.py`
+against each skill's actual committed candidates, not a scoped/estimated
+script — and every number in this file now reflects it. **Final per-skill
+means: `house` 83.3% (unchanged in practice, +0.9pp — its candidates already
+matched the ground truth's date format, so only the broader caption-check
+fix moved its number), `prose` 84.7% (+3.0pp), `scripts` 86.0% (+4.5pp,
+the largest gainer).** The estimate below correctly predicted the
+direction and rough magnitude (`house` unchanged, `prose` +1.6pp est. vs.
++3.0pp actual, `scripts` +2.7pp est. vs. +4.5pp actual — the estimate only
+substituted 2 of the ~30 mechanical checks, so it undercounted the
+caption-check's separate, broader contribution) and correctly called
+**`scripts` as the new top scorer, overtaking both `house` and `prose`** —
+now confirmed as final, not a guess. The original disclosure text is kept
+below for the bug-hunting detail (what `normalize_id` got wrong, and
+exactly which invocations flipped); read "understated"/"deferred"/"estimate"
+in it as historical framing from before this recompute landed, not the
+current state.
+
+---
+
+**Original CAVEAT (2026-08-13, added after this round's numbers above were
 committed; WIDENED 2026-08-13 after a second review round's independent
 recompute — see below):** the "sp500's ground-truth month-label ambiguity"
 item cited above as an unfixable source of spread was, in fact, a real
@@ -633,21 +663,24 @@ correctness") for every `sp500_monthly_performance` invocation:
   **~83.3%** (+1.6pp over the full 18-invocation mean); `scripts` rises
   from 81.5% to **~84.2%** (+2.7pp) — **the largest gainer, and the new
   likely top scorer, overtaking both `prose` and `house`.** All three
-  numbers are estimates from a scoped, non-committed recompute (only the
-  two `normalize_id`-dependent checks substituted; not a full
-  `eval-results/**` regenerate), so treat the ranking as directionally
-  reliable but not final.
+  numbers were, AT THE TIME THIS WAS WRITTEN, estimates from a scoped,
+  non-committed recompute (only the two `normalize_id`-dependent checks
+  substituted; not a full `eval-results/**` regenerate) — **superseded by
+  the actual full recompute, see "RESOLVED" above: real final numbers are
+  `house` 83.3%, `prose` 84.7%, `scripts` 86.0%,** higher than this
+  estimate for `prose`/`scripts` because the separately-tracked
+  `check_caption_not_generic` fix (see further below) landed in the same
+  recompute and affects invocations beyond just `sp500_monthly_performance`.
 
-Since this fix changes the likely ranking among all three skills — not
-just `house` vs. `prose` — **the round-4 "`house` edges out `prose` and
-`scripts`" framing above should be treated as stale pending a fresh,
-full recompute, and `scripts` (not `house` or `prose`) is the current
-best guess for the new top scorer.** That recompute (a full
-`eval-results/**` regenerate reflecting the fixed `normalize_id`) is
-deliberately deferred to a separate, small follow-up PR — not done as
-part of #108, to keep that PR's diff focused on the comparator code fix
-alone. Until that recompute lands, do not cite this round's `house` vs.
-`prose` vs. `scripts` ranking as settled.
+The fix changed the ranking among all three skills, not just `house` vs.
+`prose`, exactly as this section anticipated: **`scripts` (not `house` or
+`prose`) is now confirmed, with real committed numbers, as the new top
+scorer** (86.0% vs. `prose`'s 84.7% and `house`'s 83.3%). The full
+`eval-results/**` regenerate this section called for (deliberately
+deferred to a separate, small follow-up PR at the time, so as to keep PR
+#108's diff focused on the comparator code fix alone) is exactly what
+`chore/recompute-eval-results-post-fixes` did. This ranking can now be
+cited as settled.
 
 **Two description corrections (round-5 review):**
 - The baselines are **not** all "no stub column for the same reason."
@@ -670,13 +703,20 @@ alone. Until that recompute lands, do not cite this round's `house` vs.
 
 ## `check_caption_not_generic` calibration correction (2026-08-13, PR #116 review round)
 
-PR #116 (which replaced the exact-keyword `check_caption_keywords` with the
-deterministic `check_caption_not_generic`) is not yet reflected in any
-`eval-results/**` numbers above or in the skill-level `SUMMARY.md`/
-`metrics.json` files — that recompute is, like the `normalize_id` fix
-above, **deliberately deferred to a separate follow-up**, so this section
-is disclosure of a measured before/after, not a claim that the stored
-scores already include it.
+**RESOLVED (2026-08-13, `chore/recompute-eval-results-post-fixes`):** PR
+#116 (which replaced the exact-keyword `check_caption_keywords` with the
+deterministic `check_caption_not_generic`) IS now reflected in every
+`eval-results/**` number above and in every skill-level `SUMMARY.md`/
+`metrics.json` file — see "RESOLVED" further above for the final per-skill
+means. The recalibration numbers below (rounds 3/4/5) predate that
+recompute and describe a separate, narrower thing: a scoped, non-committed
+script's measurement of just this one check's own point-behavior across
+its several bug-fix rounds, independent of whether `eval-results/**` had
+been regenerated yet. They're kept as-is for the bug-hunting detail (real
+bugs found and fixed in `check_caption_not_generic` itself, across 3
+review rounds); read any "deferred"/"not yet reflected"/"until a full
+harness regenerate lands" language inside them as historical framing from
+before the recompute landed, not the current state of `eval-results/**`.
 
 PR #116's own description compared **raw pass-RATES** on a 54-candidate
 corpus (`house`/`prose`/`scripts` only, `creator` omitted): the old
@@ -723,12 +763,14 @@ for genuine captions the old exact-keyword mechanism couldn't recognize;
 `creator` loses credit it was never substantively earning in the first
 place.
 
-As with the `normalize_id` disclosure above, this is a scoped, non-committed
-recalibration script's output (reads each candidate's `table.py` via
-`convergence.parse_design_choices()` directly, not a full harness re-run) —
-directionally reliable, but the actual `eval-results/**` files (per-skill
-`metrics.json`/`SUMMARY.md`/plots) still reflect the PRE-#116
-`check_caption_keywords` scores until a full regenerate lands.
+As with the `normalize_id` disclosure above, this was, at the time, a
+scoped, non-committed recalibration script's output (reads each
+candidate's `table.py` via `convergence.parse_design_choices()` directly,
+not a full harness re-run) — directionally reliable but not yet reflected
+in the actual `eval-results/**` files. That gap is now closed (see
+"RESOLVED" above): the actual `eval-results/**` files (per-skill
+`metrics.json`/`SUMMARY.md`/plots) reflect the POST-#116
+`check_caption_not_generic` scores as of 2026-08-13's full regenerate.
 
 ### Round-4 follow-up (2026-08-13): fixed a recurring "prefix veto instead of strip-and-grade" bug shape
 
@@ -914,6 +956,8 @@ slightly different word counts/overlap percentages (since "across"/"this"
 no longer inflate the content-word count), but no pass/fail outcome moved
 because of Fix 3 alone; the two flips above are entirely attributable to
 Fixes 1 and 2. All 6 ground truths' own captions still pass at 3/3. As
-with prior rounds, this is a scoped, non-committed script output — the
-stored `eval-results/**` files still reflect the PRE-#116
-`check_caption_keywords` scores until a full harness regenerate lands.
+with prior rounds, this was, at the time, a scoped, non-committed script
+output. That gap is now closed (see "RESOLVED" above): the stored
+`eval-results/**` files reflect the fully-fixed (post round-5)
+`check_caption_not_generic` scores as of 2026-08-13's full regenerate,
+not the PRE-#116 `check_caption_keywords` scores.

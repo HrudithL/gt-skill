@@ -1,8 +1,8 @@
 Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080322_house_6prompts/prompts/towny_growth_trends/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 77/90 (85.6%)
+TOTAL: 78/90 (86.7%)
   Data-compliance:        39/47
-  Formatting-compliance:  38/43
+  Formatting-compliance:  39/43
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
@@ -26,7 +26,7 @@ TOTAL: 77/90 (85.6%)
 [PASS] [MECHANICAL] Stripe color (neutral grey): 2/2 -- expected #F6F6F6, got '#F6F6F6'
 [N/A] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 0/0 -- no hero_uncolored measure value-matched a candidate column
 [PASS] [MECHANICAL] Signed-percent force_sign correctness: 2/2 -- 1/1 signed percent columns use force_sign=True
-[FAIL] [MECHANICAL] Caption keyword coverage: 2/3 -- 3/5 caption-keyword rules satisfied; caption missing: ['fastest-growing', 'not the average']
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 9 word(s) beyond the title/subtitle (overlap 36%): 'Ranked by overall population growth rate (1996–2021) as percentage change. All municipality types included. Period growth rates shown as percentage changes between consecutive census years.'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 5/5, truncate=False correct 5/5, autocolor_text=True correct 5/5, reverse orientation matches truth 5/5
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 2/4 -- 6/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']

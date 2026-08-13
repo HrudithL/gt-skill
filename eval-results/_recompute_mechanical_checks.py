@@ -25,6 +25,22 @@ current again. That recompute is deliberately deferred to a separate,
 small follow-up PR; it is NOT done as part of #108, to keep that PR's diff
 focused on the comparator code fix alone.
 
+UPDATE (2026-08-13, `chore/recompute-eval-results-post-fixes`): the deferred
+recompute described above has now been RUN (both the `normalize_id` fix and
+the separately-merged `check_caption_keywords` -> `check_caption_not_generic`
+redesign are picked up in the same pass, since both are mechanical-tier and
+this script already recomputes every non-judge check fresh). Doing so
+surfaced one more gap worth recording: the caption redesign renamed the
+check IN PLACE ("Caption keyword coverage" -> "Caption is substantive", same
+FORMAT_CHECKS slot, same points value) rather than just changing its logic,
+which broke this script's original name-keyed old-vs-fresh pairing
+(`fresh_by_name[name]` KeyErrors on any renamed check). Fixed by pairing
+checks POSITIONALLY instead (old `score["checks"]` order vs. fresh
+`DATA_CHECKS + FORMAT_CHECKS` order, judge slots skipped identically on both
+sides) -- robust to a check being renamed without moving, which a name
+lookup is not. See the inline comments in `main()` and
+`rewrite_report_text()` for the mechanics.
+
 Recomputes every MECHANICAL check fresh (via the fixed
 `_stmt_targets_name`) against each already-committed candidate table.py,
 while preserving the 4 judge-backed checks' stored values byte-identical
@@ -96,13 +112,29 @@ _DATA_RE = re.compile(r"^  Data-compliance:\s+(\d+)/(\d+)$")
 _FORMAT_RE = re.compile(r"^  Formatting-compliance:\s+(\d+)/(\d+)$")
 
 
-def rewrite_report_text(old_text: str, new_checks_by_name: dict, new_score: dict) -> str:
+def rewrite_report_text(old_text: str, new_checks: list, new_score: dict) -> str:
+    # Paired POSITIONALLY against `new_checks`, not by name: a check can be
+    # renamed in place at the same list/report slot (e.g. `check_caption_
+    # keywords` / "Caption keyword coverage" was replaced by `check_caption_
+    # not_generic` / "Caption is substantive" at the identical FORMAT_CHECKS
+    # slot on 2026-08-13 -- same points value, same position, new name).
+    # Name-keyed lookup KeyErrors on any such rename even though the check's
+    # identity (list position, which report.txt's check-lines are written in
+    # and which `new_checks` preserves) never moved. Judge checks keep their
+    # name across recomputes (never renamed here), so checking the CURRENT
+    # entry's name against JUDGE_CHECK_NAMES still correctly identifies them
+    # positionally.
     lines = old_text.splitlines()
     out = []
+    check_idx = 0
     for line in lines:
         m = _CHECK_LINE_RE.match(line)
-        if m and m.group(3) not in JUDGE_CHECK_NAMES:
-            nc = new_checks_by_name[m.group(3)]
+        if m:
+            nc = new_checks[check_idx]
+            check_idx += 1
+            if nc["name"] in JUDGE_CHECK_NAMES:
+                out.append(line)  # not recomputed -- preserve byte-identical
+                continue
             # Matches comparator.format_report's own precedence exactly (comparator.py's
             # `mark = "N/A" if r.points_possible == 0 else (...)`) -- N/A must be checked
             # FIRST: `_na()` results have `passed=True` (see its own docstring), so
@@ -153,21 +185,40 @@ def main():
                 if not candidate.is_file():
                     continue
                 fresh_mechanical = recompute_checks(candidate, gt_path)
-                fresh_by_name = {r.name: r for r in fresh_mechanical}
+                n_total_checks = len(c.DATA_CHECKS) + len(c.FORMAT_CHECKS)
+                if len(score["checks"]) != n_total_checks:
+                    raise AssertionError(
+                        f"{skill}/{pid}/{variant}: stored check count "
+                        f"{len(score['checks'])} != current DATA_CHECKS+FORMAT_CHECKS "
+                        f"count {n_total_checks} -- a check was added/removed, so "
+                        "positional pairing below would silently misalign scores"
+                    )
+                fresh_iter = iter(fresh_mechanical)
 
                 new_checks = []
                 # score["checks"] is stored in exactly DATA_CHECKS + FORMAT_CHECKS order
                 # (ComparatorReport.checks = data_results + format_results) -- walk it in
-                # that same order, substituting freshly-recomputed mechanical checks in place.
+                # that same order, substituting freshly-recomputed mechanical checks in
+                # place. Paired POSITIONALLY (via `fresh_iter`), NOT by name: a check can
+                # be renamed in place at the same list slot without moving -- e.g.
+                # `check_caption_keywords` ("Caption keyword coverage") was replaced by
+                # `check_caption_not_generic` ("Caption is substantive") at the identical
+                # FORMAT_CHECKS slot on 2026-08-13 (same points value, same position, new
+                # name/logic). A name-keyed lookup KeyErrors on any such rename even
+                # though the check's identity (list position) never moved; `fresh_iter`
+                # yields `fresh_mechanical` in the same relative order as the non-judge
+                # entries of `score["checks"]` (both walk DATA_CHECKS + FORMAT_CHECKS in
+                # order, judge slots skipped identically), so positional pairing is safe.
                 for old in score["checks"]:
                     name = old["name"]
                     if name in JUDGE_CHECK_NAMES:
                         new = dict(old)
                     else:
-                        fresh = fresh_by_name[name]
+                        fresh = next(fresh_iter)
                         if (fresh.points_earned, fresh.points_possible, fresh.passed) != (old["points_earned"], old["points_possible"], old["passed"]):
                             n_diff += 1
-                            changed_summary.append((skill, pid, variant, name, old["points_earned"], fresh.points_earned))
+                            label = name if name == fresh.name else f"{name} [renamed -> {fresh.name}]"
+                            changed_summary.append((skill, pid, variant, label, old["points_earned"], fresh.points_earned))
                         new = {
                             "name": fresh.name,
                             "points_earned": fresh.points_earned,
@@ -204,8 +255,7 @@ def main():
                 }
                 report_path = skill_dir / "samples" / pid / variant / "report.txt"
                 if report_path.is_file():
-                    new_checks_by_name = {ch["name"]: ch for ch in new_checks}
-                    new_score["report_text"] = rewrite_report_text(report_path.read_text(), new_checks_by_name, new_score)
+                    new_score["report_text"] = rewrite_report_text(report_path.read_text(), new_checks, new_score)
                     report_path.write_text(new_score["report_text"])
                 else:
                     new_score["report_text"] = score.get("report_text")
