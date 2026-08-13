@@ -148,6 +148,22 @@ gt = gt.tab_options(column_labels_border_bottom_color="#CCCCCC",
                     column_labels_border_bottom_width="2px")
 ```
 
+**Column-label text is white — the mechanism is `tab_style`, not `tab_options`.** The
+heading band (Step 4) requires white column-label text over the dark navy fill, but
+`tab_options()` has no parameter that sets it — set it with a `tab_style` call instead:
+
+```python
+from great_tables import GT, style, loc
+
+gt = gt.tab_style(style=style.text(color="white"), locations=loc.column_labels())
+```
+
+`tab_options()` has **no** `column_labels_font_color` or `column_labels_text_color`
+parameter — confirmed via `inspect.signature(GT.tab_options)` (great_tables 0.22.0):
+none of its 141 parameters matches either name. White column-label text is only ever
+set via `tab_style(style.text(color="white"), loc.column_labels())`, as in
+`assets/examples/ranking/ranking.py`.
+
 ---
 
 ## (b) Column-group vertical dividers
@@ -194,6 +210,22 @@ gt = (
     .tab_options(row_striping_background_color="#F6F6F6")
 )
 ```
+
+**Hallucinated-kwarg guardrail.** `opt_row_striping()` takes **only** `row_striping: bool
+= True` — confirmed via `inspect.signature(GT.opt_row_striping)`. It has no color/style
+parameter of its own. Do not invent `opt_row_striping(background_color=...)`,
+`opt_row_striping(color=...)`, `opt_row_striping(style=...)`, or
+`opt_row_striping(row_striping_background_color=...)` — stripe color is set exactly as
+shown above, via a **separate** `tab_options(row_striping_background_color=...)` call.
+
+The same discipline applies to `heading_*` kwargs on `tab_options()`. Confirmed via
+`inspect.signature(GT.tab_options)` (great_tables 0.22.0), the real ones are
+`heading_title_font_size`, `heading_subtitle_font_size`, `heading_title_font_weight`,
+`heading_subtitle_font_weight`, `heading_background_color`, `heading_align`,
+`heading_padding`, `heading_padding_horizontal`, and `heading_border_bottom_*` /
+`heading_border_lr_*`. There is **no** `heading_font_size`, `heading_text_transform`,
+`heading_font_weight`, `heading_text_font_weight`, `heading_text_color`, or
+`heading_has_subtitle_padding` — none of these exist on `tab_options()`.
 
 ---
 
