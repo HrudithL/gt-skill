@@ -1047,12 +1047,28 @@ def check_frame(source: str, exec_res: "ExecResult") -> list[Finding]:
     ]
 
 
+def _walk_no_nested_defs(tree: ast.AST):
+    """Like ``ast.walk``, but does not descend into a `def`/`class`'s own
+    body -- a call trapped inside a never-invoked helper function (or dead
+    code) doesn't count. Mirrors `runner/comparator.py`'s `_walk_top_level`
+    bound (round-2 review finding: the first version of this file's checks
+    used unrestricted `ast.walk`, so `hairlines(gt)` sitting in a function
+    that's never called, or behind an `if True:`, PASSed here while the real
+    comparator -- scoped to the exported call chain -- would still fail it)."""
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        yield node
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            stack.append(child)
+
+
 def _is_call_named(node: ast.AST, name: str) -> bool:
     """True if ``node`` is a genuine `ast.Call` to a function/method literally
     named ``name`` -- excludes a `def name(...):`, a comment, or a docstring
-    mention (none of those parse as an `ast.Call`), matching
-    `runner/comparator.py`'s `_has_real_call` used for the identical `frame`
-    check this file already runs."""
+    mention (none of those parse as an `ast.Call`)."""
     if not isinstance(node, ast.Call):
         return False
     func = node.func
@@ -1061,24 +1077,61 @@ def _is_call_named(node: ast.AST, name: str) -> bool:
     )
 
 
+def _is_zero_length(v: str) -> bool:
+    """A CSS-style zero length (`"0px"`, `"0"`, `"0.0em"`, ...). Mirrors
+    `runner/convergence.py`'s `_is_zero_length` verbatim."""
+    return re.fullmatch(r"0+(\.0+)?(px|pt|em|rem|%)?", v.strip()) is not None
+
+
+def _is_effectively_transparent(color: str) -> bool:
+    """True if a CSS color literal renders with effectively zero opacity --
+    `transparent`/`none`/empty, a zero-alpha `rgba(...)`, or a zero-alpha
+    8-digit `#RRGGBBAA`/4-digit `#RGBA` hex. Mirrors
+    `runner/comparator.py`'s `_is_effectively_transparent` verbatim --
+    deliberately does NOT treat `#ffffff`/white as transparent (round-2
+    review finding: an earlier version of this check did, false-failing a
+    genuinely visible white hairline)."""
+    c = color.strip()
+    if c.lower() in ("transparent", "none", ""):
+        return True
+    m = re.fullmatch(r"rgba?\(\s*[^,]+,\s*[^,]+,\s*[^,]+,\s*([\d.]+)\s*\)", c, re.I)
+    if m:
+        try:
+            return float(m.group(1)) == 0.0
+        except ValueError:
+            return False
+    if re.fullmatch(r"#[0-9A-Fa-f]{8}", c):
+        return c[-2:].lower() == "00"
+    if re.fullmatch(r"#[0-9A-Fa-f]{4}", c):
+        return c[-1].lower() == "0"
+    return False
+
+
 def _hairlines_tab_options_ok(tree: ast.AST) -> Optional[bool]:
     """True/False if `table_body_hlines_style`/`_width`/`_color` (whichever
-    appear as a LITERAL string, taking the last occurrence of each across
-    every real `tab_options(...)` call) together indicate a genuinely visible
-    hairline; `None` if none of the three appear as a literal at all.
+    appear as a LITERAL string, taking the last occurrence of each in SOURCE
+    order across every real `tab_options(...)` call) together indicate a
+    genuinely visible hairline; `None` if none of the three appear as a
+    literal at all.
 
     Mirrors `runner/comparator.py`'s `_option_line_present` (same tolerance:
     a non-literal color expression like `PALETTE["neutral"]["hairline"]`
     cannot be resolved here and is treated as unset, not as a failure --
-    `style`/`width` alone, if visible, are enough)."""
+    `style`/`width` alone, if visible, are enough). Round-2 review finding:
+    the first version iterated `ast.walk` order (breadth-first, NOT source
+    order) for "last occurrence wins," so a later-in-source override could
+    lose to an earlier call visited later in the traversal. Calls are now
+    explicitly sorted by source position first."""
+    calls = [
+        node
+        for node in _walk_no_nested_defs(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "tab_options"
+    ]
+    calls.sort(key=lambda n: (n.lineno, n.col_offset))
     style = width = color = None
-    for node in ast.walk(tree):
-        if not (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "tab_options"
-        ):
-            continue
+    for node in calls:
         for kw in node.keywords:
             if not (isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str)):
                 continue
@@ -1092,9 +1145,9 @@ def _hairlines_tab_options_ok(tree: ast.AST) -> Optional[bool]:
         return None
     if style is not None and style.strip().lower() in ("none", "hidden", ""):
         return False
-    if width is not None and width.strip().lower() in ("0", "0px", ""):
+    if width is not None and _is_zero_length(width):
         return False
-    if color is not None and color.strip().lower() in ("transparent", "none", "", "#ffffff", "#fff"):
+    if color is not None and _is_effectively_transparent(color):
         return False
     return True
 
@@ -1106,21 +1159,23 @@ def check_hairlines(source: str) -> list[Finding]:
     different option family from that check (the outer table border vs. the
     rule BETWEEN body rows).
 
-    AST-based (no DOM signal wired up yet, unlike ``check_frame`` above):
-    accepts either a genuine ``hairlines(gt)`` CALL (``_is_call_named``,
-    immune to a candidate merely defining its own same-named function, or a
-    comment/docstring mention -- the exact false-positive class a naive
-    text-regex hit here), or an explicit ``table_body_hlines_*`` tab_options
-    call indicating a visible line (``_hairlines_tab_options_ok`` -- does not
+    AST-based (no DOM signal wired up yet, unlike ``check_frame`` above,
+    which uses a source regex for its own no-DOM fallback): accepts either a
+    genuine ``hairlines(gt)`` CALL (``_is_call_named``, immune to a candidate
+    merely defining its own same-named function, or a comment/docstring
+    mention), or an explicit ``table_body_hlines_*`` tab_options call
+    indicating a visible line (``_hairlines_tab_options_ok`` -- does not
     require the color to be a literal hex; ``PALETTE["neutral"]["hairline"]``
     is the taught, expected form and is accepted like the comparator accepts
-    it, via style/width alone).
+    it, via style/width alone). Both checks are scoped via
+    ``_walk_no_nested_defs`` to exclude dead/never-called code, matching how
+    the real comparator scopes its own equivalent checks.
     """
     try:
         tree = ast.parse(source)
     except SyntaxError:
         return []  # a broken file already gets its own exec-error finding elsewhere
-    if any(_is_call_named(node, "hairlines") for node in ast.walk(tree)):
+    if any(_is_call_named(node, "hairlines") for node in _walk_no_nested_defs(tree)):
         return []
     if _hairlines_tab_options_ok(tree):
         return []
