@@ -728,3 +728,86 @@ recalibration script's output (reads each candidate's `table.py` via
 directionally reliable, but the actual `eval-results/**` files (per-skill
 `metrics.json`/`SUMMARY.md`/plots) still reflect the PRE-#116
 `check_caption_keywords` scores until a full regenerate lands.
+
+### Round-4 follow-up (2026-08-13): fixed a recurring "prefix veto instead of strip-and-grade" bug shape
+
+A further review round of `check_caption_not_generic` found 4 more real
+bugs on top of the round-3 fixes reflected in the table above. Three of
+the four shared the same root shape: **the check treated a prefix pattern
+(a citation label, a generic opener) as a verdict on the WHOLE caption
+instead of stripping the prefix and grading whatever remains** — the same
+class of bug, found and fixed three separate times before the structural
+fix below unified them:
+
+- **Generic-opener whole-caption veto (2 bugs):** `_caption_generic_opener_sentence`
+  failed the ENTIRE caption if ANY sentence in ANY note matched a generic-
+  opener pattern ("the table shows...") — with no check for whether
+  distinctive content remained after the matched prefix, and with the veto
+  applying even when OTHER sentences in the same caption carried real
+  content. Verified real casualty: `house/airquality_monthly_summary/
+  repeat_2`'s genuine methodology note ("Data represents monthly averages
+  across all observed days in each month.") was zeroed for its four
+  opening words alone. **Fixed structurally**: replaced the veto with
+  `_strip_generic_opener_sentences`, which strips only the matched prefix
+  from each matching sentence (the same treatment `_strip_citation_clause`
+  already gave citation labels) and keeps whatever follows; the caption now
+  only fails on generic-template grounds if NOTHING distinctive survives
+  anywhere, across every note and sentence.
+- **Citation-clause boundary insensitivity:** `_CAPTION_SENTENCE_END_RE`
+  matched the FIRST `.`/`;`/em-dash occurring anywhere after a citation
+  label, with no requirement that it be followed by whitespace/end-of-
+  string — so a period embedded in a filename ("`airquality.csv`")
+  truncated the clause at the wrong point, leaving a meaningless fragment
+  that got graded as real caption content (a false PASS on a pure-
+  attribution caption). It also lacked en-dash as a recognized terminator
+  even though the corpus uses en-dashes pervasively for ranges/separators,
+  so otherwise-identical prose reached different verdicts depending on
+  which dash character it used. **Fixed**: the terminator regex now
+  requires whitespace-or-end-of-string after the punctuation, and
+  recognizes en-dash alongside em-dash/semicolon (bare hyphen deliberately
+  still excluded — more often part of a compound word/range than a clause
+  boundary).
+- **Word-filter/floor undercounting short-but-real insights:** the
+  `len(w) > 2` filter dropped short domain abbreviations ("HP") from the
+  content-word count, and the stopword filter ran BEFORE stemming (so a
+  plural of a stopword, e.g. "displays", leaked through as a counted
+  word instead of being excluded like its singular "display"). The
+  4-content-word floor also zeroed genuinely substantive 3-word captions
+  that no filter tweak could fix (e.g. "The Corvette outguns the Bentley.").
+  **Fixed**: loosened the filter to `len(w) >= 2`, fixed the stem-then-
+  filter order, and lowered the floor from 4 to 3.
+
+**Isolated before/after impact of just this round's fixes** (same 72
+real committed candidates; "before" = the round-3 numbers in the table
+above, "after" = post round-4 fix, both measured with the identical
+recalibration methodology so the delta reflects only today's changes):
+
+| Skill | Before (round-3) mean pts/3 | After (round-4) mean pts/3 | Mean points delta | Before pass-rate | After pass-rate |
+|---|---|---|---|---|---|
+| `house` | 2.333 | 2.667 | **+0.333** | 77.8% | 88.9% |
+| `prose` | 2.833 | 2.833 | +0.000 | 94.4% | 94.4% |
+| `scripts` | 2.667 | 2.833 | **+0.167** | 88.9% | 94.4% |
+| `creator` | 0.333 | 0.500 | **+0.167** | 11.1% | 16.7% |
+| **All 72** | **2.042** | **2.208** | **+0.167** | 68.1% | 73.6% |
+
+Exactly 4 of the 72 candidates changed verdict, each a direct real-corpus
+instance of one of the bugs above flipping from 0/3 to 3/3, with no
+regressions elsewhere:
+
+- `house/airquality_monthly_summary/repeat_2` — genuine methodology note,
+  previously zeroed by the generic-opener veto (bug 1 above).
+- `house/gtcars_hp_price/repeat_3` — `"Price is the MSRP in USD."`,
+  previously zeroed by the 4-word floor (bug 3 above).
+- `scripts/islands_sizes/repeat_2` — `"Data shows the area of islands
+  across the world."`, previously zeroed by the generic-opener veto (bug 1).
+- `creator/sp500_monthly_performance/repeat_1` — `"Data: S&P 500 daily
+  prices and volumes, 2010-2015."`, previously zeroed by the 4-word floor
+  (bug 3).
+
+All 6 ground truths' own captions still pass at 3/3. As with the
+round-3 recalibration above, this is a scoped, non-committed script
+output (see `runner/comparator.py`'s test suite,
+`tests/test_caption_not_generic.py`, for the mechanical, deterministic
+unit coverage of each fix) — the stored `eval-results/**` files still
+reflect the PRE-#116 `check_caption_keywords` scores until a full
+harness regenerate lands.
