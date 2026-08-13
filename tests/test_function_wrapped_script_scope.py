@@ -178,6 +178,39 @@ if __name__ == "__main__":
     assert _render_call_present(src) is False
 
 
+def test_required_arg_guard_target_is_not_unwrapped():
+    # Round-3 review finding: `_main_guard_call_target` only checks the
+    # CALL SITE is zero-argument, not that the resolved `def` can accept
+    # that -- `def build_table(df):` called bare as `build_table()`
+    # raises `TypeError` and renders nothing, the same "scored as if it
+    # ran, but it didn't" bug class as the async/NameError cases above.
+    src = """\
+def build_table(df):
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+
+if __name__ == "__main__":
+    build_table()
+"""
+    assert _hairlines_present(src) is False
+    assert _render_call_present(src) is False
+
+
+def test_defaulted_or_variadic_guard_target_is_still_unwrapped():
+    # A default, or *args/**kwargs, still makes the bare zero-arg call
+    # site valid -- must not be excluded by the arity check above.
+    for params in ("df=None", "*args, **kwargs"):
+        src = f"""\
+def build_table({params}):
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+
+if __name__ == "__main__":
+    build_table()
+"""
+        assert _hairlines_present(src) is True, params
+
+
 def test_plain_unwrapped_script_is_unaffected():
     # A normal, already-linear top-level script (no wrapper function at
     # all) must keep working exactly as before.

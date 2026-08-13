@@ -47,7 +47,7 @@ _GT_VERSION_PINNED = "0.22.0"
 # (fresh subprocess, redirected stdout, exceptions never escape) but returns
 # full row/column values instead of a single hash.
 _EXEC_RUNNER = r'''
-import sys, types, io, json, contextlib, math
+import ast, sys, types, io, json, contextlib, math
 
 path = sys.argv[1]
 _PINNED_GT_VERSION = "0.22.0"
@@ -110,6 +110,113 @@ def _json_safe(v):
     return str(v)
 
 
+class _StripReturns(ast.NodeTransformer):
+    """Replace a bare `return`/`return expr` with `pass`/an expression
+    statement -- `return` is only legal inside a `def`, and the whole
+    point of `_inline_main_guard` below is running a function's body
+    OUTSIDE of one. Common in practice (`return gt` as the function's own
+    last line). Does NOT descend into a nested `def`/`async def`/
+    `lambda`, where a `return` is still legal and unrelated to the guard
+    target's own top-level control flow."""
+
+    def visit_FunctionDef(self, node):
+        return node
+
+    def visit_AsyncFunctionDef(self, node):
+        return node
+
+    def visit_Lambda(self, node):
+        return node
+
+    def visit_Return(self, node):
+        return ast.Pass() if node.value is None else ast.Expr(value=node.value)
+
+
+def _inline_main_guard(src):
+    """If `src` is shaped `def build_table(): gt = ...` +
+    `if __name__ == "__main__": build_table()`, return compiled code with
+    the guard replaced by that function's OWN body statements, inlined in
+    place; `None` if `src` isn't shaped this way (a normal top-level
+    script is completely unaffected).
+
+    Plain `exec(src, ns)` does NOT leak a function's local assignments
+    into `ns` just because the function was called from top-level code --
+    a script wrapped this idiomatic way (see
+    `runner/comparator.py::_walk_top_level`'s docstring for the full
+    rationale and the real candidates this affects) renders a perfectly
+    good `table.png` when actually run, but never assigns a top-level
+    `gt` here either way, so this extractor reported "no top-level `gt`"
+    for it even after the comparator's own static AST checks learned to
+    treat the same shape as inlined. This applies that same treatment to
+    execution: only the exact single-statement `if __name__ ==
+    "__main__": name()` shape, calling a plain module-level `def` that
+    appears BEFORE the guard (calling it any earlier is a real
+    `NameError` at runtime, not this shape) -- mirrors
+    `_main_guard_call_target`/`_module_level_functions` in
+    `runner/comparator.py`, duplicated (not imported) here since this
+    payload runs standalone in an isolated subprocess.
+    """
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return None
+
+    def _has_no_params(func_def):
+        # Stricter than runner/comparator.py's equivalent check (that one
+        # only needs the CALL SITE to be valid, since it's purely static
+        # text/AST analysis -- a defaulted `df=None` is fine there). This
+        # one actually EXECUTES the inlined body without ever calling the
+        # function, so a default is NEVER applied and a referenced `df`
+        # would raise `NameError` -- confirmed directly. Only a genuinely
+        # zero-parameter `def` (no positional, keyword-only, *args, or
+        # **kwargs) is safe to inline this way.
+        a = func_def.args
+        return not (
+            a.posonlyargs or a.args or a.kwonlyargs or a.vararg or a.kwarg
+        )
+
+    defs = {
+        n.name: n
+        for n in tree.body
+        if isinstance(n, ast.FunctionDef) and _has_no_params(n)
+    }
+    for i, node in enumerate(tree.body):
+        if not (isinstance(node, ast.If) and not node.orelse):
+            continue
+        test = node.test
+        if not (
+            isinstance(test, ast.Compare)
+            and isinstance(test.left, ast.Name) and test.left.id == "__name__"
+            and len(test.ops) == 1 and isinstance(test.ops[0], ast.Eq)
+            and len(test.comparators) == 1 and isinstance(test.comparators[0], ast.Constant)
+            and test.comparators[0].value == "__main__"
+        ):
+            continue
+        if len(node.body) != 1 or not isinstance(node.body[0], ast.Expr):
+            continue
+        call = node.body[0].value
+        if not (
+            isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Name)
+            and not call.args
+            and not call.keywords
+        ):
+            continue
+        target = defs.get(call.func.id)
+        if target is None or tree.body.index(target) >= i:
+            continue  # unresolved, or the def doesn't come before the guard
+        new_body = list(tree.body)
+        stripped_body = [_StripReturns().visit(stmt) for stmt in target.body]
+        new_body[i : i + 1] = stripped_body
+        tree.body = new_body
+        ast.fix_missing_locations(tree)
+        try:
+            return compile(tree, "<inlined>", "exec")
+        except Exception:
+            return None
+    return None
+
+
 def main():
     with open(path) as fh:
         src = fh.read()
@@ -120,10 +227,11 @@ def main():
     # ever produced -- reset argv to look like a normal `python table.py`
     # invocation first.
     sys.argv = [path]
+    code = _inline_main_guard(src) or compile(src, path, "exec")
     ns = {"__name__": "__main__", "__file__": path}
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        exec(compile(src, path, "exec"), ns)
+        exec(code, ns)
 
     gt = ns.get("gt")
     if gt is None or type(gt).__name__ != "GT":
