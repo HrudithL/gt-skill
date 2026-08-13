@@ -473,6 +473,7 @@ _MISSING_ID = "\x00__MISSING__\x00"
 # markers carry the actual collision-safety guarantee.
 _DATE_YM_PREFIX = "\x00__date_ym__\x00"
 _DATE_YMD_PREFIX = "\x00__date_ymd__\x00"
+_DATE_YMDHMS_PREFIX = "\x00__date_ymdhms__\x00"
 
 
 # Strict, explicit whitelist of `datetime.strptime` formats tried (in
@@ -491,7 +492,13 @@ _DATE_YMD_PREFIX = "\x00__date_ymd__\x00"
 # -> `"2010-01-15 00:00:00"`), which is the single most common way a
 # non-`Period` pandas datetime column renders to text. Timezone-aware
 # variants (e.g. a trailing `"+00:00"`) are deliberately not handled here --
-# not present in this repo's corpus data, so out of scope.
+# not present in this repo's corpus data, so out of scope. This format
+# carries strictly finer granularity than a bare `"%Y-%m-%d"` date -- two
+# timestamps on the same calendar day but different times of day are
+# different instants -- so it normalizes through its own `_DATE_YMDHMS_PREFIX`
+# key (including hour/minute/second) rather than falling into the plain
+# day-granularity bucket, following the same distinct-prefix-per-granularity
+# pattern used to keep month-only and day-only matches apart.
 #
 # `%b`/`%B` (abbreviated/full month name) are locale-sensitive in general --
 # `strptime` parses month names against the process's current locale, not
@@ -530,12 +537,16 @@ def normalize_id(x: Any) -> str:
     that parses the ENTIRE string AND round-trips wins (see below). A
     month-granularity match normalizes to the wrapped key produced by
     `_DATE_YM_PREFIX`; a day-granularity match normalizes to the wrapped
-    key produced by `_DATE_YMD_PREFIX` -- the distinct prefixes (and
-    lengths) keep the two granularities from ever comparing equal to each
-    other, even for the same calendar month, since a stub author who wrote
-    a bare month presumably meant the whole month, not one specific day of
-    it. Strings that don't match any whitelisted format fall back,
-    unchanged, to the original `str(x).strip().casefold()` behavior.
+    key produced by `_DATE_YMD_PREFIX`; a full-timestamp match (the
+    `"%Y-%m-%d %H:%M:%S"` format) normalizes to the wrapped key produced by
+    `_DATE_YMDHMS_PREFIX` and additionally carries the hour/minute/second --
+    the distinct prefixes (and lengths) keep all three granularities from
+    ever comparing equal to each other, even for the same calendar day/month,
+    since a stub author who wrote a bare month/day presumably meant the
+    whole month/day, not one specific narrower instant of it, and two
+    different times of day on the same date are different instants.
+    Strings that don't match any whitelisted format fall back, unchanged,
+    to the original `str(x).strip().casefold()` behavior.
 
     Round-trip guard: `strptime`'s `%m`/`%d` directives accept non-zero-
     padded values even when the format string specifies padding -- e.g.
@@ -547,7 +558,13 @@ def normalize_id(x: Any) -> str:
     format string, and the result must exactly equal the original trimmed
     input; if it doesn't, that format is treated as a non-match and the
     next format in the whitelist is tried (falling through to the plain
-    casefold fallback if none match this way).
+    casefold fallback if none match this way). The comparison is casefolded
+    on both sides -- `%b`/`%B` accept case-insensitive month names on the
+    `strptime` side (e.g. "JAN"/"jan"/"Jan" all parse), but `strftime`
+    always re-renders its own canonical capitalization ("Jan"), so a
+    byte-exact (non-casefolded) comparison would wrongly reject case
+    variants like "JAN 2010" as non-round-tripping even though they are a
+    perfectly valid, unambiguous match for the same month.
     """
     if x is None:
         return _MISSING_ID
@@ -557,7 +574,7 @@ def normalize_id(x: Any) -> str:
             dt = datetime.strptime(text, fmt)
         except ValueError:
             continue
-        if dt.strftime(fmt) != text:
+        if dt.strftime(fmt).casefold() != text.casefold():
             continue
         return f"{_DATE_YM_PREFIX}{dt.year:04d}-{dt.month:02d}"
     for fmt in _DAY_ID_FORMATS:
@@ -565,8 +582,13 @@ def normalize_id(x: Any) -> str:
             dt = datetime.strptime(text, fmt)
         except ValueError:
             continue
-        if dt.strftime(fmt) != text:
+        if dt.strftime(fmt).casefold() != text.casefold():
             continue
+        if fmt == "%Y-%m-%d %H:%M:%S":
+            return (
+                f"{_DATE_YMDHMS_PREFIX}{dt.year:04d}-{dt.month:02d}-{dt.day:02d} "
+                f"{dt.hour:02d}:{dt.minute:02d}:{dt.second:02d}"
+            )
         return f"{_DATE_YMD_PREFIX}{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
     return text.casefold()
 
