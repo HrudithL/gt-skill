@@ -33,13 +33,11 @@ from plotnine import (
     geom_text,
     ggplot,
     ggsave,
-    ggtitle,
     labs,
     position_dodge,
     scale_color_manual,
     scale_fill_manual,
     scale_x_discrete,
-    scale_y_continuous,
     theme,
     theme_minimal,
     ylim,
@@ -53,7 +51,7 @@ BASELINE_LABEL = "baseline (no skill)"
 GROUP_COLORS = {SKILL_LABEL: REPEAT_COLOR, BASELINE_LABEL: BASELINE_COLOR}
 
 
-def base_theme(*, legend_position: str = "bottom"):
+def base_theme():
     """One consistent look for all 3 plots: no minor gridlines, no chart
     junk, generous margins so long titles/legends never clip against the
     saved PNG's edge."""
@@ -61,7 +59,7 @@ def base_theme(*, legend_position: str = "bottom"):
         plot_title=element_text(weight="bold", size=13, ha="left"),
         plot_margin=0.03,
         panel_grid_minor=element_blank(),
-        legend_position=legend_position,
+        legend_position="bottom",
         legend_title=element_blank(),
         legend_text=element_text(size=9),
         axis_title=element_text(size=10),
@@ -82,32 +80,17 @@ def _prompt_order(prompt_labels: dict[str, str], prompt_ids: list[str]) -> list[
     return [prompt_labels[p] for p in prompt_ids]
 
 
-def _skill_mean_and_baseline(variants: dict, key_path: tuple[str, ...]):
-    """Pull a numeric field out of each repeat's variant dict (by nested key
-    path) and return (mean-of-repeats-or-None, baseline-value-or-None)."""
-
-    def _get(d):
-        for k in key_path:
-            if d is None:
-                return None
-            d = d.get(k)
-        return d
-
-    repeat_vals = [
-        v for r in REPEATS if variants.get(r) and (v := _get(variants[r])) is not None
-    ]
-    mean = float(np.mean(repeat_vals)) if repeat_vals else None
-    baseline = _get(variants.get("baseline"))
-    return mean, baseline
-
-
 def plot_usage(
     metrics: dict, prompt_ids: list[str], prompt_labels: dict[str, str], skill: str, out_path: Path
-) -> None:
+) -> bool:
     """Grouped bar chart of total tokens per prompt (skill mean vs.
     baseline), each bar's USD cost printed just above it -- one chart
     instead of a separate cost bar chart and token scatter plot, so the
-    reader sees token volume and what it actually cost in the same glance."""
+    reader sees token volume and what it actually cost in the same glance.
+
+    Returns whether a chart was actually written (False if there was no
+    data at all for this skill's sweep -- callers should surface that
+    loudly rather than silently leaving a stale PNG in place)."""
     prompts = metrics["prompts"]
     rows = []
     for pid in prompt_ids:
@@ -145,22 +128,30 @@ def plot_usage(
             )
 
     if not rows:
-        return
+        return False
     df = pd.DataFrame(rows)
     order = _prompt_order(prompt_labels, prompt_ids)
     df["prompt"] = pd.Categorical(df["prompt"], categories=order, ordered=True)
     df["cost_label"] = df["cost"].map(lambda c: f"${c:.2f}")
 
     # Headroom above the tallest bar so the cost label printed above it
-    # never gets clipped by the plot's top edge.
-    upper = df["tokens_k"].max() * 1.22
+    # never gets clipped by the plot's top edge; floored so an all-zero
+    # sweep (e.g. every invocation missing usage data) still gets a
+    # renderable, non-degenerate axis instead of ylim(0, 0).
+    upper = max(df["tokens_k"].max() * 1.22, 1.0)
+
+    # preserve="single" keeps every bar at its full dodged width and slot
+    # even when one prompt is missing a group (e.g. a crashed baseline) --
+    # without it, a lone surviving bar re-centers and doubles in width,
+    # which reads as a normal bar rather than a visibly missing one.
+    dodge = position_dodge(width=0.75, preserve="single")
 
     plot = (
         ggplot(df, aes(x="prompt", y="tokens_k", fill="group"))
-        + geom_col(position=position_dodge(width=0.75), width=0.68)
+        + geom_col(position=dodge, width=0.68)
         + geom_text(
             aes(label="cost_label", group="group"),
-            position=position_dodge(width=0.75),
+            position=dodge,
             va="bottom",
             size=8,
         )
@@ -175,16 +166,19 @@ def plot_usage(
         + base_theme()
     )
     _save(plot, out_path)
+    return True
 
 
 def plot_consistency(
     metrics: dict, prompt_ids: list[str], prompt_labels: dict[str, str], skill: str, out_path: Path
-) -> None:
+) -> bool:
     """Range ("dumbbell") plot: for each prompt, a line from the lowest to
     the highest comparator score among the 3 skill repeats, with the mean
     marked -- the line's length IS the consistency metric. Baseline's own
     score is plotted alongside for reference, not folded into the spread (a
-    single baseline run has no spread of its own)."""
+    single baseline run has no spread of its own).
+
+    Returns whether a chart was actually written (see `plot_usage`)."""
     prompts = metrics["prompts"]
     rows = []
     segments = []
@@ -204,7 +198,7 @@ def plot_consistency(
             rows.append({"prompt": label, "group": BASELINE_LABEL, "pct": float(b["pct"])})
 
     if not rows:
-        return
+        return False
     df = pd.DataFrame(rows)
     seg_df = pd.DataFrame(segments)
     order = _prompt_order(prompt_labels, prompt_ids)
@@ -234,15 +228,18 @@ def plot_consistency(
         + base_theme()
     )
     _save(plot, out_path)
+    return True
 
 
 def plot_comparator_score(
     metrics: dict, prompt_ids: list[str], prompt_labels: dict[str, str], skill: str, out_path: Path
-) -> None:
+) -> bool:
     """Box plot of comparator total-score % across the 3 skill repeats per
     prompt, with the baseline score overlaid as a point -- one fill color for
     the box, one color for the baseline point, no mean marker or other
-    chart junk on top of the box itself."""
+    chart junk on top of the box itself.
+
+    Returns whether a chart was actually written (see `plot_usage`)."""
     prompts = metrics["prompts"]
     box_rows = []
     point_rows = []
@@ -258,7 +255,7 @@ def plot_comparator_score(
             point_rows.append({"prompt": label, "pct": b["pct"], "group": BASELINE_LABEL})
 
     if not box_rows:
-        return
+        return False
     order = _prompt_order(prompt_labels, prompt_ids)
     box_df = pd.DataFrame(box_rows)
     box_df["prompt"] = pd.Categorical(box_df["prompt"], categories=order, ordered=True)
@@ -281,3 +278,4 @@ def plot_comparator_score(
         + base_theme()
     )
     _save(plot, out_path)
+    return True

@@ -45,11 +45,23 @@ def _load_metrics() -> dict:
 
 def main() -> None:
     metrics = _load_metrics()
-    plots.plot_usage(metrics, PROMPT_IDS, PROMPT_LABELS, SKILL, HERE / "usage.png")
-    plots.plot_consistency(metrics, PROMPT_IDS, PROMPT_LABELS, SKILL, HERE / "consistency.png")
-    plots.plot_comparator_score(metrics, PROMPT_IDS, PROMPT_LABELS, SKILL, HERE / "comparator_score.png")
+    written = {
+        "usage.png": plots.plot_usage(metrics, PROMPT_IDS, PROMPT_LABELS, SKILL, HERE / "usage.png"),
+        "consistency.png": plots.plot_consistency(
+            metrics, PROMPT_IDS, PROMPT_LABELS, SKILL, HERE / "consistency.png"
+        ),
+        "comparator_score.png": plots.plot_comparator_score(
+            metrics, PROMPT_IDS, PROMPT_LABELS, SKILL, HERE / "comparator_score.png"
+        ),
+    }
     lib.curate_runs(metrics, SKILL_DIR / "samples")
-    print(f"wrote 3 plots to {HERE} and curated runs under {SKILL_DIR / 'runs'}")
+    skipped = [name for name, ok in written.items() if not ok]
+    if skipped:
+        print(f"WARNING: no data to plot, left stale (or missing) files in place: {', '.join(skipped)}")
+    print(
+        f"wrote {sum(written.values())}/{len(written)} plots to {HERE} "
+        f"and curated runs under {SKILL_DIR / 'samples'}"
+    )
 
 
 if __name__ == "__main__":
