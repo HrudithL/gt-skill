@@ -68,23 +68,6 @@ REQUIRED_INSTRUCTIONS = {
     "row_count": 15,
 }
 
-# Keyword-presence check for the caption/subtitle overlap rule (see
-# CONSISTENCY_DEV.md Step 6). caption_should_mention are terms the footer's
-# takeaway sentence must include; subtitle_should_not_duplicate are terms the
-# subtitle must NOT lean on (they belong to the caption's insight, not the
-# subtitle's organization-description). Verified against the actual rendered
-# text below (case-insensitive substring): the subtitle legitimately says
-# "percent change" / "consecutive" as organization-description (which
-# columns exist), so those generic words can't be the caption-exclusivity
-# check — the caption's actual unique insight is the "not the average"
-# disambiguation, which the subtitle never states.
-CAPTION_KEYWORDS = {
-    "caption_should_mention": ["fastest-growing", "1996", "not the average"],
-    "subtitle_should_not_duplicate": [
-        "not the average", "highest percent change in total population",
-    ],
-}
-
 # Underlying SOURCE CSV column(s) that are the canonical colored measure(s),
 # used for value-based matching -- NOT the rendered column name/label.
 CANONICAL_MEASURES = {

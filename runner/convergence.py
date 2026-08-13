@@ -2174,7 +2174,7 @@ def parse_design_choices(source: str, run_dir: Path | None = None) -> dict:
         "column_labels_font_weight": _find_column_labels_font_weight(source),
         "column_labels_text_color": _find_column_labels_text_color(source),
         "stripe_hex": _find_stripe_hex(source),
-        # Literal title/subtitle/caption text (for check_caption_keywords):
+        # Literal title/subtitle/caption text (for check_caption_not_generic):
         "title_text": _tab_header_text(source, "title"),
         "subtitle_text": _tab_header_text(source, "subtitle"),
         "source_note_texts": _source_note_texts(source),
