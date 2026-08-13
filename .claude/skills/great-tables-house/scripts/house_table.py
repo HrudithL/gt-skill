@@ -10,6 +10,33 @@ This file is two things at once:
            stripe, stub_tint, heatmap, status_chip, summary_row, \
            group_emphasis, humanize_labels
 
+   Seven of these helpers are similarly-shaped but each take a DIFFERENT
+   parameter list — do not reconstruct these from memory. This is the
+   complete list; nothing else is accepted (an unlisted kwarg raises
+   ``TypeError``, not a silent no-op):
+
+   * ``frame(gt, color=None, width="1px", style="solid")`` — wrong guess:
+     ``zoom=``/``expand=``. Those belong to ``finalize()``, not ``frame()``.
+   * ``hairlines(gt, color=None, width="1px", style="solid")``.
+   * ``heatmap(gt, columns, *, kind, hue, domain=None, reverse=False)`` —
+     wrong guess: ``palette=``. There is no ``palette`` kwarg; the color
+     choice is always ``hue=``. ``hue``'s valid values also depend on
+     ``kind`` — see the warning next to the demo's heatmap calls below.
+   * ``band(gt, *, shade="dark", hue)`` — wrong guess: ``columns=``,
+     ``header_color=``. Only ``shade``/``hue`` exist; ``hue`` has no
+     default, it must be passed.
+   * ``stripe(gt)`` — wrong guess: any kwarg. Takes no parameters besides
+     ``gt``.
+   * ``stub_tint(gt, *, hue)`` — wrong guess: ``columns=``,
+     ``header_color=``. Same confusion as ``band()``; only ``hue`` exists,
+     and it has no default either.
+   * ``finalize(gt, path="table.png", **overrides)`` — ``zoom=``/``expand=``
+     ARE valid here (via ``**overrides``, e.g. ``finalize(gt, "table.png",
+     zoom=3)``) — this is the helper that actually takes them. Call it
+     LAST, after every other styling call, and never call
+     ``gt.gtsave(...)`` again afterward (see ``finalize()``'s own
+     docstring below for why).
+
 2. **The one worked example.** Running this file directly
    (``python house_table.py``) builds a single synthetic "Regional Product
    Line Performance" table that exercises every generic formatting feature
@@ -295,6 +322,17 @@ def finalize(gt, path="table.png", **overrides):
     normal viewing sizes. If a table renders too big, grow room/zoom before
     ever shrinking font size (see ``references/RULES.md``'s font-size fit
     order).
+
+    Call ``finalize()`` LAST, after every other styling/formatting call on
+    ``gt``. It snapshots the table's rendered HTML at the moment it's called
+    and writes it to disk immediately, so any change made to ``gt``
+    afterward silently never reaches the saved PNG. Likewise, never call
+    ``gt.gtsave(...)`` again after ``finalize()``: it would silently
+    overwrite the file using ``gtsave``'s own defaults (``expand=5``)
+    instead of the pinned ``expand=15``/``zoom=2.0`` above — a real,
+    invisible render-parameter downgrade. Reassigning the return value
+    (``gt = finalize(gt, ...)``) is harmless either way — ``gtsave``
+    returns ``self`` for chaining — so either form is fine.
     """
     opts = {"expand": 15, "zoom": 2.0}
     opts.update(overrides)
@@ -778,6 +816,20 @@ def build_house_table():
     # when domain=None) — safe because the grand-summary Total added below
     # is NOT part of `gt._tbl_data`; unlike a manually appended total ROW, it
     # can never stretch/compress the color scale.
+    #
+    # WARNING — `hue`'s valid values are DIFFERENT per `kind` below, and the
+    # two sets do NOT overlap: `kind="sequential"` only resolves
+    # PALETTE["sequential"]'s keys (`positive`/`warning`/`warning_alt`/
+    # `neutral`); `kind="diverging"` only resolves PALETTE["diverging"]'s
+    # keys (`default`/`colorblind_safe`). Passing a diverging key like
+    # `hue="default"` with `kind="sequential"` (or vice versa) is NOT caught
+    # here — the unresolved string is passed straight through to
+    # `great_tables` as a literal color/palette name, which then fails with
+    # an opaque error (e.g. `ValueError: Invalid color name provided
+    # (default)`) instead of a clear "unknown hue for this kind" message.
+    # The two calls immediately below look parallel but use DIFFERENT `hue`
+    # vocabularies — don't copy `hue="neutral"` into the diverging call, or
+    # `hue="default"` into the sequential one.
     gt = heatmap(gt, "revenue", kind="sequential", hue="neutral")
     gt = heatmap(gt, "yoy_change", kind="diverging", hue="default")
     gt = status_chip(gt, "status", {"On Track": "good", "At Risk": "bad", "Watch": "neutral"})
