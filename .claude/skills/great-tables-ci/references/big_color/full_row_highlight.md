@@ -4,9 +4,10 @@ Background fill (optionally bold text) on entire "winner" rows to dominate visua
 
 ## When to use
 
-- Ranking/leaderboard where the top 1–3 rows are the message, WITHIN a larger table (top-N-among-many) — or the request already pre-filtered to <5 rows total, too few for `column_gradient_fill.md`'s gradient to read as anything but random pastel (its own `≥5 rows` gate's documented fallback, not a `≤30%`-cap exception).
+- Ranking/leaderboard where the top 1–3 rows are the message, WITHIN a larger table (top-N-among-many).
 - A single "current"/"featured" row (this quarter, this user, selected item) must be found instantly.
-- Highlighted rows are **≤30% of body rows** — any more and the highlight becomes the norm.
+- **The table itself has fewer than 5 rows total** (small by nature, or filtered down that far) — too few for `column_gradient_fill.md`'s gradient to read as anything but random pastel (its own `≥5 rows` gate's documented fallback). Filling every row is correct here, not a ≤30% violation — that guidance is about carving a subset out of a larger table.
+- Otherwise: highlighted rows are **≤30% of body rows** — any more and the highlight becomes the norm.
 
 If you're trying to encode magnitude across all rows, use `column_gradient_fill.md`. If the emphasis is per-cell (only certain values in a column), use `bold_colored_number.md`.
 

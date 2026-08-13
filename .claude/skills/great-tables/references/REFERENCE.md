@@ -68,11 +68,11 @@ violating that file's own `≤30% of body rows` cap) and the ranking measure its
 (`msrp`, `revenue`, whatever was ranked on) still needs its relative magnitude shown
 row-to-row. That's the **Ordered magnitude** row above, not this one — `nlargest`/`head`
 having already produced the row set is a strong signal you're there, regardless of the
-request's own "top N" phrasing. Exception: if the pre-filtered row set has **fewer than
-5 rows**, `column_gradient_fill.md`'s own `≥5 rows` gate rules it out too (a 3-row
-gradient reads as random pastel) — its own text says to fall back to a targeted
-highlight here, so `full_row_highlight.md` applied to the whole (small) table is correct,
-and its `≤30%` cap does not apply to this specific fewer-than-5-rows case.
+request's own "top N" phrasing. Exception: a table with **fewer than 5 rows total**
+(pre-filtered that far, or just small by nature) is also too few for
+`column_gradient_fill.md`'s own gradient to read as anything but random pastel — see
+`full_row_highlight.md`'s "When to use," which already covers this case: filling the
+whole (small) table there is correct, not a `≤30%`-cap violation.
 
 Which measures earn fill: one qualifying measure ⇒ it's the hero and gets colored.
 When several qualify, `big_color/column_gradient_fill.md`'s priority ladder picks
