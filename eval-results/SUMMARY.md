@@ -575,10 +575,12 @@ instead of the documented `mfr + model` composite. All three are places the
 skills' own reference docs already teach the correct pattern (2/3 sibling
 repeats on the same prompt did it right); this is inherent haiku-tier
 sampling variance on a 3-repeat sample, not something a further doc/code fix
-would eliminate. Combined with the already-known sources (sp500's
-ground-truth month-label ambiguity, occasional Big-Color restraint lapses,
-towny's spanner/ranking-metric ambiguity), this round's remaining spread has
-no fixable mechanical cause left that this effort's deep-dive could find.
+would eliminate (a doc fix for the specific `set_index()`-vs-`rowname_col=`
+confusion has since landed, PR #107). Combined with the already-known
+sources (sp500's ground-truth month-label ambiguity, occasional Big-Color
+restraint lapses, towny's spanner/ranking-metric ambiguity), this round's
+remaining spread has no fixable mechanical cause left that this effort's
+deep-dive could find.
 
 **CAVEAT (2026-08-13, added after this round's numbers above were
 committed; WIDENED 2026-08-13 after a second review round's independent
