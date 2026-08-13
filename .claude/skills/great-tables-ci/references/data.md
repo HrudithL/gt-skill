@@ -5,6 +5,22 @@ into **one tidy DataFrame with the right dtype in every column** — `great_tabl
 formats numbers, it does not parse strings, and a currency string or `object`-dtype
 column silently breaks `fmt_*`/`data_color` downstream.
 
+**Anti-pattern: don't cast a numeric identifier column to string to suppress
+thousands-separators.** A column like `Year` or an ID renders `1,996` instead of
+`1996` once a broader `fmt_integer`/`fmt_number` pass (default `use_seps=True`)
+touches it — not by default, and not until that pass runs — and it's tempting to
+fix that with `df["Year"] = df["Year"].astype(str)` — don't. That silently converts
+the column to `object` dtype: any later `fmt_*` call on it raises
+`TypeError: '<' not supported between instances of 'str' and 'int'`, and a
+`data_color`/heatmap pass on it doesn't crash but silently produces a different,
+wrong color mapping. The column stays numeric; suppress the separators at format
+time instead — `gt.fmt_integer(columns="Year", use_seps=False)` (here `gt` is the
+`GT` instance you already built, e.g. `gt = GT(df)` — never
+`import great_tables as gt`) — and apply that call *after* any
+broader `fmt_integer`/`fmt_number` pass over multiple columns (or exclude this
+column from it): the later matching format call wins, so a broader pass's default
+`use_seps=True` would otherwise silently re-add the separators.
+
 ## The checklist — run it before you organize columns
 
 1. **Strip number-like strings to real numbers.** Currency symbols, thousands
@@ -104,12 +120,27 @@ grain, not just present.
     A column can pass the uniqueness test below and still be worth combining for
     this reason alone.
 
-  A hypothetical product-catalog dataset illustrates the readability case: suppose
-  `sku_name` (e.g. "Trail Runner 3") is already unique across every row on its own
-  (verified directly against the data), so uniqueness alone would not require a
-  composite. A stub can still combine `brand + " " + sku_name` into one label
-  anyway, because "Trail Runner 3" read alone doesn't say which brand makes it,
-  while "Summit Trail Runner 3" is self-describing without a separate brand column:
+  A concrete case combining both motivations: `mfr` + `model` in a car dataset —
+  `mfr` alone isn't unique (only 19 distinct manufacturers across 47 rows, e.g.
+  multiple Aston Martins), so a composite is required just to disambiguate. `model`
+  alone is in fact unique across all 47 rows in this dataset (zero duplicate
+  values), and still isn't reliably recognizable on its own: "GT" alone is not a
+  known car, "Ford GT" is.
+  Combining both gives a stub that's unique *and* readable. Build the stub column
+  yourself before stubbing:
+  ```python
+  df["car"] = df["mfr"] + " " + df["model"]
+  ```
+  then `rowname_col="car"`. Do this whenever the request's own language refers to
+  rows by the combination ("the Bentley Continental GT," not "the Bentley").
+
+  A hypothetical product-catalog dataset illustrates the readability motivation with
+  no uniqueness requirement at all: suppose `sku_name` (e.g. "Trail Runner 3") is
+  already unique across every row on its own (verified directly against the data),
+  so uniqueness alone would not require a composite. A stub can still combine
+  `brand + " " + sku_name` into one label anyway, because "Trail Runner 3" read
+  alone doesn't say which brand makes it, while "Summit Trail Runner 3" is
+  self-describing without a separate brand column:
   ```python
   df["display_name"] = df["brand"] + " " + df["sku_name"]
   ```
