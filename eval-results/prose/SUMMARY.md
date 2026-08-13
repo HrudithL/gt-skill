@@ -38,7 +38,7 @@ see `scripts/SUMMARY.md`. It remains a real, still-open bug in
 | Cost per invocation | $0.182 | $0.076 |
 | Repeat-to-repeat spread (mean across 6 prompts) | 23.5 points | n/a (1 run) |
 
-See [`plots/cost.png`](plots/cost.png), [`plots/tokens.png`](plots/tokens.png),
+See [`plots/usage.png`](plots/usage.png),
 [`plots/consistency.png`](plots/consistency.png),
 [`plots/comparator_score.png`](plots/comparator_score.png).
 
