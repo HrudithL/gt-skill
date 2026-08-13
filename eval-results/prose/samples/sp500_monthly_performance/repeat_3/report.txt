@@ -1,20 +1,20 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260812_212011_prose_6prompts/prompts/sp500_monthly_performance/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080331_prose_6prompts/prompts/sp500_monthly_performance/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py
 
-TOTAL: 45/88 (51.1%)
-  Data-compliance:        12/45
+TOTAL: 46/88 (52.3%)
+  Data-compliance:        13/45
   Formatting-compliance:  33/43
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- row set mismatch (precision=0.00, recall=0.00); missing=[(None, 'apr 2010'), (None, 'apr 2011'), (None, 'apr 2012'), (None, 'apr 2013'), (None, 'apr 2014')], extra=[(None, '2010-01'), (None, '2010-02'), (None, '2010-03'), (None, '2010-04'), (None, '2010-05')]
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/6 canonical measures have a value-matching candidate column; unmatched: ['pct_change', 'avg_volume', 'best_day_gain', 'worst_day_loss', 'monthly_open', 'monthly_close']
 [FAIL] [MECHANICAL] Colored-measure selection (right measure(s) colored): 0/6 -- 0/4 canonical colored measures covered by a candidate color call
-[FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 4/5 -- 3/4 colored measures use an encoding matching their data shape; ['worst_loss']: data is sequential but palette 'RdYlGn' is diverging
+[FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 4/5 -- 3/4 colored measures use an encoding matching their data shape; ['worst_day_loss']: data is sequential but palette 'RdYlGn' is diverging
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.15 (candidate-only=['best_gain', 'close', 'open', 'period', 'worst_loss'], missing=['best_day_gain', 'month_label', 'monthly_close', 'monthly_open', 'worst_day_loss', 'year'])
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.50 (candidate-only=['close_price', 'open_price'], missing=['monthly_close', 'monthly_open', 'year'])
 [N/A] [MECHANICAL] Grouping existence: 0/0 -- grouping is a discretionary editorial choice here (ground truth groups, but REQUIRED_INSTRUCTIONS has no 'grouping' key) -- judged separately by grouping_choice_quality, not scored as a strict presence match
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py)
 [FAIL] [MECHANICAL] Column-group spanners existence: 0/2 -- candidate spanner_present=False, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[FAIL] [MECHANICAL] No same-family hue collision across 2 measures: 0/1 -- colored-measure palettes: ['Blues', 'Blues', 'RdYlGn', 'RdYlGn']; colliding pair(s) sharing a hue family: [('Blues', 'Blues'), ('RdYlGn', 'RdYlGn')]
+[FAIL] [MECHANICAL] No same-family hue collision across 2 measures: 0/1 -- colored-measure palettes: ['Blues', 'Greens', 'RdYlGn', 'RdYlGn']; colliding pair(s) sharing a hue family: [('RdYlGn', 'RdYlGn')]
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py)
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 4/4 colored measures have a shape-appropriate domain

@@ -126,3 +126,31 @@ code, then a targeted checker-driven fix pass after.
 
 Curated candidate scripts, renders, and comparator reports for every
 invocation are under [`samples/`](samples/), organized `samples/<prompt>/<variant>/`.
+
+## Round 4 (2026-08-13) — missing hairlines() helper + checker rule fixed
+
+Fresh sweep (`runs/sweep/20260813_080340_scripts_6prompts`), run after `main` had all
+five rounds of fixes merged: `gt_consistency.py` had `frame`/`finalize`/`heatmap`/`band`/
+`stripe`/`stub_tint` helpers but no `hairlines()`, and `gt_check.py` never verified the
+hairline color either — this skill silently missed the required body-row hairline on
+~29% of an earlier sweep's invocations, undetected by its own "self-checking" premise.
+Also fixed: the `≤30%`-cap-vs-Top-N routing gap this skill shared with `great-tables`.
+
+| Metric | This round | Round 3 |
+|---|---|---|
+| Mean score | **81.5%** | 82.3% |
+| Mean repeat spread | 16.2pp | 20.2pp |
+| Mean cost | $0.189 | $0.184 |
+
+Per-prompt means: `gtcars_top10_by_country` 94.0%, `islands_sizes` 94.0%,
+`airquality_monthly_summary` 82.9%, `towny_growth_trends` 81.9%, `gtcars_hp_price`
+85.9%, `sp500_monthly_performance` 50.4% (still the hardest — same ground-truth
+month-label-format ambiguity noted in the top-level `SUMMARY.md`).
+
+Two individual repeats scored far below their siblings, both traced to the same
+one-off mistake — forgetting `rowname_col=` in the `GT(...)` constructor entirely, so
+no stub was ever created: `gtcars_hp_price/repeat_3` (60.2% vs. 98.8% siblings) and
+`airquality_monthly_summary/repeat_1` (56.3% vs. ~96% siblings, which also added an
+unwanted column-group spanner the prompt never asked for). Both are places
+`gt_consistency.py`'s own worked pattern is unambiguous and the sibling repeats on the
+same prompt got it right — haiku-tier sampling variance, not a skill or checker gap.

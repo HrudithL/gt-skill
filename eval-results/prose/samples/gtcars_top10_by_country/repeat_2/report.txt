@@ -1,7 +1,7 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260812_212011_prose_6prompts/prompts/gtcars_top10_by_country/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080331_prose_6prompts/prompts/gtcars_top10_by_country/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
-TOTAL: 86/97 (88.7%)
-  Data-compliance:        49/51
+TOTAL: 84/97 (86.6%)
+  Data-compliance:        47/51
   Formatting-compliance:  37/46
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
@@ -9,19 +9,19 @@ TOTAL: 86/97 (88.7%)
 [PASS] [MECHANICAL] Colored-measure selection (right measure(s) colored): 6/6 -- 1/1 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 3/3 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.43 (candidate-only=['country', 'transmission'], missing=['ctry_origin', 'trsmn'])
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.25 (candidate-only=['Car', 'Country', 'Transmission'], missing=['car', 'ctry_origin', 'trsmn']); value-matched renamed columns: {'drivetrain': 'Drivetrain', 'msrp': 'Price'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=True, truth=True
-[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The REQUIRED_INSTRUCTIONS explicitly mandate grouping ("grouping": true), and both the ground truth and candidate group by country of origin. Since grouping is a required instruction, the candidate's choice to group is not discretionary, but both tables execute the grouping correctly and in the same way, so the candidate does not fail this dimension.
+[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by country of origin (Italy, United Kingdom, United States), matching the ground truth's grouping structure and the explicit prompt requirement to group by country. Within each group, cars are ordered by price descending, which correctly implements the REQUIRED_INSTRUCTIONS sort order.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 4/5 -- The candidate correctly labels the three data columns: 'drivetrain,' 'transmission,' and 'msrp.' All three labels map to the right concepts from the grounding metadata. However, the label 'msrp' appears only in the column header in lowercase, and the subtitle says 'Price' (a synonym), creating a minor inconsistency in how the price concept is labeled across the table elements—where the ground truth uses 'MSRP' consistently as a column header.
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate abbreviates transmission types (e.g., '7A' instead of '7-Speed Automatic', '8AM' instead of '8-Speed Automated-Manual'), which obscures the actual transmission concept without sufficient explanation visible in the column header itself. While a footnote explains the codes, the column label 'Transmission' does not make clear that values are abbreviated technical codes rather than full descriptions.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
-[PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
+[FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=MISSING (global constant, always required); hairlines=OK; dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=10, body not fully color-covered -> expected striping=True, actual=True
 [N/A] [MECHANICAL] Heading band hue harmonization: 0/0 -- superseded by check_header_branding (2026-08-12 -- header is now a fixed universal navy, not hue-matched per table)
-[FAIL] [MECHANICAL] Header branding (deep navy, bold, white text): 0/5 -- header background: expected #08306B, got None (MISMATCH); column_labels_font_weight: expected bold, got None (MISMATCH); column-label text color: expected white, got None (MISMATCH)
+[FAIL] [MECHANICAL] Header branding (deep navy, bold, white text): 3/5 -- header background: expected #08306B, got '#08306B' (OK); column_labels_font_weight: expected bold, got 'bold' (OK); column-label text color: expected white, got None (MISMATCH)
 [PASS] [MECHANICAL] Stub tint (washed navy): 2/2 -- expected #EAF0F6, got '#EAF0F6'
 [FAIL] [MECHANICAL] Stripe color (neutral grey): 0/2 -- expected #F6F6F6, got None
 [N/A] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 0/0 -- ground truth declares no hero_uncolored measures
@@ -32,5 +32,5 @@ TOTAL: 86/97 (88.7%)
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Top 10 Most Expensive GT Cars by Country' captures the core framing—the most expensive cars grouped by origin—matching the ground truth's intent. However, the ground truth's phrasing 'The 10 Priciest GT Cars, by Country of Origin' is slightly more polished and uses 'priciest,' whereas the candidate uses 'most expensive' (synonymous but less elegant). The subtitle also differs: the candidate says 'Price, drivetrain, and transmission details' (using 'Price') versus the ground truth's more formal 'MSRP, drivetrain, and transmission for the ten most expensive cars in the gtcars dataset'—the ground truth's subtitle is more informative about the source.
-[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate places the car name (stub) first, then drivetrain, transmission, and msrp rightmost. The ground truth places car name first, then msrp (as the second column), followed by drivetrain and transmission. The candidate's reordering moves the msrp—the hero measure and the basis for the sort—to the far right, breaking the logical flow; a reader must scan to the end of each row to see the price that drives the ranking. This is a genuine ordering problem that costs readability and logical coherence with the analytical story (top 10 by price).
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The title 'Top 10 Most Expensive GT Cars' is clear and accurate, capturing the core subject matter. The subtitle 'Grouped by Country of Origin with Drivetrain and Transmission Details' adds appropriate context. However, the ground truth's phrasing 'The 10 Priciest GT Cars, by Country of Origin' is slightly more elegant and directly emphasizes the country grouping in the title itself, whereas the candidate relegates it to the subtitle.
+[FAIL] [JUDGE] Column order quality: 0/2 -- judge score 1/5 -- The candidate places the Price column (rightmost) far from the Car name column (leftmost stub), forcing readers to scan across Drivetrain and Transmission to connect car identity with its primary measure of interest—the MSRP/price. The ground truth keeps MSRP adjacent to Car, allowing the story (which car is most expensive) to read naturally left-to-right. This ordering significantly harms readability of the narrative flow.

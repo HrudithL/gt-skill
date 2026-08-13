@@ -1,61 +1,67 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, style, loc, md
-from gt_consistency import heatmap, band, stripe, stub_tint, frame, finalize
+from great_tables import GT, style, loc
+from gt_consistency import heatmap, band, stripe, stub_tint, frame, hairlines, finalize
 
-# Step 1: Load and clean the data
+# Step 1: Load and clean data
 df = pd.read_csv("gtcars.csv")
 
-# Select relevant columns: manufacturer, model, hp, msrp
+# Select relevant columns: model (stub), horsepower, and price
 df = df[["mfr", "model", "hp", "msrp"]].copy()
 
-# Create a combined identifier for uniqueness (mfr + model)
-df["car_name"] = df["mfr"] + " " + df["model"]
-df = df.drop(columns=["mfr", "model"])
+# Create a display label combining manufacturer and model
+df["car"] = df["mfr"] + " " + df["model"]
+df = df[["car", "hp", "msrp"]].copy()
+df.columns = ["car", "hp", "msrp"]
 
-# Reorder columns: car_name (stub), hp, msrp
-df = df[["car_name", "hp", "msrp"]]
+# Step 2: Organize columns - car as stub, horsepower (plain), price (colored)
+gt = GT(df, rowname_col="car")
 
-# Ensure numeric columns are properly typed
-df["hp"] = pd.to_numeric(df["hp"], errors="coerce")
-df["msrp"] = pd.to_numeric(df["msrp"], errors="coerce")
+# Step 3: Big Color - msrp is the hero (neutral magnitude → Blues)
+# Domain computation
+msrp_cols = ["msrp"]
+lo = float(np.nanmin(df[msrp_cols].to_numpy()))
+hi = float(np.nanmax(df[msrp_cols].to_numpy()))
 
-# Remove rows with missing critical values
-df = df.dropna(subset=["hp", "msrp"])
+gt = heatmap(gt, "msrp", kind="sequential", hue="neutral", domain=[lo, hi])
 
-# Step 2: Create the GT table with car_name as stub
-gt = (
-    GT(df, rowname_col="car_name")
-    .cols_label(hp="Horsepower", msrp="Price (MSRP)")
-    .fmt_number(columns="hp", decimals=0)
-    .fmt_currency(columns="msrp", currency="USD")
-)
-
-# Step 3: Apply Big Color - only price is colored (hero measure)
-# Horsepower stays plain per the redundancy rule in small_color.md
-gt = heatmap(gt, "msrp", kind="sequential", hue="neutral")
-
-# Step 4: Apply heading band
+# Step 4: Heading band (fixed navy)
 gt = band(gt)
 
-# Step 5: Apply small color polish
+# Step 5: Small Color polish
+gt = frame(gt)
+gt = hairlines(gt)
 gt = stripe(gt)
 gt = stub_tint(gt)
-gt = frame(gt)
 
-# Step 6: Add titles and annotations
-gt = (
-    gt
-    .tab_header(
-        title="GT Cars: Horsepower vs Price",
-        subtitle="2014-2017 performance vehicles"
-    )
-    .tab_source_note(
-        md("Data represents MSRP pricing and horsepower ratings for performance vehicles from 2014-2017.")
-    )
-    .tab_source_note(
-        md("Price encoded by magnitude; horsepower shown for reference.")
-    )
+# Formatting per column type
+gt = gt.fmt_number(columns="hp", decimals=0, use_seps=True)
+gt = gt.fmt_currency(columns="msrp", decimals=0, use_seps=True)
+
+# Column widths
+gt = gt.cols_width(cases={"hp": "100px", "msrp": "120px"})
+
+# Padding
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
+
+# Step 6: Titles & annotations
+gt = gt.tab_header(
+    title="Performance and Pricing",
+    subtitle="GT Cars Horsepower and MSRP"
+)
+
+gt = gt.tab_source_note(
+    source_note="Price reflects base model MSRP. Horsepower is at rated RPM."
+)
+gt = gt.tab_source_note(
+    source_note="Source: gtcars.csv"
 )
 
 # Step 7: Render

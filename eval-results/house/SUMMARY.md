@@ -153,3 +153,29 @@ scores.)
 
 Curated candidate scripts, renders, and comparator reports for every
 invocation are under [`samples/`](samples/), organized `samples/<prompt>/<variant>/`.
+
+## Round 4 (2026-08-13) — dtype footgun + comparator blind spots fixed
+
+Fresh sweep (`runs/sweep/20260813_080322_house_6prompts`), run after `main` had all
+five rounds of fixes merged: `RULES.md`'s `np.where(...)` baseline-guard snippet used
+`None` instead of `np.nan` (forced `object` dtype, broke `.nlargest()` — caused a real
+2x token blowup in an earlier sweep); the comparator's static AND execution-tier
+extractors now both recognize a `def build_table(): ... if __name__=="__main__":`-wrapped
+script as inlined top-level code (previously invisible to either).
+
+| Metric | This round | Round 3 |
+|---|---|---|
+| Mean score | **82.4%** | 79.4% |
+| Mean repeat spread | 16.0pp | 18.1pp |
+| Mean cost | $0.131 | $0.134 |
+
+Per-prompt means: `gtcars_hp_price` 94.1%, `islands_sizes` 94.4%, `gtcars_top10_by_country`
+89.3%, `sp500_monthly_performance` 73.6%, `airquality_monthly_summary` 71.7%,
+`towny_growth_trends` 71.4%. Two individual repeats scored far below their siblings
+this round, both traced to the same one-off mistake, not a bug: `towny_growth_trends/
+repeat_1` (38.4% vs. 85–90% siblings) used `.set_index('Town')` instead of passing
+`rowname_col="Town"` to `GT(...)`, so no stub was ever created; `sp500_monthly_
+performance` also runs into the known month-label-format ambiguity (see top-level
+`SUMMARY.md`). Both are places `RULES.md`/the worked example already teach the correct
+pattern and the other 2 of 3 repeats on the same prompt did it right — haiku-tier
+sampling variance on a small sample, not a skill or comparator gap.

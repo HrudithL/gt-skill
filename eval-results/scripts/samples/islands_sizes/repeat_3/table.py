@@ -1,50 +1,47 @@
 import pandas as pd
-import numpy as np
-from great_tables import GT
-from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
+from great_tables import GT, style, loc
+from gt_consistency import band, finalize, frame, heatmap, stripe, stub_tint
 
 df = pd.read_csv("islands.csv")
 
-# Step 1: Data cleaning — verify the data
-df["size"] = pd.to_numeric(df["size"], errors="coerce")
-
-# Step 2: Organize columns — name is the stub identifier
-cols_measure = ["size"]
-
-# Step 3: Big Color — ordered magnitude with >5 rows qualifies
-lo = float(np.nanmin(df[cols_measure].to_numpy()))
-hi = float(np.nanmax(df[cols_measure].to_numpy()))
-
-# Build the table
 gt = (
     GT(df, rowname_col="name")
-    .tab_header(
-        title="Islands and Their Sizes",
-        subtitle="Land area in thousands of km²"
+    .cols_label(size="Size (1000s km²)")
+    .fmt_number(columns="size", decimals=1, use_seps=True)
+    .sub_missing(columns="size", missing_text="—")
+    .tab_options(
+        table_body_hlines_style="solid",
+        table_body_hlines_color="#E8E8E8",
+        table_body_hlines_width="1px",
     )
-    .fmt_number(columns=cols_measure, decimals=0, use_seps=True)
-    .sub_missing(columns=cols_measure, missing_text="—")
+    .tab_style(
+        style=style.fill(color="#EAF0F6"),
+        locations=loc.stub(),
+    )
+    .tab_options(
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
+    )
+    .cols_width(cases={"size": "140px"})
+    .tab_header(
+        title="World's Largest Islands",
+        subtitle="Land area comparison across 49 major islands",
+    )
 )
 
-# Step 3: Apply heatmap — neutral magnitude uses sequential Blues
-gt = heatmap(gt, cols_measure, kind="sequential", hue="neutral")
-
-# Step 4: Heading band
+gt = heatmap(gt, columns="size", kind="sequential", hue="Blues")
 gt = band(gt)
-
-# Step 5: Small Color polish
 gt = stripe(gt)
 gt = stub_tint(gt)
-gt = gt.cols_width(cases={"size": "120px"})
-gt = gt.tab_options(
-    heading_padding="6px",
-    column_labels_padding="6px",
-    column_labels_padding_horizontal="8px",
-    data_row_padding="5px",
-    data_row_padding_horizontal="8px",
-    source_notes_padding="6px",
+gt = frame(gt)
+
+gt = (
+    gt.tab_source_note(source_note="Island sizes ranked by land area in thousands of square kilometers.")
+    .tab_source_note(source_note="Source: islands.csv")
 )
 
-# Frame and render
-gt = frame(gt)
-finalize(gt, "table.png")
+finalize(gt)

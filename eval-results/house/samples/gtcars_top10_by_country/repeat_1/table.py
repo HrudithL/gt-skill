@@ -1,98 +1,96 @@
 import pandas as pd
-from great_tables import GT, loc, md, style
-from house_table import PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap, group_emphasis, humanize_labels
+from great_tables import GT, md, loc, style
+from house_table import PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, group_emphasis, humanize_labels
 
-# Load data
 df = pd.read_csv("gtcars.csv")
 
-# Create composite car identifier and select top 10 most expensive
-df["car"] = df["mfr"] + " " + df["model"]
-top_10 = df.nlargest(10, "msrp")[["car", "ctry_origin", "drivetrain", "trsmn", "msrp"]].copy()
+# Select top 10 most expensive cars and sort by country, then price
+top_10 = df.nlargest(10, "msrp").copy()
+top_10 = top_10.sort_values(["ctry_origin", "msrp"], ascending=[True, False])
 
-# Sort by country and price within country for better grouping
-top_10 = top_10.sort_values(["ctry_origin", "msrp"], ascending=[True, False]).reset_index(drop=True)
+# Create readable car identifier (mfr + model)
+top_10["car"] = top_10["mfr"] + " " + top_10["model"]
 
-# Format transmission codes to be more readable
-trsmn_map = {
-    "6a": "6-speed automatic",
-    "6m": "6-speed manual",
-    "7a": "7-speed automatic",
-    "7m": "7-speed manual",
-    "8a": "8-speed automatic",
-    "8am": "8-speed automatic/manual",
-    "9a": "9-speed automatic",
-    "1dd": "Direct drive"
+# Map transmission codes to readable format
+transmission_map = {
+    "7a": "7-Speed Auto",
+    "7m": "7-Speed Manual",
+    "6a": "6-Speed Auto",
+    "6m": "6-Speed Manual",
+    "8a": "8-Speed Auto",
+    "8am": "8-Speed Auto/Manual",
+    "9a": "9-Speed Auto",
+    "1dd": "Direct Drive",
 }
-top_10["trsmn"] = top_10["trsmn"].map(lambda x: trsmn_map.get(x, x))
+top_10["transmission"] = top_10["trsmn"].map(transmission_map)
 
-# Format drivetrain to be more readable
+# Map drivetrain codes to readable format
 drivetrain_map = {
-    "rwd": "Rear-wheel",
-    "awd": "All-wheel",
-    "fwd": "Front-wheel"
+    "rwd": "Rear Wheel Drive",
+    "awd": "All Wheel Drive",
+    "fwd": "Front Wheel Drive",
 }
-top_10["drivetrain"] = top_10["drivetrain"].map(lambda x: drivetrain_map.get(x, x))
+top_10["drivetrain_display"] = top_10["drivetrain"].map(drivetrain_map)
 
-# Create GT object with grouping by country
-gt = GT(top_10, rowname_col="car", groupname_col="ctry_origin")
+# Select and reorder columns
+display_df = top_10[["car", "ctry_origin", "drivetrain_display", "transmission", "msrp"]].copy()
+display_df.columns = ["car", "country_origin", "drivetrain", "transmission", "msrp"]
 
-# Apply humanized labels with overrides
-gt = humanize_labels(gt, top_10, overrides={
-    "car": "Car Model",
-    "ctry_origin": "Country",
-    "drivetrain": "Drivetrain",
-    "trsmn": "Transmission",
-    "msrp": "MSRP"
-})
-
-# Format MSRP as currency
-gt = gt.fmt_currency(columns="msrp", decimals=0, currency="USD")
-
-# Apply styling
-gt = band(gt, hue="navy")
-gt = stub_tint(gt, hue="navy")
-gt = group_emphasis(gt)
-gt = stripe(gt)
-gt = frame(gt)
-gt = hairlines(gt)
-
-# Apply sequential heatmap to MSRP (the hero measure)
-gt = heatmap(gt, "msrp", kind="sequential", hue="neutral")
-
-# Add header and source notes
-gt = gt.tab_header(
-    title="Top 10 Most Expensive GT Cars",
-    subtitle="Grouped by country of origin with drivetrain and transmission details"
+# Build the GT table
+gt = (
+    GT(display_df, rowname_col="car", groupname_col="country_origin")
+    .tab_header(
+        title="Top 10 Most Expensive GT Cars",
+        subtitle=md("Performance vehicles ranked by MSRP, grouped by country of origin"),
+    )
+    .tab_stubhead(label="Vehicle")
+    .fmt_currency(columns="msrp", decimals=0)
 )
 
-gt = gt.tab_source_note(
-    source_note="Ranked by MSRP (manufacturer's suggested retail price), sorted by country and price within each country."
+gt = humanize_labels(
+    gt,
+    display_df,
+    overrides={"country_origin": "Country", "drivetrain": "Drivetrain", "transmission": "Transmission", "msrp": "MSRP"},
 )
 
-gt = gt.tab_source_note(
-    source_note=md("Source: gtcars.csv")
+# Set column widths
+gt = gt.cols_width(
+    cases={
+        "car": "180px",
+        "country_origin": "130px",
+        "drivetrain": "150px",
+        "transmission": "140px",
+        "msrp": "120px",
+    }
 )
 
-# Missing values
-gt = gt.sub_missing(columns=["drivetrain", "trsmn"], missing_text="—")
-
-# Column widths and padding
-gt = gt.cols_width(cases={
-    "car": "200px",
-    "ctry_origin": "120px",
-    "drivetrain": "120px",
-    "trsmn": "170px",
-    "msrp": "120px"
-})
-
+# Set padding
 gt = gt.tab_options(
     heading_padding="6px",
     column_labels_padding="6px",
     column_labels_padding_horizontal="8px",
     data_row_padding="5px",
     data_row_padding_horizontal="8px",
-    source_notes_padding="6px"
+    source_notes_padding="6px",
 )
 
-# Finalize and save
-finalize(gt, path="table.png")
+# Apply branding and styling
+gt = band(gt, hue="navy")
+gt = stripe(gt)
+gt = stub_tint(gt, hue="navy")
+gt = group_emphasis(gt)
+
+# Add source notes
+gt = (
+    gt.tab_source_note(
+        source_note="Ranking based on manufacturer suggested retail price (MSRP) at time of model year."
+    )
+    .tab_source_note(source_note="Source: gtcars dataset.")
+)
+
+# Apply frame and hairlines
+gt = hairlines(gt)
+gt = frame(gt)
+
+# Render
+finalize(gt)

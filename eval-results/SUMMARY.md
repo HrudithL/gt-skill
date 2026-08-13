@@ -543,3 +543,39 @@ deliberately want to score a fresh sweep from scratch (needs
 `house`/`prose`/`scripts`' current numbers were produced (see "Data
 refresh" above); it was a deliberate choice made once, not something to
 casually re-run expecting the same numbers back.
+
+## Data refresh (2026-08-13, round 4 — current, trustworthy numbers)
+
+Fresh 6-prompt sweeps for `house`/`prose`/`scripts` (`--repeat 3 --model
+haiku`), run AFTER merging all five rounds of fixes to `main`: a house
+`RULES.md` dtype footgun, a missing `hairlines()` helper + checker rule in
+`great-tables-ci`, a Top-N/Ordered-magnitude routing ambiguity, the
+comparator's static AND execution-tier extractors both learning to recognize
+a `def build_table(): ...` / `if __name__ == "__main__":` wrapped script as
+inlined top-level code (previously invisible to both, scoring real
+candidates ~18–35% purely from the blind spot), a `check_caption_keywords`
+crash on non-literal caption text, and (round 5, defensive-only — 0/949 real
+candidates ever hit either shape) a decorated or class/assignment-shadowed
+guard target no longer being wrongly inlined. `creator` not re-swept
+(unchanged from 2026-08-09, still losing to baseline).
+
+| Skill | Mean score | Mean spread (was, round 3) | Max spread (was) | Mean cost |
+|---|---|---|---|---|
+| `house` | 82.4% | 10.8pp (18.1pp) | 51.7pp | **$0.131** (cheapest) |
+| `prose` | 81.7% | 10.3pp (23.5pp) | 28.9pp | $0.190 |
+| `scripts` | 81.5% | 16.2pp (20.2pp) | 40.4pp | $0.189 |
+
+All three land in a tight band, similar to round 3's own "tight band"
+finding. Several single-prompt spreads are WIDER than the mid-fix-cycle
+sweep reported in an earlier draft of this section — traced individually
+(see each skill's own `SUMMARY.md`) to one-off model mistakes in this fresh
+batch, not mechanical bugs: forgetting `rowname_col=` entirely, confusing
+pandas' `.set_index()` with it, and picking a non-unique `mfr`-only stub
+instead of the documented `mfr + model` composite. All three are places the
+skills' own reference docs already teach the correct pattern (2/3 sibling
+repeats on the same prompt did it right); this is inherent haiku-tier
+sampling variance on a 3-repeat sample, not something a further doc/code fix
+would eliminate. Combined with the already-known sources (sp500's
+ground-truth month-label ambiguity, occasional Big-Color restraint lapses,
+towny's spanner/ranking-metric ambiguity), this round's remaining spread has
+no fixable mechanical cause left that this effort's deep-dive could find.

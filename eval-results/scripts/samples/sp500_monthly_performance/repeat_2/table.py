@@ -1,99 +1,139 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT
-from gt_consistency import band, frame, heatmap, stripe, stub_tint, finalize
+from great_tables import GT, style, loc
 
-# Load and clean data
-df_raw = pd.read_csv("sp500.csv")
-df_raw["date"] = pd.to_datetime(df_raw["date"])
+# Read the data
+df = pd.read_csv("sp500.csv")
+df["date"] = pd.to_datetime(df["date"])
 
-# Calculate daily high-low gain/loss for each day
-df_raw["daily_gain"] = df_raw["high"] - df_raw["open"]
-df_raw["daily_loss"] = df_raw["low"] - df_raw["open"]
+# Filter to 2010-2015
+df = df[(df["date"].dt.year >= 2010) & (df["date"].dt.year <= 2015)]
 
-# Extract year-month for grouping
-df_raw["year_month"] = df_raw["date"].dt.to_period("M")
+# Sort by date
+df = df.sort_values("date")
 
-# Aggregate by month
-monthly = df_raw.groupby("year_month").agg(
+# Calculate intra-month high-low (daily gain/loss)
+df["daily_gain"] = df["high"] - df["open"]
+df["daily_loss"] = df["open"] - df["low"]
+
+# Group by year-month
+df["year_month"] = df["date"].dt.to_period("M")
+
+# Aggregate monthly data
+monthly = df.groupby("year_month").agg(
     open_price=("open", "first"),
     close_price=("close", "last"),
-    avg_volume=("volume", "mean"),
+    volume_avg=("volume", "mean"),
     highest_gain=("daily_gain", "max"),
-    highest_loss=("daily_loss", "min"),
+    highest_loss=("daily_loss", "max"),
 ).reset_index()
 
 # Calculate percent change
-monthly["pct_change"] = ((monthly["close_price"] - monthly["open_price"]) / monthly["open_price"]) * 100
+monthly["pct_change"] = (
+    (monthly["close_price"] - monthly["open_price"]) / monthly["open_price"]
+)
 
-# Filter to 2010-2015
-monthly["year"] = monthly["year_month"].dt.year
-df = monthly[(monthly["year"] >= 2010) & (monthly["year"] <= 2015)].copy()
-df = df.drop("year", axis=1)
+# Format the year_month for display
+monthly["period"] = monthly["year_month"].astype(str)
 
-# Create month-year label for display
-df["month_label"] = df["year_month"].astype(str)
+# Select and reorder columns
+monthly = monthly[
+    ["period", "open_price", "close_price", "pct_change", "volume_avg", "highest_gain", "highest_loss"]
+]
 
-# Reorder columns
-df = df[["month_label", "open_price", "close_price", "pct_change", "avg_volume", "highest_gain", "highest_loss"]]
-
-# Build the table
+# Create the table
 gt = (
-    GT(df, rowname_col="month_label")
+    GT(monthly, rowname_col="period")
     .cols_label(
         open_price="Opening Price",
         close_price="Closing Price",
         pct_change="% Change",
-        avg_volume="Avg Daily Volume",
-        highest_gain="Highest Daily Gain",
-        highest_loss="Highest Daily Loss",
+        volume_avg="Avg Daily Volume",
+        highest_gain="Highest Single-Day Gain",
+        highest_loss="Highest Single-Day Loss",
     )
-    .cols_width(
-        cases={
-            "open_price": "110px",
-            "close_price": "120px",
-            "pct_change": "95px",
-            "avg_volume": "135px",
-            "highest_gain": "130px",
-            "highest_loss": "130px",
-        }
+    .fmt_number(
+        columns=["open_price", "close_price"],
+        decimals=2,
+        use_seps=True,
     )
-    .fmt_number(columns=["open_price", "close_price"], decimals=2, use_seps=True)
-    .fmt_number(columns=["avg_volume"], decimals=0, use_seps=True)
-    .fmt_number(columns=["highest_gain", "highest_loss"], decimals=2, use_seps=False)
-    .fmt_percent(columns="pct_change", decimals=2, scale_values=False, force_sign=True)
-    .sub_missing(columns=["open_price", "close_price", "pct_change", "avg_volume", "highest_gain", "highest_loss"], missing_text="—")
+    .fmt_number(
+        columns=["volume_avg"],
+        decimals=0,
+        use_seps=True,
+    )
+    .fmt_number(
+        columns=["highest_gain", "highest_loss"],
+        decimals=2,
+        use_seps=True,
+    )
+    .fmt_percent(
+        columns=["pct_change"],
+        decimals=2,
+        force_sign=True,
+    )
+    .data_color(
+        columns=["pct_change"],
+        palette="RdYlGn",
+        domain=[
+            float(np.nanmin(monthly[["pct_change"]].to_numpy())),
+            float(np.nanmax(monthly[["pct_change"]].to_numpy())),
+        ],
+        truncate=False,
+        na_color="#808080",
+    )
+    .data_color(
+        columns=["volume_avg"],
+        palette="Blues",
+        domain=[
+            float(np.nanmin(monthly[["volume_avg"]].to_numpy())),
+            float(np.nanmax(monthly[["volume_avg"]].to_numpy())),
+        ],
+        truncate=False,
+        na_color="#808080",
+    )
+    .tab_header(
+        title="S&P 500 Monthly Performance Summary (2010–2015)",
+        subtitle="Opening/closing prices, percent change, trading volume, and daily gains/losses",
+    )
+    .tab_stubhead(label="Period")
     .tab_options(
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
-        heading_padding="12px",
-        column_labels_padding="12px",
+        table_border_top_style="solid",
+        table_border_top_color="#CCCCCC",
+        table_border_top_width="1px",
+        table_border_bottom_style="solid",
+        table_border_bottom_color="#CCCCCC",
+        table_border_bottom_width="1px",
+        table_border_left_style="solid",
+        table_border_left_color="#CCCCCC",
+        table_border_left_width="1px",
+        table_border_right_style="solid",
+        table_border_right_color="#CCCCCC",
+        table_border_right_width="1px",
+        heading_padding="6px",
+        column_labels_padding="6px",
         column_labels_padding_horizontal="8px",
-        data_row_padding="8px",
+        data_row_padding="5px",
         data_row_padding_horizontal="8px",
-        source_notes_padding="12px",
+        source_notes_padding="6px",
     )
-    .tab_header(
-        title="S&P 500 Monthly Performance Summary (2010–2015)",
-        subtitle="Opening and closing prices, percent change, average daily volume, and daily gain/loss extremes",
+    .opt_row_striping()
+    .tab_style(
+        style=style.fill(color="#EAF0F6"),
+        locations=loc.stub(),
     )
-    .tab_source_note(source_note="Percent change is calculated as (closing price − opening price) ÷ opening price × 100. Highest daily gain and loss represent the intraday high and low relative to each day's opening price, within each month.")
-    .tab_source_note(source_note="Source: sp500.csv")
+    .tab_source_note(
+        source_note="Percent change is calculated as (close - open) / open. Highest single-day gain/loss represents the largest intraday price movement (high - open and open - low, respectively)."
+    )
+    .tab_source_note(
+        source_note="Source: S&P 500 daily historical data (sp500.csv)."
+    )
 )
 
-# Apply heatmap to percent change (the hero measure)
-gt = heatmap(gt, columns=["pct_change"], kind="diverging", hue="default")
-
-# Apply branding styling
-gt = band(gt)
-gt = stripe(gt)
-gt = stub_tint(gt)
-
-# Apply frame
-gt = frame(gt)
-
-# Finalize and render
-finalize(gt, "table.png")
+# Render
+gt.gtsave("table.png", expand=15)

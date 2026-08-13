@@ -1,89 +1,147 @@
 import pandas as pd
-from great_tables import GT, md, html, style, loc
-from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
-import sys
-sys.path.insert(0, '.claude/skills/great-tables-ci/scripts')
+import numpy as np
+from great_tables import GT, md, style, loc
+from gt_consistency import PALETTE, heatmap, band, finalize, frame, hairlines, stripe, stub_tint
 
-# Load and prepare data
-df = pd.read_csv('towny.csv')
+# Step 1: Load and clean data
+df = pd.read_csv("towny.csv")
 
-# Calculate overall growth rate from 1996 to 2021
-df['overall_growth_pct'] = (df['population_2021'] - df['population_1996']) / df['population_1996']
+# Calculate overall growth rate from 1996 to 2021 to identify fastest-growing towns
+df["total_growth_pct"] = (df["population_2021"] - df["population_1996"]) / df["population_1996"]
 
 # Get top 15 fastest-growing towns
-top_15 = df.nlargest(15, 'overall_growth_pct')[['name', 'density_1996', 'density_2001',
-                                                   'density_2006', 'density_2011', 'density_2016',
-                                                   'density_2021', 'pop_change_1996_2001_pct',
-                                                   'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct',
-                                                   'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct',
-                                                   'overall_growth_pct']].reset_index(drop=True)
+top_15 = df.nlargest(15, "total_growth_pct")
 
-# Rename columns for display
-top_15_display = top_15.copy()
-top_15_display.columns = ['Town', 'Density 1996', 'Density 2001', 'Density 2006',
-                           'Density 2011', 'Density 2016', 'Density 2021',
-                           'Change 96-01 %', 'Change 01-06 %', 'Change 06-11 %',
-                           'Change 11-16 %', 'Change 16-21 %', 'Overall Growth %']
+# Step 2: Select and organize columns
+# Show town name, then density across years, then percent changes across periods
+display_df = top_15[
+    [
+        "name",
+        "density_1996",
+        "density_2001",
+        "density_2006",
+        "density_2011",
+        "density_2016",
+        "density_2021",
+        "pop_change_1996_2001_pct",
+        "pop_change_2001_2006_pct",
+        "pop_change_2006_2011_pct",
+        "pop_change_2011_2016_pct",
+        "pop_change_2016_2021_pct",
+    ]
+].reset_index(drop=True)
 
-# Create the table
+# Rename columns for clarity
+display_df.columns = [
+    "Town",
+    "Density 1996",
+    "Density 2001",
+    "Density 2006",
+    "Density 2011",
+    "Density 2016",
+    "Density 2021",
+    "1996-2001",
+    "2001-2006",
+    "2006-2011",
+    "2011-2016",
+    "2016-2021",
+]
+
+# Define column groups
+density_cols = [
+    "Density 1996",
+    "Density 2001",
+    "Density 2006",
+    "Density 2011",
+    "Density 2016",
+    "Density 2021",
+]
+pct_cols = [
+    "1996-2001",
+    "2001-2006",
+    "2006-2011",
+    "2011-2016",
+    "2016-2021",
+]
+
+# Step 3 & 4: Build the table with structure
 gt = (
-    GT(top_15_display, rowname_col='Town')
-    .fmt_number(columns=['Density 1996', 'Density 2001', 'Density 2006',
-                         'Density 2011', 'Density 2016', 'Density 2021'],
-                decimals=2)
-    .fmt_percent(columns=['Change 96-01 %', 'Change 01-06 %', 'Change 06-11 %',
-                          'Change 11-16 %', 'Change 16-21 %', 'Overall Growth %'],
-                 decimals=1, scale_values=False, force_sign=True)
-    .cols_width(cases={'Town': '200px', 'Density 1996': '100px', 'Density 2001': '100px',
-                       'Density 2006': '100px', 'Density 2011': '100px', 'Density 2016': '100px',
-                       'Density 2021': '100px', 'Change 96-01 %': '90px', 'Change 01-06 %': '90px',
-                       'Change 06-11 %': '90px', 'Change 11-16 %': '90px', 'Change 16-21 %': '90px',
-                       'Overall Growth %': '110px'})
-    .tab_header(
-        title="Top 15 Fastest-Growing Ontario Towns",
-        subtitle="Population Density and Growth Trends (1996-2021)"
+    GT(display_df, rowname_col="Town")
+    .fmt_number(columns=density_cols, decimals=1)
+    .fmt_percent(columns=pct_cols, decimals=1)
+    # Column spanners
+    .tab_spanner(label="Population Density (persons/km²)", columns=density_cols)
+    .tab_spanner(label="Population Change (%)", columns=pct_cols)
+)
+
+# Step 3: Apply color fills using heatmap helper
+gt = heatmap(gt, density_cols, kind="sequential", hue="neutral")
+gt = heatmap(gt, pct_cols, kind="sequential", hue="positive")
+
+# Column dividers at spanner boundaries
+gt = (
+    gt.tab_style(
+        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
+        locations=loc.body(columns="Density 2021"),
     )
-    .tab_options(
-        heading_padding='6px',
-        column_labels_padding='6px',
-        column_labels_padding_horizontal='8px',
-        data_row_padding='5px',
-        data_row_padding_horizontal='8px',
-        source_notes_padding='6px',
-        table_body_hlines_style='solid',
-        table_body_hlines_color='#E8E8E8',
-        table_body_hlines_width='1px',
-        column_labels_border_bottom_color='#CCCCCC',
-        column_labels_border_bottom_width='2px'
+    .tab_style(
+        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
+        locations=loc.column_labels(columns="Density 2021"),
     )
 )
 
-# Add heatmap for density columns (sequential)
-gt = heatmap(gt, columns=['Density 1996', 'Density 2001', 'Density 2006',
-                          'Density 2011', 'Density 2016', 'Density 2021'],
-             kind='sequential', hue='neutral')
-
-# Add diverging heatmap for percentage change columns
-gt = heatmap(gt, columns=['Change 96-01 %', 'Change 01-06 %', 'Change 06-11 %',
-                          'Change 11-16 %', 'Change 16-21 %', 'Overall Growth %'],
-             kind='diverging', hue='default')
-
-# Apply branding
+# Step 5: Apply small-color polish
 gt = band(gt)
+gt = hairlines(gt)
 gt = stripe(gt)
 gt = stub_tint(gt)
 gt = frame(gt)
 
-# Add footer notes
+# Compact layout: column width sizing and padding
 gt = (
-    gt
-    .tab_source_note(
-        source_note="Fastest-growing means highest percent population change from 1996–2021."
+    gt.cols_width(
+        cases={
+            "Town": "180px",
+            "Density 1996": "90px",
+            "Density 2001": "90px",
+            "Density 2006": "90px",
+            "Density 2011": "90px",
+            "Density 2016": "90px",
+            "Density 2021": "90px",
+            "1996-2001": "85px",
+            "2001-2006": "85px",
+            "2006-2011": "85px",
+            "2011-2016": "85px",
+            "2016-2021": "85px",
+        }
     )
-    .tab_source_note(
-        source_note="Source: towny.csv | Density measured in persons per km²"
+    .tab_options(
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
     )
 )
 
-# Finalize and render
-gt = finalize(gt, path='table.png')
+# Step 6: Titles and annotations
+gt = (
+    gt.tab_header(
+        title="Ontario's Fastest-Growing Towns: Population Density Trends (1996–2021)",
+        subtitle="Top 15 towns ranked by total population growth; density and inter-census percent changes across all periods",
+    )
+    .tab_source_note(
+        md(
+            "**Finding:** Fastest-growing means highest percent change across the full 1996–2021 span, not averaged across periods."
+        )
+    )
+    .tab_source_note(
+        md(
+            "**Source:** Statistics Canada Census of Population and Housing, 1996–2021. Density in persons per square kilometre; percent change calculated as (end − start) / start for each inter-census period."
+        )
+    )
+)
+
+# Step 7: Render to PNG
+finalize(gt)

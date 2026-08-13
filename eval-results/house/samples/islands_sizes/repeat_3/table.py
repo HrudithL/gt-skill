@@ -1,46 +1,35 @@
 import pandas as pd
-from great_tables import GT, md
+from great_tables import GT, loc, md, style
 from house_table import (
-    PALETTE,
-    frame,
-    hairlines,
-    finalize,
-    band,
-    stripe,
-    heatmap,
+    PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap
 )
 
+# Read the data
 df = pd.read_csv("islands.csv")
 
+# Create the GT table
 gt = (
     GT(df, rowname_col="name")
     .tab_header(
-        title="Island Sizes",
-        subtitle=md("Land area in thousands of square kilometers"),
+        title="World's Largest Islands",
+        subtitle="Land area in thousands of square kilometers"
     )
-    .tab_stubhead(label="Island")
-    .fmt_number(columns="size", decimals=0, use_seps=True)
+    .fmt_integer(columns="size", sep_mark=",")
+    .tab_source_note(
+        source_note="Ranked by total land area."
+    )
+    .tab_source_note(
+        source_note="Source: provided dataset."
+    )
 )
 
-# Column-label band with dark navy background
-gt = band(gt, hue="navy")
-
-# Heatmap for the size column — sequential Blues for a neutral magnitude
+# Apply the house-format styling
+gt = frame(gt)
+gt = hairlines(gt)
 gt = heatmap(gt, "size", kind="sequential", hue="neutral")
-
-# Striping since not all columns are heatmap-covered
+gt = band(gt, hue="navy")
+gt = stub_tint(gt, hue="navy")
 gt = stripe(gt)
 
-# Source notes: analytical caption first, then provenance
-gt = gt.tab_source_note(
-    source_note="Sizes represent land area in thousands of square kilometers."
-)
-gt = gt.tab_source_note(
-    source_note="Source: provided dataset."
-)
-
-# Polish: frame and hairlines
-gt = hairlines(gt)
-gt = frame(gt)
-
-finalize(gt)
+# Finalize and render
+finalize(gt, path="table.png")

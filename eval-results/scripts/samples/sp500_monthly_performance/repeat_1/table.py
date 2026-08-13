@@ -1,84 +1,107 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, md
-from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
+from great_tables import GT, style, loc
+from gt_consistency import PALETTE, frame, hairlines, finalize, heatmap, band, stripe, stub_tint
 
-df = pd.read_csv("sp500.csv")
+# Load and prepare data
+df_raw = pd.read_csv("sp500.csv")
+df_raw["date"] = pd.to_datetime(df_raw["date"])
 
-df["date"] = pd.to_datetime(df["date"])
-df = df.sort_values("date")
+# Filter for 2010-2015
+df_raw = df_raw[(df_raw["date"].dt.year >= 2010) & (df_raw["date"].dt.year <= 2015)]
 
-df["year"] = df["date"].dt.year
-df["month"] = df["date"].dt.month
+# Sort by date
+df_raw = df_raw.sort_values("date").reset_index(drop=True)
 
-df_filtered = df[(df["year"] >= 2010) & (df["year"] <= 2015)].copy()
+# Calculate daily gain/loss for each day
+df_raw["daily_gain"] = df_raw["high"] - df_raw["open"]
+df_raw["daily_loss"] = df_raw["open"] - df_raw["low"]
 
+# Extract year and month
+df_raw["year_month"] = df_raw["date"].dt.to_period("M")
+
+# Group by month
 monthly_data = []
-for (year, month), group in df_filtered.groupby(["year", "month"]):
-    group = group.sort_values("date")
+for period, group in df_raw.groupby("year_month"):
+    month_str = str(period)  # Format: "2010-01"
 
-    open_price = group["open"].iloc[0]
-    close_price = group["close"].iloc[-1]
-    pct_change = ((close_price - open_price) / open_price)
-
-    avg_volume = group["volume"].mean()
-
-    intraday_gains = group["high"] - group["low"]
-    highest_gain = intraday_gains.max()
-
-    daily_changes = group["close"].diff()
-    worst_loss = daily_changes.min()
-
-    year_month_str = f"{year}-{month:02d}"
+    opening_price = group.iloc[0]["open"]  # First day's opening
+    closing_price = group.iloc[-1]["close"]  # Last day's closing
+    pct_change = ((closing_price - opening_price) / opening_price) * 100
+    avg_daily_volume = group["volume"].mean()
+    best_day_gain = group["daily_gain"].max()
+    worst_day_loss = group["daily_loss"].max()  # Max loss within the month
 
     monthly_data.append({
-        "period": year_month_str,
-        "open": open_price,
-        "close": close_price,
+        "month": month_str,
+        "open": opening_price,
+        "close": closing_price,
         "pct_change": pct_change,
-        "avg_volume": avg_volume,
-        "best_day_gain": highest_gain,
-        "worst_day_loss": worst_loss,
+        "avg_volume": avg_daily_volume,
+        "best_gain": best_day_gain,
+        "worst_loss": worst_day_loss,
     })
 
-df_summary = pd.DataFrame(monthly_data)
+df = pd.DataFrame(monthly_data)
 
+# Build the table
 gt = (
-    GT(df_summary, rowname_col="period")
+    GT(df, rowname_col="month")
+    .fmt_number(columns=["open", "close"], decimals=2, use_seps=True)
+    .fmt_percent(columns=["pct_change"], decimals=2, scale_values=False, force_sign=True)
+    .fmt_number(columns=["avg_volume"], decimals=0, use_seps=True)
+    .fmt_number(columns=["best_gain", "worst_loss"], decimals=2)
     .cols_label(
-        open="Open",
-        close="Close",
-        pct_change="% Change",
+        open="Opening Price",
+        close="Closing Price",
+        pct_change="Monthly % Change",
         avg_volume="Avg Daily Volume",
-        best_day_gain="Best Day Gain",
-        worst_day_loss="Worst Day Loss",
+        best_gain="Best Day Gain",
+        worst_loss="Worst Day Loss",
     )
-    .fmt_number(columns=["open", "close"], decimals=2)
-    .fmt_percent(columns=["pct_change"], decimals=2, force_sign=True)
-    .fmt_number(columns=["avg_volume"], decimals=0, compact=True)
-    .fmt_number(columns=["best_day_gain", "worst_day_loss"], decimals=2)
+    .cols_width(cases={
+        "month": "100px",
+        "open": "120px",
+        "close": "120px",
+        "pct_change": "140px",
+        "avg_volume": "140px",
+        "best_gain": "120px",
+        "worst_loss": "120px",
+    })
 )
 
+# Apply heatmaps for the key metrics
 gt = heatmap(gt, "pct_change", kind="diverging", hue="default")
-gt = heatmap(gt, ["best_day_gain", "worst_day_loss"], kind="sequential", hue="neutral")
 gt = heatmap(gt, "avg_volume", kind="sequential", hue="neutral")
 
+# Heading band
 gt = band(gt)
+
+# Small color polish
 gt = stripe(gt)
 gt = stub_tint(gt)
 gt = frame(gt)
+gt = hairlines(gt)
 
+# Titles and annotations
 gt = (
-    gt.tab_header(
-        title="S&P 500 Monthly Performance Summary (2010–2015)",
-        subtitle="Opening price, closing price, monthly return, and daily volatility metrics"
+    gt
+    .tab_header(
+        title="S&P 500 Monthly Performance Summary",
+        subtitle="Monthly trading metrics for 2010–2015"
     )
-    .tab_source_note(
-        md("**Analytical caption:** Percent change is calculated as (close − open) / open. Best day gain is the largest intraday gain (high − low) in each month. Worst day loss is the largest single-day decline (close.diff) in each month.")
-    )
-    .tab_source_note(
-        md("**Source:** S&P 500 historical price data, 2010–2015")
-    )
+    .tab_source_note(source_note="Highest single-day gain and loss represent the maximum intraday gain (high − open) and loss (open − low) within each month.")
+    .tab_source_note(source_note="Source: S&P 500 historical daily price data (sp500.csv).")
+)
+
+# Layout padding
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
 )
 
 finalize(gt, "table.png")

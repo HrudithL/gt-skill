@@ -121,3 +121,30 @@ precede every write.
 
 Curated candidate scripts, renders, and comparator reports for every
 invocation are under [`samples/`](samples/), organized `samples/<prompt>/<variant>/`.
+
+## Round 4 (2026-08-13) — routing ambiguity + baseline-masking docs fixed
+
+Fresh sweep (`runs/sweep/20260813_080331_prose_6prompts`), run after `main` had all
+five rounds of fixes merged: `REFERENCE.md`'s Top-N-vs-Ordered-magnitude routing
+ambiguity (an earlier sweep's repeat had picked `full_row_highlight.md` for a "top 10
+most expensive" table and filled 100% of rows, violating that file's own cap);
+`data.md` was missing the zero/negative-baseline percent-masking gotcha entirely.
+
+| Metric | This round | Round 3 |
+|---|---|---|
+| Mean score | **81.7%** | 79.0% |
+| Mean repeat spread | 10.3pp | 23.5pp |
+| Mean cost | $0.190 | $0.182 |
+
+Per-prompt means: `gtcars_hp_price` 93.7%, `airquality_monthly_summary` 93.4%,
+`islands_sizes` 92.5%, `towny_growth_trends` 86.5%, `gtcars_top10_by_country` 70.9%,
+`sp500_monthly_performance` 53.1% (still the hardest — same ground-truth
+month-label-format ambiguity noted in the top-level `SUMMARY.md`).
+
+`gtcars_top10_by_country` had the widest single-prompt spread (28.9pp: 57.7%, 86.6%,
+68.4%) — the 57.7% repeat used the bare `model` column as the stub instead of the
+documented `mfr + model` composite (`data.md`'s own worked example is this exact
+dataset), producing row-identity mismatches the comparator can't reconcile (e.g. a
+Lamborghini "aventador" mismatching the ground truth's "ferrari laferrari" once names
+don't line up); the other two repeats on the same prompt built the composite stub
+correctly. Sampling variance on a small repeat count, not a mechanical bug.

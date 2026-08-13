@@ -1,72 +1,47 @@
 import pandas as pd
-import numpy as np
 from great_tables import GT, style, loc
-from gt_consistency import PALETTE, frame, finalize, heatmap, band, stripe, stub_tint
+from gt_consistency import frame, finalize, heatmap, band, stripe, stub_tint, hairlines
 
-# Step 1: Load and clean data
 df = pd.read_csv("gtcars.csv")
 
-# Create stub label combining manufacturer and model for better readability
-df["car"] = df["mfr"] + " " + df["model"]
+# Select relevant columns - use mfr as stub (row identifier)
+display_df = df[["mfr", "model", "hp", "msrp"]].copy()
 
-# Select and reorder columns: stub + horsepower (plain) + price (colored)
-df_display = df[["car", "hp", "msrp"]].copy()
-df_display = df_display.head(30)  # Show first 30 cars for readability
-
-# Step 2: Organize columns and create GT object with stub
-gt = GT(df_display, rowname_col="car")
-
-# Step 3: Apply Big Color to price (msrp) only — price is the financial hero
-# Horsepower stays plain per the redundancy check
-gt = heatmap(gt, columns="msrp", kind="sequential", hue="neutral")
-
-# Step 4: Apply heading band (navy branding tier)
-gt = band(gt)
-
-# Step 5: Small Color polish checklist
-# (a) Cell borders — hairlines between rows
-gt = gt.tab_options(
-    table_body_hlines_style="solid",
-    table_body_hlines_color="#E8E8E8",
-    table_body_hlines_width="1px",
-    column_labels_border_bottom_color="#CCCCCC",
-    column_labels_border_bottom_width="2px",
-)
-
-# (c) Row striping
-gt = stripe(gt)
-
-# (d) Stub tint
-gt = stub_tint(gt)
-
-# (e) Formatting per column
-gt = gt.fmt_number(columns="hp", decimals=0, use_seps=True)
-gt = gt.fmt_currency(columns="msrp", decimals=0, use_seps=True)
-gt = gt.sub_missing(columns=["hp", "msrp"], missing_text="—")
-
-# Adjust column widths
-gt = gt.cols_width(cases={"hp": "100px", "msrp": "120px"})
-
-# Step 6: Titles & annotations
+# Create the GT table with mfr as stub (row identifier)
 gt = (
-    gt.tab_header(
-        title="GT Cars: Horsepower and Price",
-        subtitle="Sample of high-performance vehicles"
+    GT(display_df, rowname_col="mfr")
+    .cols_label(
+        model="Model",
+        hp="Horsepower (hp)",
+        msrp="Price (USD)"
     )
-    .tab_source_note(source_note="Price is the colored measure; horsepower provides context.")
-    .tab_source_note(source_note="Source: gtcars.csv")
+    .cols_width(cases={"model": "200px", "hp": "120px", "msrp": "140px"})
+    .fmt_integer(columns="hp")
+    .fmt_currency(columns="msrp", currency="USD", decimals=0)
+    .tab_header(
+        title="GT Cars Performance & Pricing",
+        subtitle="Horsepower and MSRP across premium automobile manufacturers"
+    )
+    .tab_stubhead(label="Manufacturer")
+    .tab_source_note("Price is the hero measure; horsepower is shown for reference as a related performance metric.")
+    .tab_source_note("Source: GT Cars Dataset")
+    .tab_options(
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px"
+    )
 )
 
-# Padding values
-gt = gt.tab_options(
-    heading_padding="6px",
-    column_labels_padding="6px",
-    column_labels_padding_horizontal="8px",
-    data_row_padding="5px",
-    data_row_padding_horizontal="8px",
-    source_notes_padding="6px",
-)
+# Apply Big Color to msrp (price) using heatmap helper
+gt = heatmap(gt, "msrp", kind="sequential", hue="positive")
 
-# Step 7: Frame and render
+# Apply styling
+gt = band(gt)
+gt = hairlines(gt)
+gt = stripe(gt)
+gt = stub_tint(gt)
 gt = frame(gt)
 finalize(gt)
