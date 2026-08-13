@@ -4858,7 +4858,14 @@ def check_caption_keywords(cand: dict, truth: dict, meta: dict) -> CheckResult:
     # Pure source-text extraction (title/subtitle/source_note are literal
     # strings, independent of whether the script's DATA execution
     # succeeds) -- not gated on tier2.ok, unlike the value-based checks.
-    caption_text = " ".join(cand["tier1"].get("source_note_texts") or []).lower()
+    # `source_note_texts` entries are `str | None` (`_source_note_texts_local`
+    # returns `None` for a note whose text isn't a static string literal --
+    # e.g. an f-string or a computed expression); `" ".join(...)` raises
+    # `TypeError` on any `None` entry, crashing this check on a candidate
+    # that legitimately renders fine. Drop `None` entries before joining --
+    # a dynamic caption's literal-text portion (if any) still contributes,
+    # it just can't check the part it couldn't statically read.
+    caption_text = " ".join(t for t in (cand["tier1"].get("source_note_texts") or []) if t).lower()
     subtitle_text = (cand["tier1"].get("subtitle_text") or "").lower()
     total = len(should_mention) + len(should_not_duplicate)
     ok_count = 0

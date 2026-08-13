@@ -91,6 +91,35 @@ def build_table():
     gt = GT(df)
 """
 
+_SHADOWED_DEF_SRC = """\
+import pandas as pd
+from great_tables import GT
+
+def build_table():
+    df = pd.DataFrame({"x": [1, 2, 3]})
+    gt = GT(df)
+
+def build_table(df):
+    gt = GT(df)
+
+if __name__ == "__main__":
+    build_table()
+"""
+
+_EARLY_RETURN_SRC = """\
+import pandas as pd
+from great_tables import GT
+
+def build_table():
+    gt = GT(pd.DataFrame({"x": [1, 2, 3]}))
+    if True:
+        return gt
+    gt = GT(pd.DataFrame({"x": [9] * 7}))
+
+if __name__ == "__main__":
+    build_table()
+"""
+
 
 def _write(tmp_path: Path, src: str) -> Path:
     p = tmp_path / "table.py"
@@ -121,9 +150,15 @@ def test_unresolvable_guard_target_does_not_crash(tmp_path):
 def test_required_arg_def_is_not_inlined(tmp_path):
     # `def build_table(df):` called bare as `build_table()` raises
     # TypeError at runtime and renders nothing -- must not be scored as
-    # if it ran (round-3 review finding).
+    # if it ran (round-3 review finding). Asserting on the SPECIFIC error
+    # (round-4 review finding: asserting only `ok is False` here is
+    # vacuous -- it also arrives, via a different NameError, if the arity
+    # check is deleted and the body is wrongly inlined anyway) pins that
+    # the real script itself was run, unmodified, and hit its own real
+    # TypeError -- not that inlining happened and failed differently.
     result = exec_table(_write(tmp_path, _REQUIRED_ARG_SRC))
     assert result["ok"] is False
+    assert "TypeError" in result["error"] and "missing 1 required positional argument" in result["error"]
 
 
 def test_defaulted_arg_def_is_not_inlined(tmp_path):
@@ -131,15 +166,49 @@ def test_defaulted_arg_def_is_not_inlined(tmp_path):
     # here actually EXECUTES the body without ever calling the function --
     # a default is never applied, so a referenced `df` would raise
     # NameError. Only genuinely zero-parameter defs are safe to inline.
+    # Same specific-error reasoning as the required-arg test above: a
+    # generic "no top-level gt" (the real, un-inlined script's own result)
+    # is the correct outcome here, not a NameError from a wrongly-inlined
+    # body.
     result = exec_table(_write(tmp_path, _DEFAULTED_ARG_SRC))
     assert result["ok"] is False
+    assert result["error"] == "no top-level `gt` GT instance in table.py"
 
 
 def test_guard_before_def_is_not_inlined(tmp_path):
     # Same "def must precede the guard" rule as the comparator's fix --
-    # calling it any earlier is a real NameError at runtime.
+    # calling it any earlier is a real NameError at runtime. Specific
+    # assertion (round-4 review finding, same reasoning as above): the
+    # real, un-inlined script raises NameError on `build_table` itself
+    # (called before it's defined); a wrongly-inlined version would
+    # instead NameError on `GT` (an import that comes after the guard).
     result = exec_table(_write(tmp_path, _GUARD_BEFORE_DEF_SRC))
     assert result["ok"] is False
+    assert "NameError" in result["error"] and "build_table" in result["error"]
+
+
+def test_shadowed_def_resolves_to_the_last_one(tmp_path):
+    # Round-4 review finding: a LATER same-name `def` with a required
+    # parameter shadows an earlier zero-param one at real runtime (plain
+    # Python name rebinding) -- `build_table()` calls the parameterized
+    # version and raises TypeError, rendering nothing. Resolving to the
+    # earlier (shadowed) def instead would fabricate a 3-row result for a
+    # script that actually crashes.
+    result = exec_table(_write(tmp_path, _SHADOWED_DEF_SRC))
+    assert result["ok"] is False
+    assert "TypeError" in result["error"] and "missing 1 required positional argument" in result["error"]
+
+
+def test_return_before_other_code_declines_to_inline(tmp_path):
+    # Round-4 review finding: an early `return` with more code after it
+    # (dead code at real runtime) must not be silently stripped -- doing
+    # so previously fell through to the dead code and fabricated a
+    # 7-row result for a script that actually renders 3 rows. Declining
+    # to inline (falling back to the existing "no top-level gt" result)
+    # is the safe outcome for this shape, not a wrongly-produced value.
+    result = exec_table(_write(tmp_path, _EARLY_RETURN_SRC))
+    assert result["ok"] is False
+    assert result["error"] == "no top-level `gt` GT instance in table.py"
 
 
 if __name__ == "__main__":
