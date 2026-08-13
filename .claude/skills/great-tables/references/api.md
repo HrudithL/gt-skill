@@ -4,6 +4,8 @@
 
 Detailed method signatures and parameters for the `great_tables` Python package.
 
+> Verified against the installed `great_tables` package: no `fmt_*` function (`fmt_number`, `fmt_integer`, `fmt_percent`, `fmt_currency`, etc.) is top-level importable — every one is a `GT` instance method only. Call it as `gt.fmt_number(...)`, never `from great_tables import fmt_number` (raises `ImportError`). Also not top-level importable: `resolve`, `snapshot`, `CellStyle`, `Style`. The commonly used top-level imports are `GT, md, html, style, loc` (see `SKILL.md`); `style` itself exposes `text, fill, borders, css` as attributes (e.g. `style.borders(...)`, `style.fill(...)`).
+
 ## GT Constructor
 
 ```python
@@ -146,6 +148,7 @@ All `fmt_*` methods share common parameters:
     columns=None,
     rows=None,
     currency=None,           # "USD", "EUR", "GBP", etc. (3-letter ISO code)
+                             # case-sensitive: must be uppercase (e.g. "USD" — "usd" raises ValueError)
     use_subunits=True,       # show cents/pence
     decimals=None,           # override default decimal places
     use_seps=True,
