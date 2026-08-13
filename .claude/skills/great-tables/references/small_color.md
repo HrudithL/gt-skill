@@ -148,6 +148,31 @@ gt = gt.tab_options(column_labels_border_bottom_color="#CCCCCC",
                     column_labels_border_bottom_width="2px")
 ```
 
+**Column-label text is white — pin it explicitly via `tab_style`.** The heading band
+(Step 4) requires white column-label text over the dark navy fill. As
+`big_color/column_label_emphasis.md` explains, `great_tables` actually
+**auto-contrasts** column-label text to white by default whenever the band is dark
+enough — a bare `tab_options(column_labels_background_color=...)` band with no
+`tab_style` call at all already renders white label text. This project's convention is
+to pin it explicitly anyway, matching every worked example in this project's corpus
+(e.g. `assets/examples/ranking/ranking.py`) rather than relying on the auto-contrast
+default:
+
+```python
+from great_tables import GT, style, loc
+
+gt = gt.tab_style(style=style.text(color="white"), locations=loc.column_labels())
+```
+
+`tab_options()` has **no** `column_labels_font_color` or `column_labels_text_color`
+parameter — confirmed via `inspect.signature(GT.tab_options)` (great_tables 0.22.0):
+none of its 141 parameters matches either name — so this explicit pin has to go
+through `tab_style`, not a same-call `tab_options()` kwarg.
+
+If you're also touching heading-band `tab_options(...)` kwargs (background color,
+padding, alignment), see the `heading_*` hallucinated-kwarg guardrail under item (c)
+below — it lists the invented names to avoid and the real ones to use.
+
 ---
 
 ## (b) Column-group vertical dividers
@@ -194,6 +219,22 @@ gt = (
     .tab_options(row_striping_background_color="#F6F6F6")
 )
 ```
+
+**Hallucinated-kwarg guardrail.** `opt_row_striping()` takes **only** `row_striping: bool
+= True` — confirmed via `inspect.signature(GT.opt_row_striping)`. It has no color/style
+parameter of its own. Do not invent `opt_row_striping(background_color=...)`,
+`opt_row_striping(color=...)`, `opt_row_striping(style=...)`, or
+`opt_row_striping(row_striping_background_color=...)` — stripe color is set exactly as
+shown above, via a **separate** `tab_options(row_striping_background_color=...)` call.
+
+The same discipline applies to `heading_*` kwargs on `tab_options()`. Confirmed via
+`inspect.signature(GT.tab_options)` (great_tables 0.22.0), the real ones are
+`heading_title_font_size`, `heading_subtitle_font_size`, `heading_title_font_weight`,
+`heading_subtitle_font_weight`, `heading_background_color`, `heading_align`,
+`heading_padding`, `heading_padding_horizontal`, and `heading_border_bottom_*` /
+`heading_border_lr_*`. There is **no** `heading_font_size`, `heading_text_transform`,
+`heading_font_weight`, `heading_text_font_weight`, `heading_text_color`, or
+`heading_has_subtitle_padding` — none of these exist on `tab_options()`.
 
 ---
 

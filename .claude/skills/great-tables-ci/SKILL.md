@@ -146,8 +146,8 @@ numeric values live in the references.
 - **Compact layout.** Every table sizes each column with `cols_width(cases={...})`
   to its own content plus a small buffer, and pins six padding values via
   `tab_options(...)`. Widths are content-dependent (pick per table); the padding
-  literals are pinned in `references/small_color.md`. A consistency addition,
-  not currently mechanically checked.
+  literals are pinned in `references/small_color.md`. Checked mechanically, at
+  INFO/advisory level, by `gt_check.py`'s `layout-advisory` rule.
 
 ## Correctness gotchas (named rules — the values live in the references)
 
