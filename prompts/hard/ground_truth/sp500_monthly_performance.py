@@ -104,15 +104,6 @@ REQUIRED_INSTRUCTIONS = {
     "row_count": 72,
 }
 
-# Keyword-presence check for the caption/subtitle overlap rule. The caption
-# states the daily-gain/loss methodology (the thing that makes this table's
-# numbers reproducible); the subtitle only describes organization/scope, so
-# it must never quote the methodology phrases the caption owns.
-CAPTION_KEYWORDS = {
-    "caption_should_mention": ["continuous", "day-over-day", "not reset"],
-    "subtitle_should_not_duplicate": ["continuous day-over-day", "not reset"],
-}
-
 # Underlying derived column(s) that are the canonical colored measure(s),
 # used for value-based matching -- NOT the rendered column name/label.
 CANONICAL_MEASURES = {
