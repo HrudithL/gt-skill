@@ -13,9 +13,10 @@ fix that with `df["Year"] = df["Year"].astype(str)` — don't. That silently con
 the column to `object` dtype: any later `fmt_*` call on it raises
 `TypeError: '<' not supported between instances of 'str' and 'int'`, and a
 `data_color`/heatmap pass on it doesn't crash but silently produces a different,
-wrong color mapping (and `.sort_values()` on it mis-sorts as strings). The column
-stays numeric; suppress the separators at format time instead —
-`gt.fmt_integer(columns="Year", use_seps=False)` — and apply that call *after* any
+wrong color mapping. The column stays numeric; suppress the separators at format
+time instead — `gt.fmt_integer(columns="Year", use_seps=False)` (here `gt` is the
+`GT` instance you already built, e.g. `gt = GT(df)` — never
+`import great_tables as gt`) — and apply that call *after* any
 broader `fmt_integer`/`fmt_number` pass over multiple columns (or exclude this
 column from it): the later matching format call wins, so a broader pass's default
 `use_seps=True` would otherwise silently re-add the separators.
@@ -121,9 +122,10 @@ grain, not just present.
 
   A concrete case combining both motivations: `mfr` + `model` in a car dataset —
   `mfr` alone isn't unique (only 19 distinct manufacturers across 47 rows, e.g.
-  multiple Aston Martins), so a composite is required just to disambiguate. And even
-  where `model` alone already happens to be unique in a given dataset, it isn't
-  reliably recognizable by itself: "GT" alone is not a known car, "Ford GT" is.
+  multiple Aston Martins), so a composite is required just to disambiguate. `model`
+  alone is in fact unique across all 47 rows in this dataset (zero duplicate
+  values), and still isn't reliably recognizable on its own: "GT" alone is not a
+  known car, "Ford GT" is.
   Combining both gives a stub that's unique *and* readable. Build the stub column
   yourself before stubbing:
   ```python
