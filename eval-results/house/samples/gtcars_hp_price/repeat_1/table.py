@@ -1,67 +1,69 @@
 import pandas as pd
 from great_tables import GT, md
-from house_table import PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap, humanize_labels
+from house_table import (
+    PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap,
+    humanize_labels
+)
 
-# Load the data
-df = pd.read_csv("./gtcars.csv")
+df = pd.read_csv("gtcars.csv")
 
-# Create a composite car identifier (manufacturer + model)
+# Create car identifier: mfr + model (composite stub grain)
 df["car"] = df["mfr"] + " " + df["model"]
 
 # Select relevant columns
-df_display = df[["car", "hp", "msrp"]].copy()
-df_display.columns = ["car", "hp", "price"]
+df_table = df[["car", "hp", "msrp"]].copy()
 
-# Sort by horsepower descending for visual interest
-df_display = df_display.sort_values("hp", ascending=False).reset_index(drop=True)
+# Rename for clarity
+df_table = df_table.rename(columns={"hp": "horsepower", "msrp": "price"})
 
-# Create the GT table
-gt = GT(df_display, rowname_col="car")
-
-# Title and subtitle
+gt = GT(df_table, rowname_col="car")
 gt = gt.tab_header(
-    title="GT Cars Performance",
-    subtitle=md("Horsepower and price for high-performance vehicles")
+    title="GT Cars: Horsepower and Price",
+    subtitle=md("High-performance automobiles with engine power and market value")
 )
 
-# Stub head
-gt = gt.tab_stubhead(label="Car Model")
-
 # Format columns
-gt = gt.fmt_integer(columns="hp")
+gt = gt.fmt_number(columns="horsepower", decimals=0)
 gt = gt.fmt_currency(columns="price", decimals=0)
 
 # Humanize labels
-gt = humanize_labels(gt, df_display)
+gt = humanize_labels(gt, df_table)
 
-# Set column widths
-gt = gt.cols_width(
-    cases={
-        "car": "200px",
-        "hp": "100px",
-        "price": "130px",
-    }
+# Column widths
+gt = gt.cols_width(cases={
+    "horsepower": "120px",
+    "price": "120px",
+})
+
+# Padding
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
 )
 
-# Apply heatmap to horsepower (the hero measure)
-gt = heatmap(gt, "hp", kind="sequential", hue="neutral")
+# Color: price is the sequential hero measure (neutral magnitude → Blues)
+gt = heatmap(gt, "price", kind="sequential", hue="neutral")
 
-# Branding elements
+# Small-color polish
 gt = band(gt, hue="navy")
 gt = stripe(gt)
 gt = stub_tint(gt, hue="navy")
 
-# Source notes - analytical caption first, then provenance
+# Source notes: analytical caption first, then provenance
 gt = gt.tab_source_note(
-    source_note="Horsepower displayed at maximum RPM rating. Price represents manufacturer's suggested retail price (MSRP)."
+    source_note="Price is the manufacturer's suggested retail price (MSRP) in USD."
 )
 gt = gt.tab_source_note(
-    source_note="Source: provided GT cars dataset."
+    source_note="Source: gtcars dataset."
 )
 
-# Polish
+# Frame and hairlines
 gt = hairlines(gt)
 gt = frame(gt)
 
-# Render and save
-finalize(gt)
+# Finalize and save
+finalize(gt, path="table.png")

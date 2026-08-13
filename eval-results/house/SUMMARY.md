@@ -191,3 +191,55 @@ performance` also runs into the known month-label-format ambiguity (see top-leve
 pattern and the other 2 of 3 repeats on the same prompt did it right — haiku-tier
 sampling variance on a small sample, not a skill or comparator gap. (A doc fix for
 this exact `set_index()`-vs-`rowname_col=` confusion has since landed, PR #107.)
+
+## Round 5 (2026-08-13) — verification sweep, no new code changes
+
+A second, independent 6-prompt sweep (`runs/sweep/20260813_161436_house_6prompts`)
+against the exact same commit round 4's numbers above were computed from — checking
+whether round 4's results (and its one catastrophic single-repeat outlier) hold up
+under a fresh random draw. No code changed between round 4 and this round.
+
+| Metric | This round | Round 4 |
+|---|---|---|
+| Mean score | 83.5% | 83.3% |
+| Mean repeat spread | **8.9pp** | 16.4pp |
+| Mean cost | $0.133 | $0.131 |
+
+Mean score is flat (+0.2pp, within noise for an 18-invocation haiku sample). Mean
+repeat spread improved substantially, driven almost entirely by
+`towny_growth_trends` no longer producing a catastrophic outlier (see below).
+
+Per-prompt means: `gtcars_hp_price` 97.4%, `gtcars_top10_by_country` 95.1%,
+`islands_sizes` 85.4%, `sp500_monthly_performance` 77.7%, `towny_growth_trends`
+73.4%, `airquality_monthly_summary` 72.2%.
+
+**`towny_growth_trends`'s catastrophic outlier does not recur, but for a more
+nuanced reason than "the under-coloring bug was fixed."** Round 4's `repeat_1`
+scored 39.5%, and re-reading its actual stored report shows the dominant cause was
+a *different*, already-separately-fixed bug: it built `GT(gt_data.set_index('Town'))`
+instead of `rowname_col="Town"`, so no stub existed at all, cascading zeros across
+row identity, value correctness, column-set matching, stub existence, striping, and
+header branding (PR #107 fixed this exact confusion). That same round-4 report also
+shows a genuine, secondary under-coloring problem in the same candidate: its one
+`heatmap()` call touched only `density_cols`, never the inter-census change
+columns — 0/6 on "Colored-measure selection," the pattern PR #113 targets.
+
+This round's three fresh repeats score `[71.1%, 70.6%, 78.4%]` — clustered, no
+catastrophic outlier. Reading all three `table.py` files confirms all three now
+build the stub with `rowname_col=` (not `.set_index()`) and all three call
+`heatmap()` at least once. But the under-coloring issue is only partially resolved,
+not eliminated: `repeat_1` and `repeat_2` each heatmap only the change/percent
+columns and leave `density_1996`..`density_2021` completely plain (the mirror image
+of round 4's miss); only `repeat_3` heatmaps both groups, matching the ground
+truth's two-colored-measure design (`density_*` sequential, `pop_change_*_pct`
+diverging). The comparator's own sub-scores show this directly: "Colored-measure
+selection" is 0/6 for `repeat_1`/`repeat_2` and 3/6 for `repeat_3`. So: the
+catastrophic-score shape is gone (no repeat is stacking a missing-stub failure on
+top of an under-coloring failure anymore), and the specific `set_index()` bug is
+confirmed absent in a fresh sample, but "leave one of the two designated colorable
+measures completely plain" still shows up in 2 of 3 repeats here — it just no
+longer compounds into a catastrophic score on its own.
+
+Execution: 24/24 successful (no crashes), consistent with `prose` and `scripts`
+this round — see the top-level `SUMMARY.md` for the caveat on why this isn't
+claimed as a rigorously-proven improvement over any pre-fix baseline.

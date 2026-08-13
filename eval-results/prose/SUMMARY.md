@@ -162,3 +162,40 @@ dataset), producing row-identity mismatches the comparator can't reconcile (e.g.
 Lamborghini "aventador" mismatching the ground truth's "ferrari laferrari" once names
 don't line up); the other two repeats on the same prompt built the composite stub
 correctly. Sampling variance on a small repeat count, not a mechanical bug.
+
+## Round 5 (2026-08-13) — verification sweep, no new code changes
+
+A second, independent 6-prompt sweep (`runs/sweep/20260813_161439_prose_6prompts`)
+against the exact same commit round 4's numbers above were computed from — checking
+whether round 4's results hold up under a fresh random draw. No code changed between
+round 4 and this round.
+
+| Metric | This round | Round 4 |
+|---|---|---|
+| Mean score | 87.9% | 84.7% |
+| Mean repeat spread | 9.9pp | **8.2pp** (worse) |
+| Mean cost | $0.164 | $0.190 |
+
+Mean score is up (+3.2pp) and mean cost is down, both within the range a fresh
+18-invocation haiku sample can move by chance. Mean repeat spread is mildly worse
+than round 4, not better — this round does not show the same clean consistency win
+`house` shows below.
+
+Per-prompt means: `islands_sizes` 95.9%, `gtcars_hp_price` 95.6%,
+`airquality_monthly_summary` 94.5%, `gtcars_top10_by_country` 90.4%,
+`towny_growth_trends` 81.8%, `sp500_monthly_performance` 69.1% (still the hardest).
+
+`towny_growth_trends` has this round's widest spread (28.9pp: `[92.8%, 88.7%,
+63.9%]`). Reading the reports: all three repeats have an identical, minor row-set
+mismatch (one town swapped for another right at the rank-15 cutoff, 9/10 on row
+identity for all three — not the driver of the spread). The driver is
+"Colored-measure selection," which is 6/6 for `repeat_1`/`repeat_2` but only 3/6 for
+`repeat_3`; reading `repeat_3`'s `table.py` shows it applies `data_color(...,
+palette="Blues")` (a sequential palette) to the inter-census percent-change columns,
+which are signed values the ground truth colors with a diverging fill — a design
+choice (or a value-matching mismatch stemming from it) not fully root-caused here;
+flagged for a follow-up look rather than investigated to completion in this pass.
+
+Execution: 24/24 successful (no crashes) — see the top-level `SUMMARY.md` for the
+caveat on why this isn't claimed as a rigorously-proven improvement over any pre-fix
+baseline.

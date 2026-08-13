@@ -1,8 +1,8 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080340_scripts_6prompts/prompts/gtcars_hp_price/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-verification-sweep/runs/sweep/20260813_161442_scripts_6prompts/prompts/gtcars_hp_price/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-verification-sweep/prompts/easy/ground_truth/gtcars_hp_price.py
 
-TOTAL: 82/85 (96.5%)
-  Data-compliance:        42/42
-  Formatting-compliance:  40/43
+TOTAL: 91/91 (100.0%)
+  Data-compliance:        43/43
+  Formatting-compliance:  48/48
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [PASS] [MECHANICAL] Computed/derived value correctness: 10/10 -- 2/2 canonical measures have a value-matching candidate column
@@ -11,12 +11,12 @@ TOTAL: 82/85 (96.5%)
 [N/A] [MECHANICAL] Explicit prompt-instruction compliance: 0/0 -- prompt made no explicit structural demands (REQUIRED_INSTRUCTIONS empty)
 [PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py)
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Neither the ground truth nor the candidate uses row grouping. Since grouping is not employed by either table, there is no discretionary grouping choice to evaluate.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py)
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 4/5 -- Both 'hp' and 'msrp' columns correctly label their underlying concepts of horsepower and price (MSRP). However, the candidate uses abbreviated labels ('hp', 'msrp') while the ground truth spells them out fully ('Horsepower', 'Price (MSRP)'), which is slightly less immediately clear and lacks the parenthetical unit clarification the ground truth provides.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=47, body not fully color-covered -> expected striping=True, actual=True
@@ -26,11 +26,11 @@ TOTAL: 82/85 (96.5%)
 [PASS] [MECHANICAL] Stripe color (neutral grey): 2/2 -- expected #F6F6F6, got '#F6F6F6'
 [PASS] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 2/2 -- 1/1 hero-uncolored measures are plain text
 [N/A] [MECHANICAL] Signed-percent force_sign correctness: 0/0 -- ground truth declares no percent-semantic columns
-[FAIL] [MECHANICAL] Caption is substantive: 0/3 -- candidate has no caption
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 8 word(s) beyond the title/subtitle (overlap 11%): "Price (MSRP) represents the manufacturer's suggested retail price and is the primary measure of value."
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 1/1, truncate=False correct 1/1, autocolor_text=True correct 1/1, reverse orientation matches truth 1/1
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 2/2 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py)
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/easy/ground_truth/gtcars_hp_price.py)
+[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- Both tables use the title 'GT Cars: Horsepower and Price', capturing the identical core framing. The subtitle differs slightly ('All 47 makes and models in the gtcars dataset, sorted from highest to lowest MSRP' vs. 'High-performance sports and luxury vehicles'), but the primary title—the main reference frame—is identical and accurately captures the table's subject.
+[PASS] [JUDGE] Column order quality: 2/2 -- judge score 5/5 -- Both tables present the same three-column structure: Car name (stub), Horsepower, Price (MSRP), in a logical left-to-right sequence. The candidate's order is equally sensible—the key measures (hp and msrp) are grouped together on the right side of the car identifier, which is a natural reading order for this analytical story.

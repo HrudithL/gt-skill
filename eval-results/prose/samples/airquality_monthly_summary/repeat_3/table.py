@@ -2,107 +2,122 @@ import pandas as pd
 import numpy as np
 from great_tables import GT, style, loc
 
-# Step 1: Load and clean data
+# Step 1: Load and clean the data
 df = pd.read_csv("airquality.csv")
 
-# Compute monthly averages, grouping by Month
-monthly = df.groupby("Month")[["Temp", "Wind", "Ozone"]].mean().reset_index()
+# Calculate monthly averages
+monthly = df.groupby("Month").agg({
+    "Temp": "mean",
+    "Wind": "mean",
+    "Ozone": "mean"
+}).reset_index()
 
-# Create month names for better readability
-month_names = {
-    5: "May",
-    6: "June",
-    7: "July",
-    8: "August",
-    9: "September",
-}
+# Map month numbers to names
+month_names = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
 monthly["Month_Name"] = monthly["Month"].map(month_names)
 
-# Drop the numeric month column and reorder
-monthly = monthly[["Month_Name", "Temp", "Wind", "Ozone"]]
-monthly.columns = ["Month", "Temperature", "Wind", "Ozone"]
+# Prepare final dataframe with Month as stub
+df_display = monthly[["Month_Name", "Temp", "Wind", "Ozone"]].copy()
+df_display.columns = ["Month", "Avg_Temp", "Avg_Wind", "Avg_Ozone"]
 
-# Set Month as the index for the stub
-monthly_display = monthly.set_index("Month").reset_index()
+# Step 3: Big Color — compute domains for color fills
+# Temperature (primary neutral measure) → Blues
+temp_lo = float(np.nanmin(df_display[["Avg_Temp"]].to_numpy()))
+temp_hi = float(np.nanmax(df_display[["Avg_Temp"]].to_numpy()))
 
-# Step 2: Organize columns - Month is the stub, Temperature and Ozone are our measured values
-# Step 3: Big Color - Both Temperature (as primary) and Ozone are distinct air quality dimensions
-# Compute domains for the colored measures
-temp_cols = ["Temperature"]
-ozone_cols = ["Ozone"]
-temp_lo = float(np.nanmin(monthly[temp_cols].to_numpy()))
-temp_hi = float(np.nanmax(monthly[temp_cols].to_numpy()))
-ozone_lo = float(np.nanmin(monthly[ozone_cols].to_numpy()))
-ozone_hi = float(np.nanmax(monthly[ozone_cols].to_numpy()))
+# Ozone (secondary neutral measure) → Greens (fallback neutral ladder)
+ozone_lo = float(np.nanmin(df_display[["Avg_Ozone"]].to_numpy()))
+ozone_hi = float(np.nanmax(df_display[["Avg_Ozone"]].to_numpy()))
 
-# Step 4 & 5: Build the table with all styling
+# Step 2: Build the table
 gt = (
-    GT(monthly, rowname_col="Month")
-    # Column labels
+    GT(df_display, rowname_col="Month")
+    # Step 2: Column organization
     .cols_label(
-        Temperature="Temperature (°F)",
-        Wind="Wind Speed (mph)",
-        Ozone="Ozone (ppb)",
+        Avg_Temp="Avg. Temperature (°F)",
+        Avg_Wind="Avg. Wind Speed (mph)",
+        Avg_Ozone="Avg. Ozone (ppb)"
     )
-    # Format numbers
-    .fmt_number(columns=["Temperature", "Wind", "Ozone"], decimals=1, use_seps=False)
-    .sub_missing(columns=["Temperature", "Wind", "Ozone"], missing_text="—")
-    # Big Color - Temperature (Blues - neutral magnitude)
+    .cols_width(cases={
+        "Month": "120px",
+        "Avg_Temp": "140px",
+        "Avg_Wind": "140px",
+        "Avg_Ozone": "140px"
+    })
+    # Step 3: Big Color — gradient fills for temperature and ozone
+    .fmt_number(columns=["Avg_Temp", "Avg_Wind", "Avg_Ozone"], decimals=1)
     .data_color(
-        columns="Temperature",
+        columns=["Avg_Temp"],
         palette="Blues",
         domain=[temp_lo, temp_hi],
         truncate=False,
         na_color="#808080",
     )
-    # Big Color - Ozone (Greens - distinct air quality indicator)
     .data_color(
-        columns="Ozone",
+        columns=["Avg_Ozone"],
         palette="Greens",
         domain=[ozone_lo, ozone_hi],
         truncate=False,
         na_color="#808080",
     )
-    # Step 4: Heading band (fixed branding)
+    # Step 4: Heading band — dark navy with white text
     .tab_header(
-        title="Air Quality by Month",
-        subtitle="Average temperature, wind speed, and ozone levels",
-    )
-    .tab_style(
-        style=style.fill(color="#08306B"),
-        locations=loc.column_labels(),
-    )
-    .tab_style(
-        style=style.text(color="white", weight="bold"),
-        locations=loc.column_labels(),
+        title="Air Quality Monthly Summary",
+        subtitle="Average Temperature, Wind Speed, and Ozone Levels (May–September)"
     )
     .tab_options(
+        heading_background_color="#08306B",
+        heading_align="center",
+        column_labels_background_color="#08306B",
         column_labels_border_bottom_color="#CCCCCC",
         column_labels_border_bottom_width="2px",
     )
-    # Step 5: Small Color polish
-    # (a) Cell borders
+    .tab_style(
+        style=style.text(color="white"),
+        locations=loc.column_labels()
+    )
+    # Step 5: Small-color polish
     .tab_options(
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
-        row_striping_background_color="#F6F6F6",
+        table_border_top_style="solid",
+        table_border_top_color="#CCCCCC",
+        table_border_top_width="1px",
+        table_border_bottom_style="solid",
+        table_border_bottom_color="#CCCCCC",
+        table_border_bottom_width="1px",
+        table_border_left_style="solid",
+        table_border_left_color="#CCCCCC",
+        table_border_left_width="1px",
+        table_border_right_style="solid",
+        table_border_right_color="#CCCCCC",
+        table_border_right_width="1px",
     )
-    # (c) Row striping
-    .opt_row_striping()
-    # (d) Stub tint
+    .opt_row_striping(row_striping=True)
+    .tab_options(row_striping_background_color="#F6F6F6")
     .tab_style(
         style=style.fill(color="#EAF0F6"),
-        locations=loc.stub(),
+        locations=loc.stub()
     )
-    # Step 6: Titles & annotations (footer notes)
+    .sub_missing(columns=["Avg_Temp", "Avg_Wind", "Avg_Ozone"], missing_text="—")
+    .tab_options(
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
+    )
+    # Step 6: Titles & annotations
     .tab_source_note(
-        source_note="Temperature and Ozone are colored to highlight their magnitudes across months; Wind speed is shown as reference data.",
+        source_note="Average Ozone and Temperature are both measured across the five-month period. Wind speed is reported as context."
     )
     .tab_source_note(
-        source_note="Source: Air quality dataset (airquality.csv).",
+        source_note="Source: airquality.csv"
     )
 )
 
-# Render to PNG
-gt.gtsave("table.png")
+# Render
+gt.gtsave("table.png", expand=15)
+print("✓ table.png created successfully")

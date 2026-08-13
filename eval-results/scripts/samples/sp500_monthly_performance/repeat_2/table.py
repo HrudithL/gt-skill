@@ -1,139 +1,143 @@
-import pandas as pd
+"""S&P 500 monthly performance summary, 2010-2015."""
 import numpy as np
-from great_tables import GT, style, loc
+import pandas as pd
+from great_tables import GT, loc, style
+from gt_consistency import PALETTE, frame, hairlines, finalize, heatmap, band, stripe, stub_tint
 
-# Read the data
-df = pd.read_csv("sp500.csv")
-df["date"] = pd.to_datetime(df["date"])
+df = pd.read_csv("sp500.csv", parse_dates=["date"]).sort_values("date")
 
 # Filter to 2010-2015
-df = df[(df["date"].dt.year >= 2010) & (df["date"].dt.year <= 2015)]
-
-# Sort by date
-df = df.sort_values("date")
-
-# Calculate intra-month high-low (daily gain/loss)
-df["daily_gain"] = df["high"] - df["open"]
-df["daily_loss"] = df["open"] - df["low"]
-
-# Group by year-month
+df = df[(df["date"].dt.year >= 2010) & (df["date"].dt.year <= 2015)].copy()
 df["year_month"] = df["date"].dt.to_period("M")
 
-# Aggregate monthly data
+# Monthly aggregation: compute statistics per month
 monthly = df.groupby("year_month").agg(
-    open_price=("open", "first"),
-    close_price=("close", "last"),
-    volume_avg=("volume", "mean"),
-    highest_gain=("daily_gain", "max"),
-    highest_loss=("daily_loss", "max"),
+    open=("open", "first"),
+    close=("close", "last"),
+    high=("high", "max"),
+    low=("low", "min"),
+    volume=("volume", "mean"),
 ).reset_index()
 
-# Calculate percent change
-monthly["pct_change"] = (
-    (monthly["close_price"] - monthly["open_price"]) / monthly["open_price"]
-)
+# Compute percent change (close - open) / open
+monthly["pct_change"] = (monthly["close"] - monthly["open"]) / monthly["open"]
 
-# Format the year_month for display
-monthly["period"] = monthly["year_month"].astype(str)
+# Compute daily intraday gain/loss per month (high - low)
+monthly["daily_range"] = df.groupby("year_month").apply(
+    lambda x: (x["high"] - x["low"]).max()
+).reset_index(drop=True)
 
-# Select and reorder columns
+# Compute best single-day gain (max(high - open) within the month)
+monthly["best_day_gain"] = df.groupby("year_month").apply(
+    lambda x: (x["high"] - x["open"]).max()
+).reset_index(drop=True)
+
+# Compute worst single-day loss (min(low - open) within the month, i.e., most negative)
+monthly["worst_day_loss"] = df.groupby("year_month").apply(
+    lambda x: (x["low"] - x["open"]).min()
+).reset_index(drop=True)
+
+# Format display label: "Mon YYYY"
+monthly["month_label"] = monthly["year_month"].dt.strftime("%b %Y")
+
+# Select and reorder columns for display
 monthly = monthly[
-    ["period", "open_price", "close_price", "pct_change", "volume_avg", "highest_gain", "highest_loss"]
-]
+    ["month_label", "open", "close", "pct_change", "volume", "best_day_gain", "worst_day_loss"]
+].reset_index(drop=True)
 
-# Create the table
+# Compute domains for color fills
+pct_change_m = float(np.nanmax(np.abs(monthly["pct_change"].to_numpy())))
+volume_min = float(np.nanmin(monthly["volume"].to_numpy()))
+volume_max = float(np.nanmax(monthly["volume"].to_numpy()))
+best_day_gain_max = float(np.nanmax(monthly["best_day_gain"].to_numpy()))
+worst_day_loss_min = float(np.nanmin(monthly["worst_day_loss"].to_numpy()))
+
 gt = (
-    GT(monthly, rowname_col="period")
-    .cols_label(
-        open_price="Opening Price",
-        close_price="Closing Price",
-        pct_change="% Change",
-        volume_avg="Avg Daily Volume",
-        highest_gain="Highest Single-Day Gain",
-        highest_loss="Highest Single-Day Loss",
-    )
-    .fmt_number(
-        columns=["open_price", "close_price"],
-        decimals=2,
-        use_seps=True,
-    )
-    .fmt_number(
-        columns=["volume_avg"],
-        decimals=0,
-        use_seps=True,
-    )
-    .fmt_number(
-        columns=["highest_gain", "highest_loss"],
-        decimals=2,
-        use_seps=True,
-    )
-    .fmt_percent(
-        columns=["pct_change"],
-        decimals=2,
-        force_sign=True,
-    )
-    .data_color(
-        columns=["pct_change"],
-        palette="RdYlGn",
-        domain=[
-            float(np.nanmin(monthly[["pct_change"]].to_numpy())),
-            float(np.nanmax(monthly[["pct_change"]].to_numpy())),
-        ],
-        truncate=False,
-        na_color="#808080",
-    )
-    .data_color(
-        columns=["volume_avg"],
-        palette="Blues",
-        domain=[
-            float(np.nanmin(monthly[["volume_avg"]].to_numpy())),
-            float(np.nanmax(monthly[["volume_avg"]].to_numpy())),
-        ],
-        truncate=False,
-        na_color="#808080",
-    )
+    GT(monthly, rowname_col="month_label")
     .tab_header(
-        title="S&P 500 Monthly Performance Summary (2010–2015)",
-        subtitle="Opening/closing prices, percent change, trading volume, and daily gains/losses",
+        title="S&P 500 Monthly Performance",
+        subtitle="2010–2015: Opening price, closing price, monthly percent change, average daily volume, and daily extremes",
     )
-    .tab_stubhead(label="Period")
-    .tab_options(
-        table_body_hlines_style="solid",
-        table_body_hlines_color="#E8E8E8",
-        table_body_hlines_width="1px",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
-        table_border_top_style="solid",
-        table_border_top_color="#CCCCCC",
-        table_border_top_width="1px",
-        table_border_bottom_style="solid",
-        table_border_bottom_color="#CCCCCC",
-        table_border_bottom_width="1px",
-        table_border_left_style="solid",
-        table_border_left_color="#CCCCCC",
-        table_border_left_width="1px",
-        table_border_right_style="solid",
-        table_border_right_color="#CCCCCC",
-        table_border_right_width="1px",
-        heading_padding="6px",
-        column_labels_padding="6px",
-        column_labels_padding_horizontal="8px",
-        data_row_padding="5px",
-        data_row_padding_horizontal="8px",
-        source_notes_padding="6px",
+    .tab_spanner(label="Price", columns=["open", "close"])
+    .tab_spanner(label="Monthly Summary", columns=["pct_change", "volume"])
+    .tab_spanner(label="Daily Range ($)", columns=["best_day_gain", "worst_day_loss"])
+    .cols_label(
+        open="Open",
+        close="Close",
+        pct_change="% Change",
+        volume="Avg Volume",
+        best_day_gain="Best Day Gain",
+        worst_day_loss="Worst Day Loss",
     )
-    .opt_row_striping()
+    # Formatting
+    .fmt_currency(columns=["open", "close", "best_day_gain", "worst_day_loss"], currency="USD", decimals=2)
+    .fmt_number(columns=["volume"], decimals=0, use_seps=True)
+    .fmt_percent(columns=["pct_change"], decimals=2, force_sign=True)
+    # Color fills: percent change (diverging) and average volume (sequential)
+)
+
+gt = heatmap(gt, "pct_change", kind="diverging", hue="default", domain=[-pct_change_m, pct_change_m])
+gt = heatmap(gt, "volume", kind="sequential", hue="neutral", domain=[volume_min, volume_max])
+
+# Column alignment
+gt = gt.cols_align(align="right", columns=["open", "close", "pct_change", "volume", "best_day_gain", "worst_day_loss"])
+
+# Column-group vertical dividers at spanner seams
+gt = (
+    gt.tab_style(
+        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
+        locations=loc.body(columns="close"),
+    )
     .tab_style(
-        style=style.fill(color="#EAF0F6"),
-        locations=loc.stub(),
+        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
+        locations=loc.column_labels(columns="close"),
     )
-    .tab_source_note(
-        source_note="Percent change is calculated as (close - open) / open. Highest single-day gain/loss represents the largest intraday price movement (high - open and open - low, respectively)."
+    .tab_style(
+        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
+        locations=loc.body(columns="volume"),
     )
-    .tab_source_note(
-        source_note="Source: S&P 500 daily historical data (sp500.csv)."
+    .tab_style(
+        style=style.borders(sides="right", color="#D0D0D0", weight="1px"),
+        locations=loc.column_labels(columns="volume"),
     )
 )
 
-# Render
-gt.gtsave("table.png", expand=15)
+# Compact layout
+gt = gt.cols_width(cases={
+    "month_label": "75px",
+    "open": "85px",
+    "close": "85px",
+    "pct_change": "80px",
+    "volume": "110px",
+    "best_day_gain": "100px",
+    "worst_day_loss": "100px",
+})
+
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
+
+# Footer notes
+gt = (
+    gt.tab_source_note(
+        source_note=(
+            "Best day gain = largest intraday high within the month; worst day loss = largest intraday decline. "
+            "Monthly % change = (close − open) ÷ open. Average volume is the mean daily trading volume across the month."
+        )
+    )
+    .tab_source_note(source_note="Source: S&P 500 daily closing prices, 1950–2015.")
+)
+
+# Apply branding and polish helpers
+gt = band(gt)
+gt = stripe(gt)
+gt = stub_tint(gt)
+gt = frame(gt)
+gt = hairlines(gt)
+
+finalize(gt, "table.png")

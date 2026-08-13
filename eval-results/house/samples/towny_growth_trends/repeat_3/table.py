@@ -1,114 +1,124 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, loc, md, style
-from house_table import PALETTE, frame, hairlines, finalize, band, \
-    stripe, stub_tint, heatmap, humanize_labels
+from great_tables import GT, md, loc, style
+from house_table import (
+    PALETTE, frame, hairlines, finalize, band, stripe,
+    stub_tint, heatmap, humanize_labels
+)
 
 # Read data
 df = pd.read_csv("towny.csv")
 
-# Calculate overall growth rate (1996 to 2021)
-df["overall_growth_pct"] = np.where(
+# Compute overall population growth rate (1996-2021)
+df["total_growth_pct"] = np.where(
     df["population_1996"] > 0,
     (df["population_2021"] - df["population_1996"]) / df["population_1996"],
     np.nan
 )
 
-# Select top 15 by overall growth rate, excluding NaN values
-df_top15 = df.dropna(subset=["overall_growth_pct"]).nlargest(15, "overall_growth_pct")
+# Select top 15 fastest-growing towns
+top_15 = df.nlargest(15, "total_growth_pct").copy()
 
-# Create a working copy for the display table
-display_df = df_top15.copy()
+# Prepare the table data with density values and period changes
+result = pd.DataFrame()
+result["Town"] = top_15["name"].reset_index(drop=True)
 
-# Prepare data for display
-# Select key columns: town name, populations, densities, and period changes
-display_df = display_df[[
-    "name",
-    "population_1996", "population_2001", "population_2006", "population_2011", "population_2016", "population_2021",
-    "density_1996", "density_2001", "density_2006", "density_2011", "density_2016", "density_2021",
-    "pop_change_1996_2001_pct", "pop_change_2001_2006_pct", "pop_change_2006_2011_pct",
-    "pop_change_2011_2016_pct", "pop_change_2016_2021_pct"
-]].reset_index(drop=True)
+# Density columns for each census year
+result["Density 1996"] = top_15["density_1996"].reset_index(drop=True)
+result["Density 2001"] = top_15["density_2001"].reset_index(drop=True)
+result["Density 2006"] = top_15["density_2006"].reset_index(drop=True)
+result["Density 2011"] = top_15["density_2011"].reset_index(drop=True)
+result["Density 2016"] = top_15["density_2016"].reset_index(drop=True)
+result["Density 2021"] = top_15["density_2021"].reset_index(drop=True)
 
-# Rename columns for cleaner display
-display_df.columns = [
-    "Town",
-    "Pop 1996", "Pop 2001", "Pop 2006", "Pop 2011", "Pop 2016", "Pop 2021",
-    "Den 1996", "Den 2001", "Den 2006", "Den 2011", "Den 2016", "Den 2021",
-    "Δ 96-01 %", "Δ 01-06 %", "Δ 06-11 %", "Δ 11-16 %", "Δ 16-21 %"
-]
+# Period changes (as percentages, already in the data but we compute to be safe)
+result["Change 96-01 %"] = np.where(
+    top_15["density_1996"].reset_index(drop=True) > 0,
+    (top_15["density_2001"].reset_index(drop=True) - top_15["density_1996"].reset_index(drop=True)) / top_15["density_1996"].reset_index(drop=True),
+    np.nan
+)
+result["Change 01-06 %"] = np.where(
+    top_15["density_2001"].reset_index(drop=True) > 0,
+    (top_15["density_2006"].reset_index(drop=True) - top_15["density_2001"].reset_index(drop=True)) / top_15["density_2001"].reset_index(drop=True),
+    np.nan
+)
+result["Change 06-11 %"] = np.where(
+    top_15["density_2006"].reset_index(drop=True) > 0,
+    (top_15["density_2011"].reset_index(drop=True) - top_15["density_2006"].reset_index(drop=True)) / top_15["density_2006"].reset_index(drop=True),
+    np.nan
+)
+result["Change 11-16 %"] = np.where(
+    top_15["density_2011"].reset_index(drop=True) > 0,
+    (top_15["density_2016"].reset_index(drop=True) - top_15["density_2011"].reset_index(drop=True)) / top_15["density_2011"].reset_index(drop=True),
+    np.nan
+)
+result["Change 16-21 %"] = np.where(
+    top_15["density_2016"].reset_index(drop=True) > 0,
+    (top_15["density_2021"].reset_index(drop=True) - top_15["density_2016"].reset_index(drop=True)) / top_15["density_2016"].reset_index(drop=True),
+    np.nan
+)
 
-# Create GT object
-gt = GT(display_df, rowname_col="Town")
+# Reset index to ensure Town is a proper column for the stub
+result = result.reset_index(drop=True)
+
+# Create GT table
+gt = GT(result, rowname_col="Town")
+
+# Format density columns (no decimals for large values)
+density_cols = ["Density 1996", "Density 2001", "Density 2006", "Density 2011", "Density 2016", "Density 2021"]
+for col in density_cols:
+    gt = gt.fmt_number(columns=col, decimals=1)
+
+# Format percentage changes
+pct_cols = ["Change 96-01 %", "Change 01-06 %", "Change 06-11 %", "Change 11-16 %", "Change 16-21 %"]
+for col in pct_cols:
+    gt = gt.fmt_percent(columns=col, decimals=1, scale_values=False, force_sign=True)
+
+# Apply missing value substitution
+for col in density_cols + pct_cols:
+    gt = gt.sub_missing(columns=col, missing_text="—")
 
 # Add title and subtitle
 gt = gt.tab_header(
-    title="Population Growth Trends: Top 15 Fastest-Growing Ontario Towns",
-    subtitle="Density changes and period-over-period growth rates, 1996–2021"
-)
-
-# Format population columns as integers
-pop_cols = ["Pop 1996", "Pop 2001", "Pop 2006", "Pop 2011", "Pop 2016", "Pop 2021"]
-gt = gt.fmt_integer(columns=pop_cols)
-
-# Format density columns with 1 decimal
-density_cols = ["Den 1996", "Den 2001", "Den 2006", "Den 2011", "Den 2016", "Den 2021"]
-gt = gt.fmt_number(columns=density_cols, decimals=1)
-
-# Format period change columns as percentages
-change_cols = ["Δ 96-01 %", "Δ 01-06 %", "Δ 06-11 %", "Δ 11-16 %", "Δ 16-21 %"]
-gt = gt.fmt_percent(columns=change_cols, decimals=1, scale_values=False, force_sign=True)
-
-# Apply diverging heatmap to period change columns (the hero measure)
-gt = heatmap(gt, change_cols, kind="diverging", hue="default")
-
-# Add spanner headers for visual grouping
-gt = gt.tab_spanner(label="Population (Count)", columns=pop_cols)
-gt = gt.tab_spanner(label="Density (per km²)", columns=density_cols)
-gt = gt.tab_spanner(label="Period Growth Rates", columns=change_cols)
-
-# Stub tint and band
-gt = band(gt, shade="dark", hue="navy")
-gt = stub_tint(gt, hue="navy")
-
-# Striping
-gt = stripe(gt)
-
-# Hairlines
-gt = hairlines(gt)
-
-# Handle missing values
-gt = gt.sub_missing(columns=change_cols, missing_text="—")
-
-# Column width and padding
-gt = gt.cols_width(cases={
-    "Town": "180px",
-    "Pop 1996": "95px", "Pop 2001": "95px", "Pop 2006": "95px",
-    "Pop 2011": "95px", "Pop 2016": "95px", "Pop 2021": "95px",
-    "Den 1996": "85px", "Den 2001": "85px", "Den 2006": "85px",
-    "Den 2011": "85px", "Den 2016": "85px", "Den 2021": "85px",
-    "Δ 96-01 %": "90px", "Δ 01-06 %": "90px", "Δ 06-11 %": "90px",
-    "Δ 11-16 %": "90px", "Δ 16-21 %": "90px"
-})
-
-# Padding
-gt = gt.tab_options(
-    heading_padding="6px",
-    column_labels_padding="6px",
-    column_labels_padding_horizontal="8px",
-    data_row_padding="5px",
-    data_row_padding_horizontal="8px",
-    source_notes_padding="6px"
+    title="Population Density Growth in Ontario's Fastest-Growing Towns",
+    subtitle="Top 15 towns by population growth rate (1996–2021)"
 )
 
 # Add source notes
 gt = gt.tab_source_note(
-    source_note="Ranked by overall population growth rate (1996–2021) as percentage change. All municipality types included. Period growth rates shown as percentage changes between consecutive census years."
+    source_note="Ranked by overall population growth rate 1996–2021; all Ontario municipality types included."
 )
 gt = gt.tab_source_note(
-    source_note="Source: Statistics Canada census data, 1996–2021."
+    source_note="Source: provided dataset."
 )
 
-# Frame and finalize
+# Add stub head
+gt = gt.tab_stubhead(label="Town")
+
+# Create spanners for density and change sections
+gt = gt.tab_spanner(label="Population Density (persons/km²)", columns=density_cols)
+gt = gt.tab_spanner(label="Period Change (%)", columns=pct_cols)
+
+# Add vertical divider at spanner boundaries
+gt = gt.tab_style(
+    style=style.borders(sides="right", color=PALETTE["neutral"]["vertical_divider"], weight="1px"),
+    locations=[loc.body(columns="Density 2021"), loc.column_labels(columns="Density 2021")]
+)
+
+# Apply house format styling
+gt = band(gt, hue="navy")
+gt = stub_tint(gt, hue="navy")
+gt = stripe(gt)
+
+# Apply heatmaps to the density columns (sequential - growth is positive)
+gt = heatmap(gt, density_cols, kind="sequential", hue="positive")
+
+# Apply heatmap to period changes (diverging - positive and negative both meaningful)
+gt = heatmap(gt, pct_cols, kind="diverging", hue="default")
+
+# Apply frame and hairlines
 gt = frame(gt)
+gt = hairlines(gt)
+
+# Finalize and save
 finalize(gt, path="table.png")

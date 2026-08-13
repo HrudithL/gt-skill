@@ -1,21 +1,21 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, md
-from gt_consistency import PALETTE, band, hairlines, stripe, stub_tint, frame, finalize, heatmap
+from great_tables import GT, md, style, loc
 
-gt = None  # placeholder for the checker
+df = pd.read_csv("airquality.csv")
 
-# Step 1: Load and clean the data
-df_raw = pd.read_csv("airquality.csv")
+df["Ozone"] = pd.to_numeric(df["Ozone"], errors="coerce")
+df["Wind"] = pd.to_numeric(df["Wind"], errors="coerce")
+df["Temp"] = pd.to_numeric(df["Temp"], errors="coerce")
+df["Month"] = pd.to_numeric(df["Month"], errors="coerce")
 
-# Ensure numeric columns are properly typed
-df_raw["Ozone"] = pd.to_numeric(df_raw["Ozone"], errors="coerce")
-df_raw["Wind"] = pd.to_numeric(df_raw["Wind"], errors="coerce")
-df_raw["Temp"] = pd.to_numeric(df_raw["Temp"], errors="coerce")
-df_raw["Month"] = pd.to_numeric(df_raw["Month"], errors="coerce")
+agg_df = df.groupby("Month").agg({
+    "Temp": "mean",
+    "Wind": "mean",
+    "Ozone": "mean"
+}).reset_index()
 
-# Group by month and calculate averages
-month_mapping = {
+month_names = {
     5: "May",
     6: "June",
     7: "July",
@@ -23,83 +23,92 @@ month_mapping = {
     9: "September"
 }
 
-df = df_raw.groupby("Month").agg({
-    "Ozone": "mean",
-    "Wind": "mean",
-    "Temp": "mean"
-}).reset_index()
+agg_df["Month"] = agg_df["Month"].map(month_names)
 
-df["Month_Name"] = df["Month"].map(month_mapping)
-df = df[["Month_Name", "Temp", "Wind", "Ozone"]]
-df.columns = ["Month", "Temp", "Wind", "Ozone"]
+cols_measure = ["Temp", "Wind", "Ozone"]
 
-# Step 2: Create the GT table with stub
-gt = GT(df, rowname_col="Month")
+lo_temp = float(np.nanmin(agg_df[["Temp"]].to_numpy()))
+hi_temp = float(np.nanmax(agg_df[["Temp"]].to_numpy()))
 
-# Step 3: Add column labels and styling
-gt = gt.cols_label(
-    Temp="Avg Temperature",
-    Wind="Avg Wind Speed",
-    Ozone="Avg Ozone"
+lo_ozone = float(np.nanmin(agg_df[["Ozone"]].to_numpy()))
+hi_ozone = float(np.nanmax(agg_df[["Ozone"]].to_numpy()))
+
+gt = (
+    GT(agg_df, rowname_col="Month")
+    .fmt_number(columns=["Temp", "Wind", "Ozone"], decimals=1)
+    .cols_label(
+        Temp="Temperature (°F)",
+        Wind="Wind Speed (mph)",
+        Ozone="Ozone (ppb)"
+    )
+    .data_color(
+        columns=["Temp"],
+        palette="Blues",
+        domain=[lo_temp, hi_temp],
+        truncate=False,
+        na_color="#808080",
+    )
+    .data_color(
+        columns=["Ozone"],
+        palette="Reds",
+        domain=[lo_ozone, hi_ozone],
+        truncate=False,
+        na_color="#808080",
+    )
+    .tab_header(
+        title="Air Quality Metrics by Month",
+        subtitle="Average Temperature, Wind Speed, and Ozone Levels (May–September 1973)"
+    )
+    .tab_options(
+        table_border_top_style="solid",
+        table_border_top_color="#CCCCCC",
+        table_border_top_width="1px",
+        table_border_bottom_style="solid",
+        table_border_bottom_color="#CCCCCC",
+        table_border_bottom_width="1px",
+        table_border_left_style="solid",
+        table_border_left_color="#CCCCCC",
+        table_border_left_width="1px",
+        table_border_right_style="solid",
+        table_border_right_color="#CCCCCC",
+        table_border_right_width="1px",
+        table_body_hlines_style="solid",
+        table_body_hlines_color="#E8E8E8",
+        table_body_hlines_width="1px",
+        column_labels_border_bottom_color="#CCCCCC",
+        column_labels_border_bottom_width="2px",
+        column_labels_background_color="#08306B",
+        column_labels_font_weight="bold",
+        heading_padding="6px",
+        column_labels_padding="6px",
+        column_labels_padding_horizontal="8px",
+        data_row_padding="5px",
+        data_row_padding_horizontal="8px",
+        source_notes_padding="6px",
+        row_striping_background_color="#F6F6F6",
+    )
+    .tab_style(
+        style=style.fill(color="#08306B"),
+        locations=loc.column_labels(),
+    )
+    .tab_style(
+        style=style.text(color="white"),
+        locations=loc.column_labels(),
+    )
+    .tab_style(
+        style=style.fill(color="#EAF0F6"),
+        locations=loc.stub(),
+    )
+    .opt_row_striping()
+    .cols_width(cases={
+        "Month": "100px",
+        "Temp": "130px",
+        "Wind": "140px",
+        "Ozone": "130px"
+    })
+    .sub_missing(columns=["Temp", "Wind", "Ozone"], missing_text="—")
+    .tab_source_note(source_note="Average values computed across all observations for each month.")
+    .tab_source_note(source_note="Source: airquality.csv")
 )
 
-# Apply formatting to numeric columns (using original column names)
-gt = gt.fmt_number(
-    columns=["Temp", "Wind", "Ozone"],
-    decimals=1,
-    use_seps=True
-)
-
-# Step 3: Apply heatmaps for the two main measures (temperature and ozone)
-# Temperature is a magnitude measure (neutral)
-gt = heatmap(gt, "Temp", kind="sequential", hue="neutral")
-
-# Ozone is a magnitude measure (neutral) - secondary measure
-gt = heatmap(gt, "Ozone", kind="sequential", hue="neutral")
-
-# Wind speed stays plain (no fill) as it's not the focus of the analysis
-
-# Step 4: Apply the fixed heading band
-gt = band(gt)
-
-# Step 5: Apply small color polish
-gt = hairlines(gt)
-gt = frame(gt)
-gt = stripe(gt)
-gt = stub_tint(gt)
-
-# Add missing value handling
-gt = gt.sub_missing(columns=["Temp", "Wind", "Ozone"], missing_text="—")
-
-# Adjust column widths for readability
-gt = gt.cols_width(cases={
-    "Temp": "130px",
-    "Wind": "130px",
-    "Ozone": "130px"
-})
-
-gt = gt.tab_options(
-    heading_padding="6px",
-    column_labels_padding="6px",
-    column_labels_padding_horizontal="8px",
-    data_row_padding="5px",
-    data_row_padding_horizontal="8px",
-    source_notes_padding="6px",
-)
-
-# Step 6: Add titles and annotations
-gt = gt.tab_header(
-    title="Air Quality Measurements by Month",
-    subtitle="Average monthly values for temperature, wind speed, and ozone levels"
-)
-
-gt = gt.tab_source_note(
-    source_note="Temperature and ozone levels are highlighted to show relative magnitudes across months."
-)
-
-gt = gt.tab_source_note(
-    source_note="Source: airquality.csv — New York air quality data, May-September 1973."
-)
-
-# Step 7: Render and save
-finalize(gt, "table.png")
+gt.gtsave("table.png", expand=15)
