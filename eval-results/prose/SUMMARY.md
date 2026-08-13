@@ -38,8 +38,7 @@ see `scripts/SUMMARY.md`. It remains a real, still-open bug in
 | Cost per invocation | $0.182 | $0.076 |
 | Repeat-to-repeat spread (mean across 6 prompts) | 23.5 points | n/a (1 run) |
 
-See [`plots/usage.png`](plots/usage.png),
-[`plots/consistency.png`](plots/consistency.png),
+See [`plots/usage.png`](plots/usage.png) and
 [`plots/comparator_score.png`](plots/comparator_score.png).
 
 `sp500_monthly_performance` is the hardest prompt for `prose` by a wide

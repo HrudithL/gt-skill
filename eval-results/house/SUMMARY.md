@@ -63,8 +63,7 @@ failure.
 | Cost per invocation | $0.134 | $0.080 |
 | Repeat-to-repeat spread (mean across 6 prompts) | 18.1 points | n/a (1 run) |
 
-See [`plots/usage.png`](plots/usage.png),
-[`plots/consistency.png`](plots/consistency.png),
+See [`plots/usage.png`](plots/usage.png) and
 [`plots/comparator_score.png`](plots/comparator_score.png).
 
 `house` remains the cheapest of the three real skills by a wide margin
