@@ -1047,31 +1047,89 @@ def check_frame(source: str, exec_res: "ExecResult") -> list[Finding]:
     ]
 
 
+def _is_call_named(node: ast.AST, name: str) -> bool:
+    """True if ``node`` is a genuine `ast.Call` to a function/method literally
+    named ``name`` -- excludes a `def name(...):`, a comment, or a docstring
+    mention (none of those parse as an `ast.Call`), matching
+    `runner/comparator.py`'s `_has_real_call` used for the identical `frame`
+    check this file already runs."""
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    return (isinstance(func, ast.Name) and func.id == name) or (
+        isinstance(func, ast.Attribute) and func.attr == name
+    )
+
+
+def _hairlines_tab_options_ok(tree: ast.AST) -> Optional[bool]:
+    """True/False if `table_body_hlines_style`/`_width`/`_color` (whichever
+    appear as a LITERAL string, taking the last occurrence of each across
+    every real `tab_options(...)` call) together indicate a genuinely visible
+    hairline; `None` if none of the three appear as a literal at all.
+
+    Mirrors `runner/comparator.py`'s `_option_line_present` (same tolerance:
+    a non-literal color expression like `PALETTE["neutral"]["hairline"]`
+    cannot be resolved here and is treated as unset, not as a failure --
+    `style`/`width` alone, if visible, are enough)."""
+    style = width = color = None
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "tab_options"
+        ):
+            continue
+        for kw in node.keywords:
+            if not (isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str)):
+                continue
+            if kw.arg == "table_body_hlines_style":
+                style = kw.value.value
+            elif kw.arg == "table_body_hlines_width":
+                width = kw.value.value
+            elif kw.arg == "table_body_hlines_color":
+                color = kw.value.value
+    if style is None and width is None and color is None:
+        return None
+    if style is not None and style.strip().lower() in ("none", "hidden", ""):
+        return False
+    if width is not None and width.strip().lower() in ("0", "0px", ""):
+        return False
+    if color is not None and color.strip().lower() in ("transparent", "none", "", "#ffffff", "#fff"):
+        return False
+    return True
+
+
 def check_hairlines(source: str) -> list[Finding]:
     """Step 5a: the body-row hairline must be pinned to the palette's neutral
-    hex (``NEUTRAL["hairline"]``, ``#E8E8E8``), not left at Great Tables' own
-    raw default gray -- unconditional, every table gets it, same as
-    ``check_frame`` above, and a genuinely different option family from that
-    check (the outer table border vs. the rule BETWEEN body rows).
+    tone, not left at Great Tables' own raw default gray -- unconditional,
+    every table gets it, same as ``check_frame`` above, and a genuinely
+    different option family from that check (the outer table border vs. the
+    rule BETWEEN body rows).
 
-    Source-only, no DOM signal (unlike ``check_frame`` above): accepts either
-    the ``hairlines(gt)`` helper call, or an explicit
-    ``table_body_hlines_color=...`` tab_options call whose value matches the
-    palette hex. Setting only ``_style``/``_width`` without the matching
-    ``_color`` does not count -- color is the part that actually differs from
-    the library default.
+    AST-based (no DOM signal wired up yet, unlike ``check_frame`` above):
+    accepts either a genuine ``hairlines(gt)`` CALL (``_is_call_named``,
+    immune to a candidate merely defining its own same-named function, or a
+    comment/docstring mention -- the exact false-positive class a naive
+    text-regex hit here), or an explicit ``table_body_hlines_*`` tab_options
+    call indicating a visible line (``_hairlines_tab_options_ok`` -- does not
+    require the color to be a literal hex; ``PALETTE["neutral"]["hairline"]``
+    is the taught, expected form and is accepted like the comparator accepts
+    it, via style/width alone).
     """
-    if re.search(r"\bhairlines\s*\(", source):
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []  # a broken file already gets its own exec-error finding elsewhere
+    if any(_is_call_named(node, "hairlines") for node in ast.walk(tree)):
         return []
-    m = re.search(r"table_body_hlines_color\s*=\s*['\"]([^'\"]+)['\"]", source)
-    if m and m.group(1).strip().upper() == NEUTRAL["hairline"].upper():
+    if _hairlines_tab_options_ok(tree):
         return []
     return [
         Finding(
             "hairlines-missing",
             FAIL,
             "no body-row hairline pinned to the palette neutral hairline color",
-            f'call hairlines(gt) or set table_body_hlines_color="{NEUTRAL["hairline"]}" (with matching style/width)',
+            'call hairlines(gt) or set table_body_hlines_style/_color/_width via tab_options(...)',
         )
     ]
 
