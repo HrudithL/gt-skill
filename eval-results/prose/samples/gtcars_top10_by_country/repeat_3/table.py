@@ -1,131 +1,165 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, style, loc
+from great_tables import GT, md, style, loc
 
-# Step 1: UNDERSTAND & CLEAN DATA
+# Step 1: Load and clean data
 df = pd.read_csv("gtcars.csv")
 
-# Get top 10 most expensive cars
-df_top10 = df.nlargest(10, "msrp").copy()
+# Select top 10 most expensive cars
+df_top = df.nlargest(10, "msrp").copy()
 
-# Sort by country, then by MSRP descending within each country
-df_top10 = df_top10.sort_values(["ctry_origin", "msrp"], ascending=[True, False])
+# Group by country and sort by price within group
+df_top = df_top.sort_values(["ctry_origin", "msrp"], ascending=[True, False])
 
-# Create a display name combining manufacturer and model
-df_top10["car_name"] = df_top10["mfr"] + " " + df_top10["model"]
+# Create display columns
+df_top["car_name"] = df_top["mfr"] + " " + df_top["model"]
+df_top["price"] = df_top["msrp"]
 
-# Step 2: ORGANIZE COLUMNS
-# Select and order columns: stub (car name), country (group), then detail columns, then price
-cols_to_show = ["car_name", "ctry_origin", "drivetrain", "trsmn", "msrp"]
-df_display = df_top10[cols_to_show].copy()
+# Clean up drivetrain display
+drivetrain_map = {"rwd": "RWD", "awd": "AWD", "fwd": "FWD"}
+df_top["drivetrain_display"] = df_top["drivetrain"].map(drivetrain_map)
 
-# Rename columns for display
-df_display = df_display.rename(columns={
+# Clean up transmission display (extract key parts: "7a" -> "7-Speed Auto", "6m" -> "6-Speed Manual", etc)
+def clean_transmission(trsmn):
+    if pd.isna(trsmn):
+        return "—"
+    trsmn = str(trsmn).strip()
+    if trsmn.endswith("a"):
+        speeds = trsmn[:-1]
+        return f"{speeds}-Speed Auto"
+    elif trsmn.endswith("m"):
+        speeds = trsmn[:-1]
+        return f"{speeds}-Speed Manual"
+    elif trsmn.endswith("am"):
+        speeds = trsmn[:-2]
+        return f"{speeds}-Speed Auto"
+    elif trsmn.endswith("dd"):
+        return "Direct Drive"
+    else:
+        return trsmn
+
+df_top["transmission_display"] = df_top["trsmn"].apply(clean_transmission)
+
+# Select and rename columns for display
+display_cols = ["car_name", "ctry_origin", "drivetrain_display", "transmission_display", "price"]
+col_labels = {
     "car_name": "Car",
     "ctry_origin": "Country",
-    "drivetrain": "Drivetrain",
-    "trsmn": "Transmission",
-    "msrp": "MSRP"
-})
+    "drivetrain_display": "Drivetrain",
+    "transmission_display": "Transmission",
+    "price": "MSRP"
+}
 
-# Step 3: BIG COLOR - MSRP is an ordered magnitude (price), qualifies for gradient fill
-# Compute domain across the MSRP column
-cols_color = ["MSRP"]
-lo = float(np.nanmin(df_display[cols_color].to_numpy()))
-hi = float(np.nanmax(df_display[cols_color].to_numpy()))
+df_display = df_top[display_cols].copy()
+df_display = df_display.rename(columns=col_labels)
 
-# Step 4: HEADING BAND - dark navy band with white text (fixed, unconditional)
-# Step 5: SMALL COLOR - apply the checklist
-
+# Step 2: Organize columns and set up grouping
 gt = (
-    GT(df_display, rowname_col="Car", groupname_col="Country")
-    # Step 4: Heading band (fixed branding)
-    .tab_header(
-        title="Top 10 Most Expensive GT Cars",
-        subtitle="Grouped by Country of Origin"
-    )
-    # Step 2: Column widths (compact layout)
-    .cols_width(cases={
-        "Car": "200px",
-        "Country": "150px",
-        "Drivetrain": "120px",
-        "Transmission": "100px",
-        "MSRP": "140px"
-    })
-    # Step 2: Column labels
-    .cols_label(
-        Drivetrain="Drivetrain",
-        Transmission="Transmission",
-        MSRP="MSRP ($)"
-    )
-    # Step 5(e): Format MSRP as currency
-    .fmt_currency(columns="MSRP", decimals=0)
-    # Step 3: Big Color - gradient fill on MSRP
-    .data_color(
-        columns="MSRP",
-        palette="Blues",
-        domain=[lo, hi],
-        truncate=False,
-        na_color="#808080"
-    )
-    # Step 4: Heading band styling (dark navy background with white text)
-    .tab_options(
-        column_labels_background_color="#08306B",
-        table_font_size="12px",
-        heading_background_color="#FFFFFF"
-    )
-    # Step 5(a): Cell hairlines between rows and (c) Row striping
-    .tab_options(
-        table_body_hlines_style="solid",
-        table_body_hlines_color="#E8E8E8",
-        table_body_hlines_width="1px",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
-        row_striping_background_color="#F6F6F6"
-    )
-    # Step 5(c): Row striping (apply by default)
-    .opt_row_striping()
-    # Step 5(d): Stub tint (pale blue background on stub)
-    .tab_style(
-        style=style.fill(color="#EAF0F6"),
-        locations=loc.stub()
-    )
-    # Step 5: Row group emphasis (bold + structural rule)
-    .tab_options(
-        row_group_font_weight="bold",
-        row_group_border_top_color="#BDBDBD",
-        row_group_border_bottom_color="#BDBDBD",
-        row_group_padding="6px"
-    )
-    # Step 5: Padding for compact layout
-    .tab_options(
-        heading_padding="6px",
-        column_labels_padding="6px",
-        column_labels_padding_horizontal="8px",
-        data_row_padding="5px",
-        data_row_padding_horizontal="8px",
-        source_notes_padding="6px"
-    )
-    # Step 5: Frame border (all four sides)
-    .tab_options(
-        table_border_top_style="solid",
-        table_border_top_color="#CCCCCC",
-        table_border_top_width="1px",
-        table_border_bottom_style="solid",
-        table_border_bottom_color="#CCCCCC",
-        table_border_bottom_width="1px",
-        table_border_left_style="solid",
-        table_border_left_color="#CCCCCC",
-        table_border_left_width="1px",
-        table_border_right_style="solid",
-        table_border_right_color="#CCCCCC",
-        table_border_right_width="1px"
-    )
-    # Step 6: Titles & annotations (footer notes)
-    .tab_source_note(source_note="Table shows the top 10 most expensive GT cars, ranked by MSRP in descending order within each country.")
-    .tab_source_note(source_note="Source: gtcars.csv")
+    GT(df_display, rowname_col=None, groupname_col="Country")
+    .cols_move_to_start(columns=["Car"])
 )
 
-# Step 7: RENDER & VERIFY
+# Step 3: Apply Big Color (column gradient for MSRP)
+cols_to_color = ["MSRP"]
+lo = float(np.nanmin(df_display[cols_to_color].to_numpy()))
+hi = float(np.nanmax(df_display[cols_to_color].to_numpy()))
+
+gt = gt.data_color(
+    columns=cols_to_color,
+    palette="Blues",
+    domain=[lo, hi],
+    truncate=False,
+    na_color="#808080",
+)
+
+# Step 4: Heading band - dark navy band with white bold text
+gt = gt.tab_header(
+    title="Top 10 Most Expensive GT Cars by Country",
+    subtitle="Grouped by country of origin with drivetrain and transmission details"
+)
+
+# Step 4 continued: Set heading band styling (already done by tab_header, now color the band)
+gt = gt.tab_options(
+    heading_background_color="#08306B",
+    heading_title_font_weight="bold",
+    heading_title_font_size="18px",
+    heading_subtitle_font_size="14px",
+)
+
+# Step 5: Small Color polish
+# (a) Cell borders
+gt = gt.tab_options(
+    table_body_hlines_style="solid",
+    table_body_hlines_color="#E8E8E8",
+    table_body_hlines_width="1px",
+    column_labels_border_bottom_color="#CCCCCC",
+    column_labels_border_bottom_width="2px",
+)
+
+# (b) Column-group vertical dividers - not needed for single grouping
+# (c) Row striping - apply by default
+gt = (
+    gt.opt_row_striping()
+    .tab_options(row_striping_background_color="#F6F6F6")
+)
+
+# (e) Format columns
+gt = (
+    gt.fmt_currency(columns="MSRP", currency="USD", decimals=0)
+    .sub_missing(columns=["Drivetrain", "Transmission", "MSRP"], missing_text="—")
+)
+
+# (f) Row group styling - bold + structural rule
+gt = gt.tab_options(
+    row_group_font_weight="bold",
+    row_group_border_top_color="#BDBDBD",
+    row_group_border_bottom_color="#BDBDBD",
+    row_group_padding="6px",
+)
+
+# (f) Titles & annotations
+gt = (
+    gt.tab_source_note(
+        source_note="Includes the top 10 highest-priced GT cars from the dataset, displayed with their country of origin."
+    )
+    .tab_source_note(
+        source_note="Source: gtcars.csv"
+    )
+)
+
+# Frame and padding
+gt = gt.tab_options(
+    table_border_top_style="solid",
+    table_border_top_color="#CCCCCC",
+    table_border_top_width="1px",
+    table_border_bottom_style="solid",
+    table_border_bottom_color="#CCCCCC",
+    table_border_bottom_width="1px",
+    table_border_left_style="solid",
+    table_border_left_color="#CCCCCC",
+    table_border_left_width="1px",
+    table_border_right_style="solid",
+    table_border_right_color="#CCCCCC",
+    table_border_right_width="1px",
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
+
+# Adjust column widths for content
+gt = gt.cols_width(
+    cases={
+        "Car": "140px",
+        "Country": "110px",
+        "Drivetrain": "90px",
+        "Transmission": "140px",
+        "MSRP": "130px",
+    }
+)
+
+# Step 7: Render
 gt.gtsave("table.png", expand=15)
 print("Table rendered successfully to table.png")

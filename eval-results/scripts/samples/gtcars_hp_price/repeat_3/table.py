@@ -1,51 +1,47 @@
 import pandas as pd
-import numpy as np
 from great_tables import GT, style, loc
-from gt_consistency import PALETTE, band, frame, finalize, stripe, stub_tint, hairlines
+from gt_consistency import frame, finalize, heatmap, band, stripe, stub_tint, hairlines
 
 df = pd.read_csv("gtcars.csv")
 
-cols_to_show = ["mfr", "model", "hp", "msrp"]
-df = df[cols_to_show].copy()
+# Select relevant columns - use mfr as stub (row identifier)
+display_df = df[["mfr", "model", "hp", "msrp"]].copy()
 
-df["car"] = df["mfr"] + " " + df["model"]
-df = df[["car", "hp", "msrp"]].reset_index(drop=True)
-
-cols_measure = ["msrp"]
-lo = float(np.nanmin(df[cols_measure].to_numpy()))
-hi = float(np.nanmax(df[cols_measure].to_numpy()))
-
+# Create the GT table with mfr as stub (row identifier)
 gt = (
-    GT(df, rowname_col="car")
-    .fmt_number(columns="hp", decimals=0, use_seps=True)
-    .fmt_currency(columns="msrp", decimals=0, currency="USD")
-    .data_color(
-        columns="msrp",
-        palette="Greens",
-        domain=[lo, hi],
-        truncate=False,
-        na_color="#808080",
+    GT(display_df, rowname_col="mfr")
+    .cols_label(
+        model="Model",
+        hp="Horsepower (hp)",
+        msrp="Price (USD)"
     )
-    .cols_width(cases={"car": "240px", "hp": "100px", "msrp": "140px"})
+    .cols_width(cases={"model": "200px", "hp": "120px", "msrp": "140px"})
+    .fmt_integer(columns="hp")
+    .fmt_currency(columns="msrp", currency="USD", decimals=0)
+    .tab_header(
+        title="GT Cars Performance & Pricing",
+        subtitle="Horsepower and MSRP across premium automobile manufacturers"
+    )
+    .tab_stubhead(label="Manufacturer")
+    .tab_source_note("Price is the hero measure; horsepower is shown for reference as a related performance metric.")
+    .tab_source_note("Source: GT Cars Dataset")
     .tab_options(
         heading_padding="6px",
         column_labels_padding="6px",
         column_labels_padding_horizontal="8px",
         data_row_padding="5px",
         data_row_padding_horizontal="8px",
-        source_notes_padding="6px",
+        source_notes_padding="6px"
     )
-    .tab_header(
-        title="GT Cars: Horsepower and MSRP",
-        subtitle="High-performance vehicles by manufacturer"
-    )
-    .tab_source_note(source_note="Price is the primary measure (colored); horsepower provides context as a secondary metric.")
-    .tab_source_note(source_note="Source: gtcars.csv")
 )
 
+# Apply Big Color to msrp (price) using heatmap helper
+gt = heatmap(gt, "msrp", kind="sequential", hue="positive")
+
+# Apply styling
 gt = band(gt)
-gt = stripe(gt)
 gt = hairlines(gt)
+gt = stripe(gt)
 gt = stub_tint(gt)
 gt = frame(gt)
-gt = finalize(gt)
+finalize(gt)

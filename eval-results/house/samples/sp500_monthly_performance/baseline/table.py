@@ -1,61 +1,71 @@
 import pandas as pd
+import numpy as np
 from great_tables import GT
-import re
+from datetime import datetime
 
+# Read the data
 df = pd.read_csv('sp500.csv')
 df['date'] = pd.to_datetime(df['date'])
 
 # Filter for 2010-2015
-df_filtered = df[(df['date'].dt.year >= 2010) & (df['date'].dt.year <= 2015)]
+df = df[(df['date'].dt.year >= 2010) & (df['date'].dt.year <= 2015)]
+df = df.sort_values('date')
 
-# Add year and month columns
-df_filtered['year'] = df_filtered['date'].dt.year
-df_filtered['month'] = df_filtered['date'].dt.month
+# Group by year-month
+df['year_month'] = df['date'].dt.to_period('M')
 
-# Group by year and month, then calculate summaries
-def calculate_monthly_stats(group):
-    intra_day_gain = (group['high'] - group['open']) * 100 / group['open']
-    intra_day_loss = (group['low'] - group['open']) * 100 / group['open']
+# Calculate monthly statistics
+monthly_stats = []
 
-    return pd.Series({
-        'open_price': group['open'].iloc[0],
-        'close_price': group['close'].iloc[-1],
-        'pct_change': ((group['close'].iloc[-1] - group['open'].iloc[0]) / group['open'].iloc[0]) * 100,
-        'avg_volume': group['volume'].mean(),
-        'highest_daily_gain': intra_day_gain.max(),
-        'highest_daily_loss': intra_day_loss.min(),
+for period in sorted(df['year_month'].unique()):
+    month_data = df[df['year_month'] == period]
+
+    opening_price = month_data.iloc[0]['open']
+    closing_price = month_data.iloc[-1]['close']
+    percent_change = ((closing_price - opening_price) / opening_price) * 100
+    avg_volume = month_data['volume'].mean()
+
+    # Daily changes
+    month_data_sorted = month_data.sort_values('date')
+    daily_gains = (month_data_sorted['close'].values[1:] - month_data_sorted['close'].values[:-1]) / month_data_sorted['close'].values[:-1] * 100
+
+    if len(daily_gains) > 0:
+        highest_gain = daily_gains.max()
+        highest_loss = daily_gains.min()
+    else:
+        highest_gain = 0
+        highest_loss = 0
+
+    monthly_stats.append({
+        'Month': str(period),
+        'Open': opening_price,
+        'Close': closing_price,
+        'Change %': percent_change,
+        'Avg Daily Vol': avg_volume,
+        'Highest Gain %': highest_gain,
+        'Highest Loss %': highest_loss
     })
 
-monthly_stats = df_filtered.groupby(['year', 'month']).apply(calculate_monthly_stats, include_groups=False).reset_index()
-monthly_stats.columns = ['Year', 'Month', 'open_price', 'close_price', 'pct_change', 'avg_volume', 'highest_daily_gain', 'highest_daily_loss']
+# Create dataframe
+results_df = pd.DataFrame(monthly_stats)
 
-# Add month name
-month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-monthly_stats['Month_Name'] = monthly_stats['Month'].apply(lambda x: month_names[x - 1])
-
-# Reorder columns
-display_df = monthly_stats[['Year', 'Month_Name', 'open_price', 'close_price', 'pct_change', 'avg_volume', 'highest_daily_gain', 'highest_daily_loss']].copy()
-
-# Round numeric columns
-display_df['open_price'] = display_df['open_price'].round(2)
-display_df['close_price'] = display_df['close_price'].round(2)
-display_df['pct_change'] = display_df['pct_change'].round(2)
-display_df['avg_volume'] = display_df['avg_volume'].round(0).astype(int)
-display_df['highest_daily_gain'] = display_df['highest_daily_gain'].round(2)
-display_df['highest_daily_loss'] = display_df['highest_daily_loss'].round(2)
-
-# Rename columns for display
-display_df.columns = ['Year', 'Month', 'Opening Price', 'Closing Price', 'Monthly % Change', 'Avg Daily Volume', 'Highest Single-Day Gain %', 'Highest Single-Day Loss %']
-
-gt = (
-    GT(display_df)
-    .tab_header(title="S&P 500 Monthly Performance Summary", subtitle="2010–2015")
-    .cols_align(align="center")
-    .tab_options(
-        table_font_size="11px",
-        heading_background_color="#f0f0f0",
+# Format the data for display
+gt_table = (
+    GT(results_df)
+    .fmt_currency(columns=['Open', 'Close'], currency='USD')
+    .fmt_number(columns=['Change %', 'Highest Gain %', 'Highest Loss %'], decimals=2)
+    .fmt_number(columns=['Avg Daily Vol'], decimals=0)
+    .cols_label(
+        Month='Month',
+        Open='Opening Price',
+        Close='Closing Price',
+        **{'Change %': 'Monthly Change %', 'Avg Daily Vol': 'Avg Daily Volume', 'Highest Gain %': 'Highest Daily Gain %', 'Highest Loss %': 'Highest Daily Loss %'}
+    )
+    .tab_header(
+        title='S&P 500 Monthly Performance Summary',
+        subtitle='2010-2015'
     )
 )
 
-gt.gtsave("table.png")
+gt_table.gtsave('table.png')
 print("Table saved to table.png")

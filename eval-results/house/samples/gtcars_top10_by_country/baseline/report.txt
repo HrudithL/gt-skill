@@ -1,7 +1,7 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_011158_house_6prompts/prompts/gtcars_top10_by_country/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080322_house_6prompts/prompts/gtcars_top10_by_country/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
-TOTAL: 20/90 (22.2%)
-  Data-compliance:        6/48
+TOTAL: 19/90 (21.1%)
+  Data-compliance:        5/48
   Formatting-compliance:  14/42
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 0/10 -- candidate has no stub column; row selection unverifiable
@@ -9,14 +9,14 @@ TOTAL: 20/90 (22.2%)
 [FAIL] [MECHANICAL] Colored-measure selection (right measure(s) colored): 0/6 -- 0/1 canonical colored measures covered by a candidate color call
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Explicit prompt-instruction compliance: 2/5 -- 1/3 required instructions satisfied; grouping=True not satisfied; sort=('msrp', 'desc', 'within_group') not satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.50 (candidate-only=['mfr', 'model', 'year'], missing=['car'])
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.22 (candidate-only=['Drivetrain', 'Manufacturer', 'Model', 'Transmission'], missing=['car', 'drivetrain', 'trsmn']); value-matched renamed columns: {'ctry_origin': 'Country', 'msrp': 'MSRP'}
 [FAIL] [MECHANICAL] Grouping existence: 0/3 -- candidate grouping_present=False, truth=True
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Grouping is mandated by REQUIRED_INSTRUCTIONS ("grouping": true), so this is not a discretionary editorial choice being tested here. The evaluation of grouping correctness is handled by a separate deterministic mechanism.
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- Grouping is mandated in REQUIRED_INSTRUCTIONS ('grouping': true), so this is a deterministic requirement, not a discretionary editorial choice. The applicable=false condition applies per system instructions.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [FAIL] [MECHANICAL] Stub existence: 0/2 -- candidate stub_present=False, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate uses abbreviated, cryptic labels for critical concepts: 'rwd' and 'awd' (lowercase, no spaces) instead of 'RWD'/'AWD', and '7a', '8a', '8am' instead of proper transmission descriptions like '7-Speed Automatic'. These abbreviations obscure rather than clarify the underlying concepts, making it harder for readers to understand drivetrain and transmission specifications.
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The Transmission column shows abbreviated codes like '7a', '8a', and '8am' instead of readable descriptions like '7-Speed Automatic' shown in the ground truth. The MSRP label is correct, and Drivetrain is correctly labeled, but the transmission abbreviations are cryptic and fail to clearly communicate the underlying concept to a reader.
 [FAIL] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 0/8 -- ground truth requires colored measure(s) but candidate has none
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 2/6 -- frame=MISSING (global constant, always required); hairlines=MISSING (Step 5a, always required); dividers=OK
 [FAIL] [MECHANICAL] Striping gate correctness: 0/5 -- n_rows=10, body not fully color-covered -> expected striping=True, actual=False
@@ -32,5 +32,5 @@ TOTAL: 20/90 (22.2%)
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [JUDGE] Title quality: 2/3 -- judge score 3/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' followed by the subtitle 'Grouped by Country of Origin' is accurate and mentions grouping, but lacks the specific framing of the ground truth ('The 10 Priciest GT Cars, by Country of Origin'). The ground truth's subtitle adds context about what is being measured, while the candidate's presentation is more structural than analytical.
-[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate's column order (Country, Manufacturer, Model, Year, Drivetrain, Transmission, MSRP) fractures the narrative flow. The stub column lists Country redundantly (already conveyed by row grouping), pushing the car identifiers (Manufacturer/Model) far right; Year and Drivetrain are introduced before the price; and MSRP is stranded at the far right instead of being grouped near Drivetrain/Transmission. The ground truth's order (Car, MSRP, Drivetrain, Transmission) keeps the identifying name, price, and specs tightly together, making the story immediate and readable.
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate title 'Top 10 Most Expensive GT Cars' with subtitle 'Grouped by Country of Origin' is accurate and captures the core subject. The ground truth title is 'The 10 Priciest GT Cars, by Country of Origin', which is slightly more distinctive in phrasing ('Priciest' vs 'Most Expensive'). Both convey the same framing, but the ground truth's phrasing is more elegant.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate places Manufacturer before Model, then Country, then MSRP, Drivetrain, and Transmission. The ground truth groups Car as the stub identifier (combining all identifying info), followed by MSRP (the hero measure, color-highlighted), then Drivetrain and Transmission together. The candidate separates manufacturer and model into distinct columns and orphans the Transmission column far from the other car-attribute columns, fragmenting related details across the table width and reducing readability of the car-specification story.

@@ -1,4 +1,4 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_004823_scripts_6prompts/prompts/sp500_monthly_performance/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080340_scripts_6prompts/prompts/sp500_monthly_performance/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py
 
 TOTAL: 11/85 (12.9%)
   Data-compliance:        6/44
@@ -9,7 +9,7 @@ TOTAL: 11/85 (12.9%)
 [FAIL] [MECHANICAL] Colored-measure selection (right measure(s) colored): 0/6 -- 0/4 canonical colored measures covered by a candidate color call
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.15 (candidate-only=['Avg Daily Volume', 'Highest Daily Gain', 'Highest Daily Loss', 'Month', 'Percent Change'], missing=['avg_volume', 'best_day_gain', 'month_label', 'pct_change', 'worst_day_loss', 'year']); value-matched renamed columns: {'monthly_close': 'Closing Price', 'monthly_open': 'Opening Price'}
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.15 (candidate-only=['Avg Daily Volume', 'Date', 'Max Daily Gain', 'Max Daily Loss', 'Percent Change'], missing=['avg_volume', 'best_day_gain', 'month_label', 'pct_change', 'worst_day_loss', 'year']); value-matched renamed columns: {'monthly_close': 'Close', 'monthly_open': 'Open'}
 [N/A] [MECHANICAL] Grouping existence: 0/0 -- grouping is a discretionary editorial choice here (ground truth groups, but REQUIRED_INSTRUCTIONS has no 'grouping' key) -- judged separately by grouping_choice_quality, not scored as a strict presence match
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/sp500_monthly_performance.py)
 [FAIL] [MECHANICAL] Column-group spanners existence: 0/2 -- candidate spanner_present=False, truth=True

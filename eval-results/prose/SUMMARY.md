@@ -124,26 +124,27 @@ invocation are under [`samples/`](samples/), organized `samples/<prompt>/<varian
 
 ## Round 4 (2026-08-13) — routing ambiguity + baseline-masking docs fixed
 
-Fresh sweep (`runs/sweep/20260813_004809_prose_6prompts`) after fixing: `REFERENCE.md`'s
-Top-N-vs-Ordered-magnitude routing ambiguity (one repeat picked `full_row_highlight.md`
-for a "top 10 most expensive" table and filled 100% of rows, violating that file's own
-cap); `data.md` was missing the zero/negative-baseline percent-masking gotcha entirely.
+Fresh sweep (`runs/sweep/20260813_080331_prose_6prompts`), run after `main` had all
+five rounds of fixes merged: `REFERENCE.md`'s Top-N-vs-Ordered-magnitude routing
+ambiguity (an earlier sweep's repeat had picked `full_row_highlight.md` for a "top 10
+most expensive" table and filled 100% of rows, violating that file's own cap);
+`data.md` was missing the zero/negative-baseline percent-masking gotcha entirely.
 
 | Metric | This round | Round 3 |
 |---|---|---|
-| Mean score | **81.9%** | 79.0% |
-| Mean repeat spread | 14.7pp | 23.5pp |
-| Mean cost | $0.181 | $0.182 |
+| Mean score | **81.7%** | 79.0% |
+| Mean repeat spread | 10.3pp | 23.5pp |
+| Mean cost | $0.190 | $0.182 |
 
-Per-prompt means: `islands_sizes` 91.8%, `gtcars_hp_price` 91.0%,
-`airquality_monthly_summary` 90.5%, `gtcars_top10_by_country` 88.8%,
-`towny_growth_trends` 71.6%, `sp500_monthly_performance` 57.7% (still the hardest —
-same ground-truth month-label-format ambiguity noted in the top-level `SUMMARY.md`).
+Per-prompt means: `gtcars_hp_price` 93.7%, `airquality_monthly_summary` 93.4%,
+`islands_sizes` 92.5%, `towny_growth_trends` 86.5%, `gtcars_top10_by_country` 70.9%,
+`sp500_monthly_performance` 53.1% (still the hardest — same ground-truth
+month-label-format ambiguity noted in the top-level `SUMMARY.md`).
 
-`repeat_1`'s original sweep invocation hit a transient API-disconnect (unrelated to
-any skill/comparator issue) and was individually re-run; the replacement then hit the
-independent, already-fixed `check_caption_keywords` crash on non-literal caption text
-(see the top-level `SUMMARY.md`) before landing at 82.2% — the "correct" side of the
-month-label-format coin flip, which is why this prompt's spread (37.9pp) is wider than
-round 3's despite the mean improving; not a new regression, just which side of an
-existing ambiguity this generation happened to land on.
+`gtcars_top10_by_country` had the widest single-prompt spread (28.9pp: 57.7%, 86.6%,
+68.4%) — the 57.7% repeat used the bare `model` column as the stub instead of the
+documented `mfr + model` composite (`data.md`'s own worked example is this exact
+dataset), producing row-identity mismatches the comparator can't reconcile (e.g. a
+Lamborghini "aventador" mismatching the ground truth's "ferrari laferrari" once names
+don't line up); the other two repeats on the same prompt built the composite stub
+correctly. Sampling variance on a small repeat count, not a mechanical bug.

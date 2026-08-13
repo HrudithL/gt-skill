@@ -1,7 +1,7 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_004823_scripts_6prompts/prompts/gtcars_top10_by_country/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080340_scripts_6prompts/prompts/gtcars_top10_by_country/repeat_1/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/gtcars_top10_by_country.py
 
-TOTAL: 92/97 (94.8%)
-  Data-compliance:        47/51
+TOTAL: 91/97 (93.8%)
+  Data-compliance:        46/51
   Formatting-compliance:  45/46
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
@@ -9,14 +9,14 @@ TOTAL: 92/97 (94.8%)
 [PASS] [MECHANICAL] Colored-measure selection (right measure(s) colored): 6/6 -- 1/1 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 1/1 colored measures use an encoding matching their data shape
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 3/3 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.25 (candidate-only=['Drivetrain', 'Transmission', 'country'], missing=['ctry_origin', 'drivetrain', 'trsmn']); value-matched renamed columns: {'msrp': 'Price (USD)'}
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- visible-column overlap 0.11 (candidate-only=['Car', 'Country', 'Drivetrain', 'Transmission'], missing=['car', 'ctry_origin', 'drivetrain', 'trsmn']); value-matched renamed columns: {'msrp': 'MSRP'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=True, truth=True
-[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by country of origin (Italy, United States, United Kingdom) exactly as the ground truth does. This serves the prompt's stated goal ('grouped by country of origin') and is sensible given the narrative emphasis in the caption about Italy's dominance of the list.
+[PASS] [JUDGE] Grouping-choice quality: 3/3 -- judge score 5/5 -- The candidate groups by country (Italy, United Kingdom, United States) just as the ground truth does, with prices sorted descending within each group. This grouping serves the stated prompt goal of showing the top 10 cars organized by country of origin.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
 [N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The candidate labels three of its four data columns. 'Drivetrain' and 'Transmission' are correctly named concepts matching the ground truth. However, 'Price (USD)' is labeled in the header but the actual column content contains raw abbreviated text like '7a', '8a', '8am' for transmission values instead of full descriptions ('7-Speed Automatic', '8-Speed Automatic', '8-Speed Automated-Manual'), making the transmission column actively misleading about what it represents.
+[FAIL] [JUDGE] Column-label concept-correctness: 0/1 -- judge score 2/5 -- The drivetrain and transmission labels use abbreviations ('rwd', 'awd', '7a', '8a', '8am') instead of full, clear terms like 'RWD', '7-Speed Automatic' shown in the ground truth. While the concepts are identifiable, the phrasing is cryptic and not instantly unambiguous to a casual reader.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 1/1 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=10, body not fully color-covered -> expected striping=True, actual=True
@@ -32,5 +32,5 @@ TOTAL: 92/97 (94.8%)
 [PASS] [MECHANICAL] fmt_* per column semantic type: 4/4 -- 1/1 columns formatted per their semantic type
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate title 'Top 10 Most Expensive GT Cars by Country' captures the core framing identical to the ground truth ('The 10 Priciest GT Cars, by Country of Origin'). Both emphasize the top-10 most expensive cars grouped by country; wording differs but the subject and angle are the same.
-[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate orders columns as Car | Drivetrain | Transmission | Price, while the ground truth orders them as Car | MSRP | Drivetrain | Transmission. The candidate relegates Price to the far right, separating it from the drivetrain/transmission details it contextualizes, whereas the ground truth foregrounds MSRP immediately after the car name. For a price-focused story (top 10 most expensive), this is a suboptimal choice that weakens the analytical priority.
+[PASS] [JUDGE] Title quality: 3/3 -- judge score 5/5 -- The candidate's title 'Top 10 Most Expensive GT Cars' with subtitle 'Grouped by Country of Origin' captures the same core framing as the ground truth's 'The 10 Priciest GT Cars, by Country of Origin.' Both clearly establish the subject and the organizing principle.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 2/5 -- The candidate places the car name (stub) first, then Drivetrain, Transmission, and MSRP last. The ground truth places car name first, then MSRP, Drivetrain, and Transmission. Moving the price column (the story's key measure) to the far right breaks the natural reading flow; readers typically scan left-to-right and expect the hero metric (price) earlier, grouped with related specs rather than isolated at the end.

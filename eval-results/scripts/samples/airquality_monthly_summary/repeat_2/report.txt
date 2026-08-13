@@ -1,4 +1,4 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_004823_scripts_6prompts/prompts/airquality_monthly_summary/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080340_scripts_6prompts/prompts/airquality_monthly_summary/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py
 
 TOTAL: 88/91 (96.7%)
   Data-compliance:        46/48
@@ -9,7 +9,7 @@ TOTAL: 88/91 (96.7%)
 [PASS] [MECHANICAL] Colored-measure selection (right measure(s) colored): 6/6 -- 2/2 canonical colored measures covered by a candidate color call
 [PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 2/2 colored measures use an encoding matching their data shape
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.60 (candidate-only=['Month'], missing=['month']); value-matched renamed columns: {'avg_ozone': 'Avg Ozone (ppb)', 'avg_temp': 'Avg Temp (°F)', 'avg_wind': 'Avg Wind (mph)'}
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 2/4 -- visible-column overlap 0.60 (candidate-only=['Month'], missing=['month'])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py)
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False

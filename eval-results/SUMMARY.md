@@ -547,35 +547,35 @@ casually re-run expecting the same numbers back.
 ## Data refresh (2026-08-13, round 4 — current, trustworthy numbers)
 
 Fresh 6-prompt sweeps for `house`/`prose`/`scripts` (`--repeat 3 --model
-haiku`), after fixing the specific bugs a prior deep-dive traced as the cause
-of that round's token/consistency outliers: a house `RULES.md` dtype
-footgun, a missing `hairlines()` helper + checker rule in `great-tables-ci`,
-a Top-N/Ordered-magnitude routing ambiguity, the comparator's static AND
-execution-tier extractors both learning to recognize a `def build_table():
-...` / `if __name__ == "__main__":` wrapped script as inlined top-level code
-(previously invisible to both, scoring two real candidates ~18–35% purely
-from the blind spot), and a `check_caption_keywords` crash on any candidate
-whose caption text isn't a static string literal (hit two independent
-candidates this round, previously silently dropped as "no score"). `creator`
-not re-swept (unchanged from 2026-08-09, still losing to baseline). Two
-transient API-disconnect failures during the sweep (unrelated to any of the
-above) were individually re-run rather than left as gaps.
+haiku`), run AFTER merging all five rounds of fixes to `main`: a house
+`RULES.md` dtype footgun, a missing `hairlines()` helper + checker rule in
+`great-tables-ci`, a Top-N/Ordered-magnitude routing ambiguity, the
+comparator's static AND execution-tier extractors both learning to recognize
+a `def build_table(): ...` / `if __name__ == "__main__":` wrapped script as
+inlined top-level code (previously invisible to both, scoring real
+candidates ~18–35% purely from the blind spot), a `check_caption_keywords`
+crash on non-literal caption text, and (round 5, defensive-only — 0/949 real
+candidates ever hit either shape) a decorated or class/assignment-shadowed
+guard target no longer being wrongly inlined. `creator` not re-swept
+(unchanged from 2026-08-09, still losing to baseline).
 
 | Skill | Mean score | Mean spread (was, round 3) | Max spread (was) | Mean cost |
 |---|---|---|---|---|
-| `scripts` | 86.2% | 12.2pp (20.2pp) | 25.5pp | $0.213 |
-| `house` | 84.2% | 10.8pp (18.1pp) | 28.1pp | **$0.124** (cheapest) |
-| `prose` | 81.9% | 14.7pp (23.5pp) | 37.9pp | $0.181 |
+| `house` | 82.4% | 10.8pp (18.1pp) | 51.7pp | **$0.131** (cheapest) |
+| `prose` | 81.7% | 10.3pp (23.5pp) | 28.9pp | $0.190 |
+| `scripts` | 81.5% | 16.2pp (20.2pp) | 40.4pp | $0.189 |
 
-All three improved in mean score; `house` and `scripts` improved in
-consistency too. `prose`'s mean spread also improved, but its one
-freshly-generated replacement invocation (see its own `SUMMARY.md`) happened
-to land on the "correct" side of a known coin-flip ambiguity (sp500's
-ground-truth month-label format) while its siblings didn't, producing a
-wider single-prompt max spread than round 3 — a data-point artifact of which
-side of an existing ambiguity a given generation lands on, not a new
-regression. Remaining spread across all three is attributable to known,
-non-mechanical sources already documented per-skill (sp500's month-label
-ambiguity, occasional Big-Color restraint lapses, towny's spanner/
-ranking-metric ambiguity) — not the bugs this round fixed. See each skill's
-own `SUMMARY.md` for detail.
+All three land in a tight band, similar to round 3's own "tight band"
+finding. Several single-prompt spreads are WIDER than the mid-fix-cycle
+sweep reported in an earlier draft of this section — traced individually
+(see each skill's own `SUMMARY.md`) to one-off model mistakes in this fresh
+batch, not mechanical bugs: forgetting `rowname_col=` entirely, confusing
+pandas' `.set_index()` with it, and picking a non-unique `mfr`-only stub
+instead of the documented `mfr + model` composite. All three are places the
+skills' own reference docs already teach the correct pattern (2/3 sibling
+repeats on the same prompt did it right); this is inherent haiku-tier
+sampling variance on a 3-repeat sample, not something a further doc/code fix
+would eliminate. Combined with the already-known sources (sp500's
+ground-truth month-label ambiguity, occasional Big-Color restraint lapses,
+towny's spanner/ranking-metric ambiguity), this round's remaining spread has
+no fixable mechanical cause left that this effort's deep-dive could find.

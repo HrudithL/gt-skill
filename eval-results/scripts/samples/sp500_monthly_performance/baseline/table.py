@@ -1,58 +1,66 @@
 import pandas as pd
+import numpy as np
 from great_tables import GT
+from great_tables.data import exibble
 
-# Read the CSV file
-df = pd.read_csv('sp500.csv')
+df = pd.read_csv('./sp500.csv')
 df['date'] = pd.to_datetime(df['date'])
 
-# Filter for 2010-2015
-df = df[(df['date'].dt.year >= 2010) & (df['date'].dt.year <= 2015)]
-df = df.sort_values('date')
+df = df.sort_values('date').reset_index(drop=True)
 
-# Create a year-month column
-df['year_month'] = df['date'].dt.to_period('M')
+df['daily_gain'] = df['high'] - df['low']
+df['daily_loss'] = df['open'] - df['close']
 
-# Group by month to compute summary statistics
 monthly_data = []
 
-for period, group in df.groupby('year_month'):
-    group = group.sort_values('date').reset_index(drop=True)
+for year in range(2010, 2016):
+    for month in range(1, 13):
+        month_df = df[(df['date'].dt.year == year) & (df['date'].dt.month == month)]
 
-    opening_price = group['open'].iloc[0]
-    closing_price = group['close'].iloc[-1]
-    percent_change = ((closing_price - opening_price) / opening_price) * 100
-    avg_daily_volume = group['volume'].mean()
+        if len(month_df) == 0:
+            continue
 
-    # Calculate daily gains and losses
-    group['daily_gain'] = group['close'] - group['open']
+        opening = month_df.iloc[0]['open']
+        closing = month_df.iloc[-1]['close']
+        percent_change = ((closing - opening) / opening) * 100
+        avg_volume = month_df['volume'].mean()
+        max_daily_gain = month_df['daily_gain'].max()
+        max_daily_loss = month_df['daily_loss'].max()
 
-    highest_gain = group['daily_gain'].max()
-    highest_loss = group['daily_gain'].min()
+        monthly_data.append({
+            'Date': f"{year}-{month:02d}",
+            'Open': opening,
+            'Close': closing,
+            'Percent Change': percent_change,
+            'Avg Daily Volume': avg_volume,
+            'Max Daily Gain': max_daily_gain,
+            'Max Daily Loss': max_daily_loss
+        })
 
-    monthly_data.append({
-        'Month': str(period),
-        'Opening Price': opening_price,
-        'Closing Price': closing_price,
-        'Percent Change': percent_change,
-        'Avg Daily Volume': avg_daily_volume,
-        'Highest Daily Gain': highest_gain,
-        'Highest Daily Loss': highest_loss
-    })
+monthly_df = pd.DataFrame(monthly_data)
 
-summary_df = pd.DataFrame(monthly_data)
-
-# Create the GT table
 gt = (
-    GT(summary_df)
-    .fmt_number(columns=['Opening Price', 'Closing Price', 'Highest Daily Gain', 'Highest Daily Loss'], decimals=2)
-    .fmt_number(columns=['Percent Change'], decimals=2, pattern='{x}%')
-    .fmt_number(columns=['Avg Daily Volume'], decimals=0)
+    GT(monthly_df)
+    .fmt_number(
+        columns=['Open', 'Close'],
+        decimals=2
+    )
+    .fmt_number(
+        columns=['Percent Change'],
+        decimals=2,
+        pattern='{x}%'
+    )
+    .fmt_number(
+        columns=['Avg Daily Volume'],
+        decimals=0
+    )
+    .fmt_number(
+        columns=['Max Daily Gain', 'Max Daily Loss'],
+        decimals=2
+    )
     .tab_header(
-        title='S&P 500 Monthly Performance Summary (2010-2015)',
-        subtitle='Daily trading metrics aggregated by month'
+        title='S&P 500 Monthly Performance Summary (2010-2015)'
     )
 )
 
-# Render to PNG
-gt.gtsave('table.png')
-print("Table saved to table.png")
+gt.gtsave("table.png")

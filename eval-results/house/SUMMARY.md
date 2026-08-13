@@ -156,25 +156,26 @@ invocation are under [`samples/`](samples/), organized `samples/<prompt>/<varian
 
 ## Round 4 (2026-08-13) — dtype footgun + comparator blind spots fixed
 
-Fresh sweep (`runs/sweep/20260813_011158_house_6prompts`) after fixing: `RULES.md`'s
-`np.where(...)` baseline-guard snippet used `None` instead of `np.nan` (forced
-`object` dtype, broke `.nlargest()` — caused a real 2x token blowup in one repeat);
-the comparator's static AND execution-tier extractors now both recognize a
-`def build_table(): ... if __name__=="__main__":`-wrapped script as inlined
-top-level code (previously invisible to either, cratering two repeats' scores to
-~18–35% from the blind spot alone, not real quality).
+Fresh sweep (`runs/sweep/20260813_080322_house_6prompts`), run after `main` had all
+five rounds of fixes merged: `RULES.md`'s `np.where(...)` baseline-guard snippet used
+`None` instead of `np.nan` (forced `object` dtype, broke `.nlargest()` — caused a real
+2x token blowup in an earlier sweep); the comparator's static AND execution-tier
+extractors now both recognize a `def build_table(): ... if __name__=="__main__":`-wrapped
+script as inlined top-level code (previously invisible to either).
 
 | Metric | This round | Round 3 |
 |---|---|---|
-| Mean score | **84.2%** | 79.4% |
-| Mean repeat spread | **10.8pp** | 18.1pp |
-| Mean cost | $0.124 | $0.134 |
+| Mean score | **82.4%** | 79.4% |
+| Mean repeat spread | 16.0pp | 18.1pp |
+| Mean cost | $0.131 | $0.134 |
 
-Per-prompt means: `gtcars_top10_by_country` 95.8%, `islands_sizes` 95.1%,
-`gtcars_hp_price` 94.1%, `airquality_monthly_summary` 87.3% (one repeat's
-28pp-below-siblings score traced to a genuine Big-Color-restraint lapse — the
-candidate heatmapped all 3 measures instead of just Ozone — not a mechanical
-bug), `towny_growth_trends` 78.2%, `sp500_monthly_performance` 54.3% (still
-the hardest — see top-level `SUMMARY.md`'s note on the sp500
-month-label-format ambiguity, a genuine ground-truth string-format
-difference, not a skill bug).
+Per-prompt means: `gtcars_hp_price` 94.1%, `islands_sizes` 94.4%, `gtcars_top10_by_country`
+89.3%, `sp500_monthly_performance` 73.6%, `airquality_monthly_summary` 71.7%,
+`towny_growth_trends` 71.4%. Two individual repeats scored far below their siblings
+this round, both traced to the same one-off mistake, not a bug: `towny_growth_trends/
+repeat_1` (38.4% vs. 85–90% siblings) used `.set_index('Town')` instead of passing
+`rowname_col="Town"` to `GT(...)`, so no stub was ever created; `sp500_monthly_
+performance` also runs into the known month-label-format ambiguity (see top-level
+`SUMMARY.md`). Both are places `RULES.md`/the worked example already teach the correct
+pattern and the other 2 of 3 repeats on the same prompt did it right — haiku-tier
+sampling variance on a small sample, not a skill or comparator gap.

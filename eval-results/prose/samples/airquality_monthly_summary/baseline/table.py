@@ -1,11 +1,14 @@
 import pandas as pd
 import great_tables as gt
+from nokap import webshot
+import tempfile
+import os
 
 # Read the air quality data
 df = pd.read_csv('airquality.csv')
 
-# Compute monthly averages
-monthly_avg = df.groupby('Month')[['Ozone', 'Wind', 'Temp']].mean()
+# Calculate monthly averages
+monthly_avg = df.groupby('Month')[['Temp', 'Wind', 'Ozone']].mean().reset_index()
 
 # Create a mapping for month names
 month_names = {
@@ -16,24 +19,30 @@ month_names = {
     9: 'September'
 }
 
-# Reset index and add month names
-monthly_avg = monthly_avg.reset_index()
-monthly_avg['Month_Name'] = monthly_avg['Month'].map(month_names)
-monthly_avg = monthly_avg[['Month_Name', 'Temp', 'Wind', 'Ozone']]
+monthly_avg['Month'] = monthly_avg['Month'].map(month_names)
 
 # Rename columns for display
 monthly_avg.columns = ['Month', 'Avg Temperature (°F)', 'Avg Wind Speed (mph)', 'Avg Ozone (ppb)']
 
-# Create and format the table
+# Create the table
 gt_table = (
     gt.GT(monthly_avg)
-    .fmt_number(columns=['Avg Temperature (°F)', 'Avg Wind Speed (mph)', 'Avg Ozone (ppb)'], decimals=2)
+    .fmt_number(columns=['Avg Temperature (°F)', 'Avg Wind Speed (mph)', 'Avg Ozone (ppb)'], decimals=1)
     .tab_header(
-        title='Monthly Air Quality Summary',
-        subtitle='Average temperature, wind speed, and ozone levels by month'
+        title='Air Quality Data: Monthly Averages',
+        subtitle='Temperature, Wind Speed, and Ozone Levels'
     )
-    .opt_stylize(style=1, color='blue')
+    .tab_options(
+        table_width='600px'
+    )
 )
 
-# Render to PNG
-gt_table.gtsave('table.png')
+# Save as HTML temporarily and then capture with webshot
+with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+    html_path = f.name
+    f.write(gt_table.as_raw_html())
+
+try:
+    webshot(html_path, 'table.png')
+finally:
+    os.unlink(html_path)

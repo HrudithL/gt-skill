@@ -1,35 +1,35 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_011158_house_6prompts/prompts/towny_growth_trends/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080322_house_6prompts/prompts/towny_growth_trends/repeat_2/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py
 
-TOTAL: 82/92 (89.1%)
-  Data-compliance:        42/47
-  Formatting-compliance:  40/45
+TOTAL: 82/91 (90.1%)
+  Data-compliance:        44/48
+  Formatting-compliance:  38/43
 
 [FAIL] [MECHANICAL] Row/entity selection identity: 9/10 -- row set mismatch (precision=0.93, recall=0.93); missing=[(None, 'barrie')], extra=[(None, 'cockburn island')]
-[FAIL] [MECHANICAL] Computed/derived value correctness: 9/10 -- 12/13 canonical measures have a value-matching candidate column; unmatched: ['rank']
-[FAIL] [MECHANICAL] Colored-measure selection (right measure(s) colored): 3/6 -- 6/11 canonical colored measures covered by a candidate color call
-[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 6/6 colored measures use an encoding matching their data shape
+[FAIL] [MECHANICAL] Computed/derived value correctness: 8/10 -- 11/13 canonical measures have a value-matching candidate column; unmatched: ['rank', 'total_growth_pct']
+[PASS] [MECHANICAL] Colored-measure selection (right measure(s) colored): 6/6 -- 11/11 canonical colored measures covered by a candidate color call
+[PASS] [MECHANICAL] Sequential-vs-diverging matches data shape: 5/5 -- 11/11 colored measures use an encoding matching their data shape
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[PASS] [MECHANICAL] Column set shown vs. hidden: 4/4 -- visible-column overlap 1.00 (candidate-only=[], missing=[]); value-matched renamed columns: {'total_growth_pct': 'pop_growth_1996_2021_pct'}
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 3/4 -- visible-column overlap 0.65 (candidate-only=['population_1996', 'population_2001', 'population_2006', 'population_2011', 'population_2016', 'population_2021'], missing=['total_growth_pct'])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py)
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=True, truth=True
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[PASS] [MECHANICAL] No same-family hue collision across 2 measures: 1/1 -- colored-measure palettes: ['Blues', 'RdYlGn']
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
 [N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py)
-[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 6/6 colored measures have a shape-appropriate domain
+[PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 11/11 colored measures have a shape-appropriate domain
 [FAIL] [MECHANICAL] Frame + hairlines + dividers: 4/6 -- frame=OK; hairlines=OK; dividers=expected=True (gated on spanners), got=False
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=15, body not fully color-covered -> expected striping=True, actual=True
 [N/A] [MECHANICAL] Heading band hue harmonization: 0/0 -- superseded by check_header_branding (2026-08-12 -- header is now a fixed universal navy, not hue-matched per table)
 [PASS] [MECHANICAL] Header branding (deep navy, bold, white text): 5/5 -- header background: expected #08306B, got '#08306B' (OK); column_labels_font_weight: expected bold, got 'bold' (OK); column-label text color: expected white, got 'white' (OK)
 [PASS] [MECHANICAL] Stub tint (washed navy): 2/2 -- expected #EAF0F6, got '#EAF0F6'
 [PASS] [MECHANICAL] Stripe color (neutral grey): 2/2 -- expected #F6F6F6, got '#F6F6F6'
-[PASS] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 2/2 -- 1/1 hero-uncolored measures are plain text
+[N/A] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 0/0 -- no hero_uncolored measure value-matched a candidate column
 [PASS] [MECHANICAL] Signed-percent force_sign correctness: 2/2 -- 1/1 signed percent columns use force_sign=True
 [FAIL] [MECHANICAL] Caption keyword coverage: 2/3 -- 3/5 caption-keyword rules satisfied; caption missing: ['fastest-growing', 'not the average']
-[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 6/6, truncate=False correct 6/6, autocolor_text=True correct 6/6, reverse orientation matches truth 6/6
+[PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 11/11, truncate=False correct 11/11, autocolor_text=True correct 11/11, reverse orientation matches truth 11/11
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
-[FAIL] [MECHANICAL] fmt_* per column semantic type: 2/4 -- 7/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']
+[FAIL] [MECHANICAL] fmt_* per column semantic type: 2/4 -- 6/13 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['rank', 'total_growth_pct', 'pop_change_1996_2001_pct', 'pop_change_2001_2006_pct', 'pop_change_2006_2011_pct', 'pop_change_2011_2016_pct', 'pop_change_2016_2021_pct']
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
 [N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/hard/ground_truth/towny_growth_trends.py)

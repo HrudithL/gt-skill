@@ -1,4 +1,4 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_011158_house_6prompts/prompts/airquality_monthly_summary/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080322_house_6prompts/prompts/airquality_monthly_summary/baseline/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py
 
 TOTAL: 17/84 (20.2%)
   Data-compliance:        11/47
@@ -9,7 +9,7 @@ TOTAL: 17/84 (20.2%)
 [FAIL] [MECHANICAL] Colored-measure selection (right measure(s) colored): 0/6 -- 0/2 canonical colored measures covered by a candidate color call
 [FAIL] [MECHANICAL] Sequential-vs-diverging matches data shape: 0/5 -- ground truth requires colored measure(s) but candidate has none
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
-[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.14 (candidate-only=['Avg Ozone (ppb)', 'Avg Temperature (°F)', 'Avg Wind Speed (mph)'], missing=['avg_ozone', 'avg_temp', 'avg_wind']); value-matched renamed columns: {'month': 'Month'}
+[FAIL] [MECHANICAL] Column set shown vs. hidden: 1/4 -- visible-column overlap 0.14 (candidate-only=['Avg Ozone Level', 'Avg Temperature', 'Avg Wind Speed'], missing=['avg_ozone', 'avg_temp', 'avg_wind']); value-matched renamed columns: {'month': 'Month'}
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
 [N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py)
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
