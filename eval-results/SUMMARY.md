@@ -134,7 +134,7 @@ pulled down by one baseline invocation that failed Tier-2 execution (a
 `gt_table`-vs-`gt` variable-naming miss, same shape as `creator`'s own
 execution failures described in its `SUMMARY.md`) — excluding those,
 `prose`'s baseline would read ~28.1% and `scripts`' ~27.8%. See each
-skill's `plots/cost.png` / `comparator_score.png` for the per-skill
+skill's `plots/usage.png` / `comparator_score.png` for the per-skill
 baseline actually used in that comparison.
 \*\*`creator` is on 2026-08-07 data (see above); the other three rows are
 the 2026-08-09 sweep as corrected by the 2026-08-11 bug fixes below. Its
@@ -518,9 +518,8 @@ eval-results/
     progressive_disclosure.md real transcript excerpt showing the skill being read progressively
     plots/
       make_plots.py           re-scores the LATEST local runs/sweep/*_<skill>_6prompts and regenerates
-                               the 4 PNGs below -- see the warning below before running this
-      cost.png                 skill cost vs. baseline, per prompt (bar)
-      tokens.png                token usage per invocation, per prompt (scatter/strip)
+                               the 3 PNGs below -- see the warning below before running this
+      usage.png                 token usage per prompt (bar), each bar's USD cost labeled above it
       consistency.png           min-mean-max comparator score across 3 repeats (range/dumbbell)
       comparator_score.png      comparator score distribution: 3 repeats vs. baseline (box)
     samples/<prompt>/<variant>/  curated table.py + table.png + comparator report.txt

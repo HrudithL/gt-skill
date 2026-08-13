@@ -28,7 +28,7 @@ comparable** to this file's pre-2026-08-09 numbers (denominator shrank
 | Cost per invocation | $0.095 | $0.073 |
 | Score spread across 3 repeats | 18.1 points | n/a (1 run) |
 
-See [`plots/cost.png`](plots/cost.png), [`plots/tokens.png`](plots/tokens.png),
+See [`plots/usage.png`](plots/usage.png),
 [`plots/consistency.png`](plots/consistency.png),
 [`plots/comparator_score.png`](plots/comparator_score.png).
 
