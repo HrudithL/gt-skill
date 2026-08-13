@@ -98,6 +98,65 @@ if __name__ == "__main__":
     assert _render_call_present(src) is False
 
 
+def test_self_referential_guard_does_not_hang():
+    # Review finding (2026-08-13): a function whose OWN body contains
+    # another `__main__`-guard shape re-triggered the same special case
+    # inside `_walk_top_level`'s stack loop, which never terminated for a
+    # self-referential `def build(): if __name__=="__main__(): build()`.
+    # `guard_ids`/`body_index` now restrict the unwrap to the guard
+    # literally sitting in `tree.body` -- anything reached BY an unwrap
+    # gets no second chance to unwrap again.
+    src = """\
+def build():
+    if __name__ == "__main__":
+        build()
+
+if __name__ == "__main__":
+    build()
+"""
+    # Must terminate and must not raise -- the exact regression was an
+    # unbounded `while stack` loop, not a wrong return value.
+    assert _hairlines_present(src) is False
+
+
+def test_chained_guards_do_not_unwrap_transitively():
+    # Review finding (2026-08-13): `a()`'s own body contains a SECOND
+    # `__main__`-guard calling `b()`, and the pre-fix code unwrapped both,
+    # contradicting the "one level of unwrapping only" design intent this
+    # module's docstrings state. Only `a`'s own body is inlined; `b`'s
+    # `hairlines(gt)` call, one level deeper, must not be seen.
+    src = """\
+def b():
+    gt = hairlines(gt)
+
+def a():
+    if __name__ == "__main__":
+        b()
+
+if __name__ == "__main__":
+    a()
+"""
+    assert _hairlines_present(src) is False
+
+
+def test_guard_before_def_is_not_unwrapped():
+    # Review finding (2026-08-13): the guard's target `def` must appear
+    # BEFORE the guard in source order -- calling it any earlier raises a
+    # real `NameError` when the harness runs `python table.py`, so this is
+    # not an inlined-equivalent script and must not be scored as if it
+    # rendered fine.
+    src = """\
+if __name__ == "__main__":
+    build_table()
+
+def build_table():
+    gt = hairlines(gt)
+    finalize(gt, path="table.png")
+"""
+    assert _hairlines_present(src) is False
+    assert _render_call_present(src) is False
+
+
 def test_plain_unwrapped_script_is_unaffected():
     # A normal, already-linear top-level script (no wrapper function at
     # all) must keep working exactly as before.
