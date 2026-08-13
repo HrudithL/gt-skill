@@ -178,4 +178,5 @@ repeat_1` (38.4% vs. 85–90% siblings) used `.set_index('Town')` instead of pas
 performance` also runs into the known month-label-format ambiguity (see top-level
 `SUMMARY.md`). Both are places `RULES.md`/the worked example already teach the correct
 pattern and the other 2 of 3 repeats on the same prompt did it right — haiku-tier
-sampling variance on a small sample, not a skill or comparator gap.
+sampling variance on a small sample, not a skill or comparator gap. (A doc fix for
+this exact `set_index()`-vs-`rowname_col=` confusion has since landed, PR #107.)

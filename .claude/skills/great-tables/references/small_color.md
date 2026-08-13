@@ -49,19 +49,14 @@ as a plain value column. A `tab_stubhead(label=…)` **requires** that the stub 
 exist — **no orphan label** (setting a stubhead when there is no `rowname_col` is
 wrong, PP-25).
 
-Never rely on `df.set_index("col")` for the stub — `great_tables` never reads
-the pandas index; the stub is a real column named via `rowname_col=`.
-`set_index()` defaults to `drop=True`, which removes that column from the
-frame entirely, so `GT(...)` renders without it — the identifier's values
-vanish, rather than merely being demoted to a plain column. The simplest fix
-is to never call `set_index()` in the first place: pass
-`GT(df, rowname_col="col")` on the original frame. If the identifier is
-already the frame's index (e.g. straight out of `df.groupby("col").agg(...)`),
-restore it as a column first with `.reset_index()` — but only when
-`df.index.name == "col"`; calling `.reset_index()` on a frame that's still on
-its default integer index instead adds a spurious `index` column. Passing
-`rowname_col="col"` while `col` isn't an actual column (whether or not it's
-currently the index) raises `KeyError`.
+Never rely on `df.set_index("col")` for the stub — `great_tables` never reads the
+pandas index; the stub is a real column set via `rowname_col=`. `set_index()`
+defaults to `drop=True`, which removes that column from the frame entirely, so
+`GT(...)` renders without it — the identifier's values vanish, rather than merely
+being demoted to a plain column. Pass `GT(df, rowname_col="col")` on the frame while
+`col` is still a real column (i.e. before any `set_index()` call) — passing
+`rowname_col="col"` once `col` is only the pandas index raises a `KeyError`, since
+it's no longer a column at all.
 
 ### Grouping — a computable trigger (PP-1)
 
