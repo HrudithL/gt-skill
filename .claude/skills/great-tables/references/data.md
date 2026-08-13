@@ -55,11 +55,27 @@ silently breaks `fmt_*` / `data_color` downstream.
    either divide by 100 first or pass `scale_values=False` — otherwise it renders
    `1200%`. Pick one and be consistent across every percent column.
 
-4. **Fix the header row.** If row 0 is a title / blank / merged cell rather than the
+4. **Guard a percent-CHANGE column against zero/negative baselines.** `(end - start) /
+   start` silently produces two different kinds of garbage for the rows this doesn't
+   work for: a zero baseline gives `inf` (renders as the literal text `"inf%"` — not
+   caught by `sub_missing`, which only substitutes `None`/`NaN`), and a negative
+   baseline gives a finite, sign-reversed, equally-meaningless value (`(5 - (-10)) /
+   (-10)` = `-1.5`, i.e. a plausible-looking `"-150%"` that passes right through
+   uncaught). Mask on the condition, not the symptom, and use `np.nan` — not `None` —
+   as the fallback: `None` forces the whole column to `object` dtype (breaking any
+   later `.nlargest()`/`.sort_values()` on it), while `np.nan` keeps it `float64` and
+   `sub_missing` still catches it identically:
+   ```python
+   df["pct_change"] = np.where(df["start"] > 0, (df["end"] - df["start"]) / df["start"], np.nan)
+   ```
+   then render with `sub_missing(missing_text="—")` as usual, without discarding the
+   rest of that row.
+
+5. **Fix the header row.** If row 0 is a title / blank / merged cell rather than the
    real header (common in Excel exports), reload with the correct `header=`/`skiprows=`
    so column names are real, not `Unnamed: 0`.
 
-5. **SQL / Decimal results → float.** Cast `decimal.Decimal` columns to `float`
+6. **SQL / Decimal results → float.** Cast `decimal.Decimal` columns to `float`
    (`df["amt"] = df["amt"].astype(float)`) so gt's formatters accept them, and confirm
    NULL handling matches your missing-value convention (below). **Caution — exact money /
    large integers:** `float` has only ~15–16 significant digits (integers exact only up
@@ -68,10 +84,10 @@ silently breaks `fmt_*` / `data_color` downstream.
    display precision (e.g. `df["amt"] = df["amt"].map(lambda d: d.quantize(Decimal("0.01")))`),
    then format. gt can format `Decimal` values directly.
 
-6. **Trim whitespace in string keys.** Leading/trailing spaces break exact matching for
+7. **Trim whitespace in string keys.** Leading/trailing spaces break exact matching for
    `groupname_col` labels and joins: `df["region"] = df["region"].str.strip()`.
 
-7. **Name the missing-value meaning, then make it uniform.** "No data", "true zero",
+8. **Name the missing-value meaning, then make it uniform.** "No data", "true zero",
    and "not applicable" are different claims — don't let them all collapse to a blank
    cell. Standardize to `NaN` where you mean missing, and render with
    `sub_missing(missing_text="—")` (an em dash reads as *intentionally blank*, not

@@ -60,10 +60,18 @@ rule.
 | **Signed** measure (neg/pos, opposite meaning) | `big_color/diverging_fill.md` |
 | **Ordered magnitude**, ≥5 rows | `big_color/column_gradient_fill.md` |
 | **Matrix / heatmap** (facets sharing one scale) | `big_color/column_gradient_fill.md` |
-| **Top-N** "winner" rows | `big_color/full_row_highlight.md` |
+| **Top-N** "winner" rows *highlighted within a larger table* | `big_color/full_row_highlight.md` |
 | **Binary / categorical status** | `big_color/status_cell_fill.md` |
 | A few **outlier cells** | `big_color/bold_colored_number.md` |
 | **One text column that IS the column** | `big_color/full_column_fill.md` |
+
+**"Top-N" means highlighting a small subset of winner rows inside a table that also
+shows other, non-winning rows** — not "the request already filtered the data down to
+only the top N" (`nlargest(10, ...)`, "the 10 most expensive X"). Once the displayed
+table's whole row set already IS the winners, there's no larger context left to stand
+out from (every row would get the fill, blowing past that file's own `≤30%` cap), and
+the ranking measure itself still needs its magnitude shown row-to-row — that's **Ordered
+magnitude** above, regardless of the request's own "top N" wording.
 
 Which measures earn fill: one qualifying measure ⇒ it's the hero and gets
 colored. When several qualify, `big_color/column_gradient_fill.md`'s priority
