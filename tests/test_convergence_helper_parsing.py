@@ -19,8 +19,12 @@ A fresh eval sweep (2026-08-12) found three bugs in this parsing:
 """
 from __future__ import annotations
 
+import io
 import sys
+import tokenize as _tokenize
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -135,3 +139,83 @@ def test_stub_tint_non_navy_hue_lookup_is_unchanged():
     """
     source = "gt = stub_tint(gt, hue='forest')\n"
     assert convergence._find_stub_fill_hex(source) is None
+
+
+def test_band_call_with_explicit_non_navy_hue_under_dark_shade_stays_unresolved():
+    """Regression test for the fix-round Finding 1 bug: an unconditional
+    `if heading_band_shade == "dark": band_hex =
+    _HELPER_HUE_TO_ACCENT_HEX["navy"]` override (added, then reverted)
+    fabricated a false positive for `band(gt, shade="dark", hue="forest")`
+    -- a real, valid call under `great-tables-house`'s OWN separate
+    `band()` (`house_table.py`), whose non-navy hues genuinely render a
+    per-hue `accent[hue]` color under `shade="dark"` (hue is NOT a no-op
+    there the way it is in `gt_consistency.band()`). This parser can't
+    tell which skill's helper convention a candidate is using from source
+    text alone, so an explicit non-navy hue must resolve to `None` (the
+    plain `.get()` lookup's miss), never a fabricated navy hex. Without
+    this test, the exact regression fixed here could be silently
+    reintroduced.
+    """
+    source = "gt = band(gt, shade='dark', hue='forest')\n"
+    design = convergence.parse_design_choices(source)
+    assert design["heading_band_shade"] == "dark"
+    assert design["heading_band_hue"] == "forest"
+    assert design["heading_band_hex"] is None
+
+
+def test_comment_ranges_form_feed_desync_no_longer_swallows_a_real_call():
+    """Fix-round Finding 2 regression test: `_comment_ranges` used to build
+    its line-start offset table via `source.splitlines(keepends=True)`,
+    which -- unlike `tokenize`'s own `io.StringIO(source).readline`-based
+    line reading -- ALSO splits on characters like a form feed (`\\x0c`)
+    that `tokenize` does not treat as a line boundary. A form feed
+    anywhere before a real call desyncs every subsequent row's computed
+    character offset, and in the worst case that desync shifts a later
+    comment's computed range far enough backward to wrongly cover an
+    earlier, unrelated real call -- a silent-drop failure mode (the real
+    call's match looks like it falls "inside" a comment and gets skipped),
+    not a crash.
+
+    This fixture (`N = 25` filler `"A"` characters after the form feed)
+    is tuned so the pre-fix line-start table desyncs by exactly enough to
+    make the real `band(...)` call's start offset fall inside the
+    trailing comment's mis-computed range -- confirmed separately (see the
+    fix-round investigation) to silently drop the call's block entirely
+    under the pre-fix `splitlines(keepends=True)`-based implementation.
+    Post-fix (splitting only on `"\\n"`, matching `tokenize`/`readline`'s
+    own notion of a line), the call is still correctly detected.
+    """
+    prefix = "w = 1\n"
+    padded_line = 'x = "' + "\x0c" + ("A" * 25) + '"\n'
+    tail = 'gt = band(gt, hue="navy")  # trailing comment\n'
+    source = prefix + padded_line + tail
+
+    blocks = convergence._bare_call_blocks(source, "band")
+    assert len(blocks) == 1
+    assert "navy" in blocks[0]
+    assert convergence._find_band_helper(source) == ("dark", "navy")
+
+
+def test_comment_ranges_falls_back_gracefully_when_tokenize_raises():
+    """`_comment_ranges` must never propagate a `tokenize` failure to its
+    caller -- a single malformed/partial candidate script (e.g. an
+    unterminated string literal elsewhere in the file) must not crash the
+    whole comparator run. Confirms both halves of the documented fallback:
+    `_comment_ranges` itself returns an empty tuple (no ranges masked)
+    rather than raising, AND the caller built on top of it
+    (`_bare_call_blocks`/`_find_band_helper`) still recovers the real call
+    via the resulting comment-blind behavior instead of raising or
+    silently losing the match.
+    """
+    source = 'gt = band(gt, hue="navy")\nx = "unterminated\n'
+
+    # `tokenize` itself must actually fail on this source -- otherwise this
+    # test would not be exercising the fallback path at all.
+    with pytest.raises(Exception):
+        list(_tokenize.generate_tokens(io.StringIO(source).readline))
+
+    assert convergence._comment_ranges(source) == ()
+    blocks = convergence._bare_call_blocks(source, "band")
+    assert len(blocks) == 1
+    assert "navy" in blocks[0]
+    assert convergence._find_band_helper(source) == ("dark", "navy")
