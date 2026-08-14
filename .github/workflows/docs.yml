@@ -6,18 +6,21 @@ on:
     paths:
       - "docs/**"
       - ".github/workflows/docs.yml"
-  # Also run when the root polish branch itself lands on main.
   workflow_dispatch: {}
 
+# Minimal permissions to publish to Pages via the native action.
 permissions:
-  contents: write   # required by peaceiris/actions-gh-pages to push to gh-pages
+  contents: read
+  pages: write
+  id-token: write
 
+# Only one Pages deployment at a time. Don't cancel an in-flight publish; queue.
 concurrency:
-  group: docs-pages
+  group: pages
   cancel-in-progress: false
 
 jobs:
-  build-and-publish:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Check out
@@ -31,14 +34,20 @@ jobs:
       - name: Render docs/
         run: quarto render docs/
 
-      - name: Deploy to gh-pages
-        if: github.ref == 'refs/heads/main'
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: docs/_site
-          # Keep any non-Quarto artifacts (e.g. CNAME) that already live on gh-pages.
-          keep_files: true
-          user_name: "github-actions[bot]"
-          user_email: "41898282+github-actions[bot]@users.noreply.github.com"
-          commit_message: "docs: publish ${{ github.sha }}"
+          path: docs/_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
