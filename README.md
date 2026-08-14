@@ -1,83 +1,49 @@
 # gtskill
 
-A tiny, lightweight harness that uses the [Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/) plus a one-paragraph [Great Tables](https://posit-dev.github.io/great-tables/) skill to turn a CSV + a natural-language prompt into a formatted table.
+[\![Docs](https://img.shields.io/badge/docs-quarto-2a78d6)](https://hrudithl.github.io/gt-skill/)
 
-## Setup
+A tiny, testable evaluation harness for a
+[Great Tables](https://posit-dev.github.io/great-tables/) skill that
+runs on the [Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/).
+Given a CSV and a natural-language prompt, the harness mounts exactly
+one skill into an ephemeral `.claude/` directory, launches an agent
+with a bounded tool set, and captures the rendered table plus the full
+conversation trace.
+
+## Quickstart
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install claude-agent-sdk great_tables pandas python-dotenv anyio pillow
-# for the ground-truth judge (runner/judge.py):
-pip install anthropic
-# for the web UI backend:
-pip install starlette uvicorn sse-starlette websockets
-# for regenerating the eval-results/ plots:
-pip install plotnine
-# also need the Claude Code CLI on PATH:
+git clone https://github.com/HrudithL/gt-skill && cd gt-skill
+python -m venv .venv && source .venv/bin/activate
+pip install claude-agent-sdk great_tables pandas python-dotenv anyio pillow anthropic plotnine
 npm install -g @anthropic-ai/claude-code
-```
+echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env
 
-Create a `.env` with your key:
-
-```
-ANTHROPIC_API_KEY=sk-ant-...
-# Optional (usually chosen with --model instead): a concrete model id override
-GTSKILL_AGENT_MODEL=claude-haiku-4-5
-```
-
-## Usage
-
-One flag-driven runner drives every flow (the web app calls the same core):
-
-```bash
-# one corpus prompt under the prose skill
+python scripts/fetch_data.py                                # provision data/*.csv
 python run.py --skill prose --prompt sp500_monthly_performance
-
-# convergence: scripts skill, 3 repeats (baseline auto-on), Haiku
-python run.py --skill scripts --prompt sp500_monthly_performance --repeat 3
-
-# sweep every easy prompt under the creator skill
-python run.py --skill creator --difficulty easy
-
-# an ad-hoc prompt against a chosen data file
-python run.py --skill prose --prompt-text "Top 10 cars by MSRP" --data data/gtcars.csv
 ```
 
-Flags: `--skill {prose,scripts,creator,house}`; `--prompt NAME` (repeatable) /
-`--difficulty {easy,medium,hard,all}` / `--prompt-text TEXT --data PATH`;
-`--repeat N`; `--model {haiku,sonnet,opus}`; `--baseline` / `--no-baseline`
-(default auto — the no-skill control runs iff `--repeat > 1`).
+## What next
 
-Each run writes one tree under `runs/<ts>_<skill>_<slug>/`:
+The full documentation lives under [`docs/`](docs/) and renders to a
+Quarto website:
 
-- `run.json` — the RunSpec + resolved config + status + timings
-- `summary.json` — aggregate pass/fail + tokens/cost across all prompts
-- `prompts/<name>/{baseline,repeat_1…N}/` — each with `table.py`, `table.png`,
-  `transcript.json`, the data snapshot, and the mounted `.claude/`
-- `prompts/<name>/{convergence.json,contact_sheet.png}` — only when `--repeat > 1`
+- **[Setup](docs/setup.qmd)** — prerequisites, install, API key, sample data.
+- **[Skills](docs/skills.qmd)** — the four skill variants and when to pick each.
+- **[Harness](docs/harness.qmd)** — architecture, sandboxing, sidecar Chrome.
+- **[Runner](docs/runner.qmd)** — CLI reference for every `run.py` flag.
+- **[Methodology](docs/methodology.qmd)** — how the skill was engineered.
+- **[Reproduce](docs/reproduce.qmd)** — end-to-end reproduction guide.
 
-The CSV stays where it is — the agent reads it from a symlink in the run dir and
-is **never** asked to copy it elsewhere.
+Published site: **<https://hrudithl.github.io/gt-skill/>** (once Pages
+is enabled).
 
-## Web UI
+## Contributing
 
-The same runner is also available through a browser-based control plane:
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR. It
+describes the branch tree, the review loop, the model-tier rules that
+govern how work lands, and the hard prohibitions.
 
-```bash
-uvicorn web.server:app --port 8000
-```
+## License
 
-Then open `http://localhost:8000`. It calls the same `runner` core as `run.py`,
-so a run launched from the browser behaves identically to one launched from
-the CLI.
-
-## How it works
-
-- Three self-contained skills live under `.claude/skills/great-tables` (prose),
-  `.claude/skills/great-tables-ci` (scripts), and `.claude-skill-creator`
-  (creator); the runner mounts exactly one per run into an ephemeral `.claude/`.
-- `runner/engine.py` calls `claude_agent_sdk.query` with the one mounted skill
-  plus `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`. The agent loads the
-  skill, reads the data, writes `table.py`, runs it, and the script renders
-  `table.png` via `gt.gtsave("table.png")` (attached to a sidecar Chrome over CDP).
+See [LICENSE](LICENSE).
