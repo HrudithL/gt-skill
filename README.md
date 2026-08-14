@@ -130,11 +130,11 @@ into `eval-results/<skill>/samples/<prompt>/`. Once all four skills finish,
 `eval-results/<skill>/plots/*.png` for each skill.
 
 Plot layout is adaptive: when every difficulty has ≤3 prompts, the plots
-condense into one `usage.png` + `comparator_score.png` pair per skill. When
+condense into one `usage.png` + `evaluation_score.png` pair per skill. When
 any difficulty exceeds 3 (e.g. `--random 4` or `--random 5`), each skill's
 plots split into one pair **per difficulty**
 (`usage_easy.png` / `usage_medium.png` / `usage_hard.png`, likewise for
-`comparator_score`).
+`evaluation_score`).
 
 `eval-results/` is gitignored — a fresh `--evaluate` overwrites it every time,
 and the intent is that it's a runtime output, not something checked in.
@@ -149,17 +149,48 @@ artifacts stay under the gitignored runtime `eval-results/`.
 
 ```
 published-metrics/
-  SUMMARY.md                          # per-skill ranking, one table + at-a-glance + leaders
-  creator/{usage,comparator_score}.png
-  house/{usage,comparator_score}.png
-  prose/{usage,comparator_score}.png
-  scripts/{usage,comparator_score}.png
+  SUMMARY.md                            # per-skill ranking: table + at-a-glance + leaders
+  creator/{usage,evaluation_score}.png
+  house/{usage,evaluation_score}.png
+  prose/{usage,evaluation_score}.png
+  scripts/{usage,evaluation_score}.png
 ```
 
-A fresh clone can browse `published-metrics/` immediately to see how each
-skill fared on the last committed evaluation. To refresh from your own
-run, either run `python run.py --evaluate --random 2 --repeat 3` (which
-auto-publishes) or call the API directly:
+See [`published-metrics/SUMMARY.md`](published-metrics/SUMMARY.md) for the
+last committed comparison of all four skills.
+
+#### Latest committed results
+
+**`creator`** — the great-tables skill-authoring aid
+
+| Usage & cost per invocation | Evaluation score across attempts |
+| :---: | :---: |
+| ![creator usage](published-metrics/creator/usage.png) | ![creator evaluation score](published-metrics/creator/evaluation_score.png) |
+
+**`house`** — the house style skill
+
+| Usage & cost per invocation | Evaluation score across attempts |
+| :---: | :---: |
+| ![house usage](published-metrics/house/usage.png) | ![house evaluation score](published-metrics/house/evaluation_score.png) |
+
+**`prose`** — the prose great-tables skill
+
+| Usage & cost per invocation | Evaluation score across attempts |
+| :---: | :---: |
+| ![prose usage](published-metrics/prose/usage.png) | ![prose evaluation score](published-metrics/prose/evaluation_score.png) |
+
+**`scripts`** — the great-tables-ci scripted skill
+
+| Usage & cost per invocation | Evaluation score across attempts |
+| :---: | :---: |
+| ![scripts usage](published-metrics/scripts/usage.png) | ![scripts evaluation score](published-metrics/scripts/evaluation_score.png) |
+
+#### Refreshing published-metrics
+
+To refresh from your own run, either run
+`python run.py --evaluate --random 2 --repeat 3` (which auto-publishes)
+or, from a runtime `eval-results/` tree that already exists, call the
+publish API directly:
 
 ```python
 from pathlib import Path

@@ -9,10 +9,13 @@ layout, writes plots and ``metrics.json``.
 Layout policy (from the human's spec):
 
 - If every difficulty has ≤3 prompts in this skill's samples, use the
-  condensed pair: ``usage.png`` + ``comparator_score.png``.
+  condensed pair: ``usage.png`` + ``evaluation_score.png``.
 - If any difficulty has >3 prompts, split into a per-difficulty pair per
   present difficulty: ``usage_<difficulty>.png`` +
-  ``comparator_score_<difficulty>.png``.
+  ``evaluation_score_<difficulty>.png``. The filename says
+  ``evaluation_score`` (not ``comparator_score``) because the chart's own
+  title does too — the score blends the deterministic comparator with the
+  LLM judge, not the comparator alone.
 
 Anything else in ``<skill>/plots/`` is left alone — the previous condensed
 plots aren't scrubbed on a split render (or vice versa) because a
@@ -126,8 +129,8 @@ def render_skill(root: Path, skill: str) -> dict:
             written[f"usage_{difficulty}.png"] = plots.plot_usage(
                 metrics, prompt_ids, labels, plots_dir / f"usage_{difficulty}.png"
             )
-            written[f"comparator_score_{difficulty}.png"] = plots.plot_comparator_score(
-                metrics, prompt_ids, labels, plots_dir / f"comparator_score_{difficulty}.png"
+            written[f"evaluation_score_{difficulty}.png"] = plots.plot_comparator_score(
+                metrics, prompt_ids, labels, plots_dir / f"evaluation_score_{difficulty}.png"
             )
     else:
         prompt_ids = [pid for ids in per_diff.values() for pid in ids]
@@ -136,8 +139,8 @@ def render_skill(root: Path, skill: str) -> dict:
             written["usage.png"] = plots.plot_usage(
                 metrics, prompt_ids, labels, plots_dir / "usage.png"
             )
-            written["comparator_score.png"] = plots.plot_comparator_score(
-                metrics, prompt_ids, labels, plots_dir / "comparator_score.png"
+            written["evaluation_score.png"] = plots.plot_comparator_score(
+                metrics, prompt_ids, labels, plots_dir / "evaluation_score.png"
             )
 
     return {

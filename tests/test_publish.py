@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 def _fake_eval_results_tree(root: Path, *, skills=("creator", "house"),
-                             per_skill_plots=("usage.png", "comparator_score.png")):
+                             per_skill_plots=("usage.png", "evaluation_score.png")):
     """Build the minimum shape publish() reads: <skill>/plots/*.png files
     and a top-level SUMMARY.md. Contents are placeholder bytes."""
     for skill in skills:
@@ -36,11 +36,11 @@ def test_publish_copies_plots_and_summary(tmp_path):
     assert (dst / "SUMMARY.md").read_text() == "# fake summary\n"
     for skill in ("creator", "house"):
         assert (dst / skill / "usage.png").is_file()
-        assert (dst / skill / "comparator_score.png").is_file()
+        assert (dst / skill / "evaluation_score.png").is_file()
     # Nothing else at the skill level.
     for skill in ("creator", "house"):
         assert sorted(p.name for p in (dst / skill).iterdir()) == [
-            "comparator_score.png",
+            "evaluation_score.png",
             "usage.png",
         ]
 
@@ -72,13 +72,13 @@ def test_publish_rewrites_previous_plots(tmp_path):
     (src / "creator" / "plots" / "usage_medium.png").unlink()
     (src / "creator" / "plots" / "usage_hard.png").unlink()
     (src / "creator" / "plots" / "usage.png").write_bytes(b"\x89PNG\r\n\x1a\nfresh")
-    (src / "creator" / "plots" / "comparator_score.png").write_bytes(b"\x89PNG\r\n\x1a\nfresh")
+    (src / "creator" / "plots" / "evaluation_score.png").write_bytes(b"\x89PNG\r\n\x1a\nfresh")
     # Also drop plots for house so the previous ones stay stale — publish
     # should still overwrite creator's dir cleanly.
     publish(src, dst)
 
     # First-run per-difficulty plots must NOT remain in creator/.
     assert sorted(p.name for p in (dst / "creator").iterdir()) == [
-        "comparator_score.png",
+        "evaluation_score.png",
         "usage.png",
     ]
