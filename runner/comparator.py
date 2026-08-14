@@ -3047,14 +3047,13 @@ def _palette_kind(palette: str | None) -> str:
     """"diverging"/"sequential" for a RECOGNIZED palette name, else
     "unknown" -- never assumed sequential by default.
 
-    A custom diverging palette expressed as a literal hex-list (e.g. the
-    repo's own `corpus/heatmap/good_table.py` red-white-green gradient) is
-    not a bare palette NAME at all, so it can't match either known set --
-    treating that as "unknown" (which `check_sequential_vs_diverging`
-    already gives the benefit of the doubt) rather than defaulting it to
-    "sequential" avoids penalizing a genuinely diverging custom palette for
-    not being one of the standard ColorBrewer names this function
-    recognizes.
+    A custom diverging palette expressed as a literal hex-list (e.g. a
+    red-white-green hex gradient) is not a bare palette NAME at all, so it
+    can't match either known set -- treating that as "unknown" (which
+    `check_sequential_vs_diverging` already gives the benefit of the doubt)
+    rather than defaulting it to "sequential" avoids penalizing a genuinely
+    diverging custom palette for not being one of the standard ColorBrewer
+    names this function recognizes.
     """
     if not palette:
         return "unknown"
