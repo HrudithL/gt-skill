@@ -193,7 +193,7 @@ produces no PNG during the check.
 **Run it, then iterate until `PASS`.** After writing `table.py`, run:
 
 ```
-python gt_check.py table.py
+python .claude/skills/great-tables-ci/scripts/gt_check.py table.py
 ```
 
 It prints a loud banner, then one line per violation:

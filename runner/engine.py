@@ -108,12 +108,12 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
     Rebuilt from scratch on every call (rmtree + recreate in place), so a run
     never sees more than the one skill it is testing — regardless of what a
     previous call (a different variant, or a stale baseline run) left behind.
-    No per-variant staging directory or symlink indirection: there's only ever
-    one name involved (``.claude``), so there's nothing "stale" to hunt down by
-    name — the rebuild-in-place already guarantees isolation. The repo
-    `.claude` contents *other than* ``skills/`` (e.g. ``settings.local.json``)
-    are mirrored so permissions match the project; ``skills/`` then holds only
-    ``<mounted name>/``, copied verbatim from the variant's source directory:
+    The result is deliberately minimal: only ``.claude/skills/<mounted name>/``
+    exists under ``run_dir/.claude``. Nothing else from the repo's own
+    ``.claude`` (``settings.local.json``, ``worktrees/``, etc.) is mirrored —
+    the run's permission/sandbox model comes from ``ClaudeAgentOptions``
+    (``can_use_tool`` + ``sandbox``), not from a copied settings file, so the
+    ephemeral ``.claude`` is purely the skill mount:
 
     - ``prose`` → the minimal, script-free ``great-tables`` skill.
     - ``scripted`` → the ``great-tables-ci`` skill (same skeleton + the checker
@@ -143,55 +143,12 @@ def _prepare_skill_root(run_dir: Path, skill_variant: str) -> Path:
             shutil.rmtree(claude_dir)
     claude_dir.mkdir(parents=True)
 
-    # Mirror everything except skills/ so permissions etc. match the real project.
-    for item in (ROOT / ".claude").iterdir():
-        if item.name == "skills":
-            continue
-        if item.is_dir():
-            shutil.copytree(item, claude_dir / item.name)
-        else:
-            shutil.copy2(item, claude_dir / item.name)
-
     skills_dst = claude_dir / "skills"
     skills_dst.mkdir()
     # Copy the selected skill verbatim as the mounted skill. symlinks=False
     # follows the CI skill's references/assets symlinks and copies real files.
     shutil.copytree(src, skills_dst / mounted, symlinks=False)
     return claude_dir
-
-
-def _clear_mounted_helpers(run_dir: Path) -> None:
-    """Remove helper-script symlinks a PREVIOUS call mounted into ``run_dir``.
-
-    The mount block below symlinks each mounted skill's ``scripts/*.py`` directly
-    into ``run_dir`` (so ``import gt_consistency`` / ``python gt_check.py`` /
-    ``import gt_house_style`` resolve with ``cwd=run_dir``). Those links are only
-    ever ADDED, so if ``run_dir`` is ever reused for a DIFFERENT variant (e.g. a
-    hand-written script calling ``engine.run()`` twice against the same dir —
-    the CLI/web app never do this, since every ``repeat_N``/``baseline`` dir is
-    created fresh) they'd linger: a prior ``scripted`` run's
-    ``gt_check.py``/``gt_consistency.py`` would stay importable in a later
-    ``prose`` or baseline ``none`` run and contaminate the "no-script" condition
-    (a critical variant-isolation bug).
-
-    Every harness helper link resolves into ``run_dir/.claude``, so we identify
-    them by that target and unlink them. The ``.claude`` directory itself is
-    skipped (rebuilt separately by ``_prepare_skill_root``, or removed outright
-    for the baseline) and the data-file symlink (target has no ``.claude``
-    component) is never touched.
-    """
-    claude_dir = run_dir / ".claude"
-    for entry in run_dir.iterdir():
-        if entry.name == ".claude":
-            continue  # rebuilt in place, or removed, by the caller
-        if not entry.is_symlink():
-            continue
-        target = Path(os.readlink(entry))
-        try:
-            target.relative_to(claude_dir)
-        except ValueError:
-            continue
-        entry.unlink()
 
 
 # Harness-specific rendering instructions appended to the claude_code system
@@ -474,14 +431,6 @@ async def run(
     claude_dir = run_dir / ".claude"
     skill_root: Path | None = None
 
-    # Variant isolation: strip any helper-script symlinks a prior call left in
-    # this run_dir before mounting the current variant, so run_dir exposes ONLY
-    # the current variant's mechanics (the CLI/web app never reuse a run_dir
-    # across variants — every repeat_N/baseline dir is created fresh — but
-    # _prepare_skill_root's own rebuild-in-place isn't enough by itself to
-    # catch these, since they live in run_dir, not under .claude).
-    _clear_mounted_helpers(run_dir)
-
     if is_baseline:
         if claude_dir.is_symlink():
             claude_dir.unlink()
@@ -494,18 +443,20 @@ async def run(
     # in the venv `.pth` startup hook (_ensure_sidecar_hook above), so a generated
     # `table.py` renders with a bare `gt.gtsave("table.png")` and no import.
 
-    # The mounted skill's Python helpers live in its scripts/ dir, but the
-    # agent's table.py runs with cwd=run_dir. Symlink every scripts/*.py into
-    # run_dir so `import gt_consistency` and `python gt_check.py` (scripted) or
-    # `import gt_house_style` (creator) resolve. Prose ships no scripts/, so this
-    # no-ops.
+    # Make the mounted skill's Python helpers importable without dumping any
+    # symlinks into ``run_dir`` itself. The agent runs ``python table.py`` with
+    # ``cwd=run_dir``, so ``from gt_consistency import ...`` (scripted) /
+    # ``from gt_house_style import ...`` (creator) resolve via PYTHONPATH
+    # pointing at ``run_dir/.claude/skills/<mounted>/scripts/``. Same env var
+    # is used when invoking the checker as
+    # ``python .claude/skills/great-tables-ci/scripts/gt_check.py table.py``:
+    # gt_check execs table.py, whose top-level imports still need the scripts
+    # dir on sys.path. Prose ships no scripts/, so this stays unset for prose.
+    pythonpath: str | None = None
     if skill_root is not None and mounted_skill is not None:
         mounted_scripts = skill_root / "skills" / mounted_skill / "scripts"
         if mounted_scripts.is_dir():
-            for py in mounted_scripts.glob("*.py"):
-                link = run_dir / py.name
-                if not link.is_symlink() and not link.exists():
-                    link.symlink_to(py)
+            pythonpath = str(mounted_scripts)
 
     full_prompt = (
         f"{user_prompt}\n\n"
@@ -559,6 +510,12 @@ async def run(
             "TMPDIR": str(run_dir),
             "PATH": f"{ROOT / '.venv' / 'bin'}:{os.environ.get('PATH', '')}",
             "VIRTUAL_ENV": str(ROOT / ".venv"),
+            # See the pythonpath block above: put the mounted skill's scripts/
+            # dir (e.g. .claude/skills/great-tables-ci/scripts) on PYTHONPATH
+            # so `from gt_consistency import ...` / `from gt_house_style import
+            # ...` in the agent's table.py resolve without any symlink into
+            # run_dir. Only set when the mounted skill actually ships scripts.
+            **({"PYTHONPATH": pythonpath} if pythonpath else {}),
         },
         permission_mode="default",
         can_use_tool=_make_can_use_tool(run_dir),
