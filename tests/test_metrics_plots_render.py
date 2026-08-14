@@ -31,10 +31,12 @@ def test_render_skill_produces_condensed_plots_against_demo(tmp_path):
 
     assert result["layout"] == "condensed"
     assert result["plots"]["usage.png"] is True
+    assert result["plots"]["tokens_and_cost.png"] is True
     assert result["plots"]["evaluation_score.png"] is True
 
     plots_dir = dst / "creator" / "plots"
     assert (plots_dir / "usage.png").stat().st_size > 1000
+    assert (plots_dir / "tokens_and_cost.png").stat().st_size > 1000
     assert (plots_dir / "evaluation_score.png").stat().st_size > 1000
 
     metrics = json.loads((dst / "creator" / "metrics.json").read_text())

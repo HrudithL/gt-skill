@@ -152,9 +152,13 @@ published-metrics/
   SUMMARY.md                            # per-skill ranking: table + at-a-glance + leaders
   creator/{usage,evaluation_score}.png
   house/{usage,evaluation_score}.png
-  prose/{usage,evaluation_score}.png
-  scripts/{usage,evaluation_score}.png
+  prose/{usage,tokens_and_cost,evaluation_score}.png
+  scripts/{usage,tokens_and_cost,evaluation_score}.png
 ```
+
+Per skill, three plots ship: `usage.png` (cost per invocation, per prompt),
+`tokens_and_cost.png` (experimental combined view: cost on top, token count
+on bottom), and `evaluation_score.png` (accuracy, per prompt).
 
 See [`published-metrics/SUMMARY.md`](published-metrics/SUMMARY.md) for the
 last committed comparison of all four skills.
@@ -163,27 +167,33 @@ last committed comparison of all four skills.
 
 **`creator`** — the great-tables skill-authoring aid
 
-| Usage & cost per invocation | Evaluation score across attempts |
+| Cost per invocation | Accuracy |
 | :---: | :---: |
 | ![creator usage](published-metrics/creator/usage.png) | ![creator evaluation score](published-metrics/creator/evaluation_score.png) |
 
 **`house`** — the house style skill
 
-| Usage & cost per invocation | Evaluation score across attempts |
+| Cost per invocation | Accuracy |
 | :---: | :---: |
 | ![house usage](published-metrics/house/usage.png) | ![house evaluation score](published-metrics/house/evaluation_score.png) |
 
 **`prose`** — the prose great-tables skill
 
-| Usage & cost per invocation | Evaluation score across attempts |
+| Cost per invocation | Accuracy |
 | :---: | :---: |
 | ![prose usage](published-metrics/prose/usage.png) | ![prose evaluation score](published-metrics/prose/evaluation_score.png) |
 
 **`scripts`** — the great-tables-ci scripted skill
 
-| Usage & cost per invocation | Evaluation score across attempts |
+| Cost per invocation | Accuracy |
 | :---: | :---: |
 | ![scripts usage](published-metrics/scripts/usage.png) | ![scripts evaluation score](published-metrics/scripts/evaluation_score.png) |
+
+Combined cost + tokens view (experimental — pending review) per skill:
+[creator](published-metrics/creator/tokens_and_cost.png) ·
+[house](published-metrics/house/tokens_and_cost.png) ·
+[prose](published-metrics/prose/tokens_and_cost.png) ·
+[scripts](published-metrics/scripts/tokens_and_cost.png).
 
 #### Refreshing published-metrics
 
