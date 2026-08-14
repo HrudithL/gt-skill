@@ -3,23 +3,42 @@ title: "gtskill"
 subtitle: "A tiny harness for Claude-Agent-SDK-driven Great Tables generation"
 ---
 
+::: {.hero-badges}
+[![GitHub stars](https://img.shields.io/github/stars/HrudithL/gt-skill?style=for-the-badge&logo=github&labelColor=1e2233&color=3b5cb0)](https://github.com/HrudithL/gt-skill/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/HrudithL/gt-skill?style=for-the-badge&logo=github&labelColor=1e2233&color=3b5cb0)](https://github.com/HrudithL/gt-skill/network/members)
+[![License](https://img.shields.io/github/license/HrudithL/gt-skill?style=for-the-badge&labelColor=1e2233&color=708090)](https://github.com/HrudithL/gt-skill/blob/main/LICENSE)
+[![Docs](https://img.shields.io/badge/docs-quarto-3b5cb0?style=for-the-badge&labelColor=1e2233)](https://hrudithl.github.io/gt-skill/)
+:::
+
 ## What this is
 
 `gtskill` is a small, testable evaluation harness that lets a language
-model produce a formatted [Great Tables](https://posit-dev.github.io/great-tables/)
-table from a CSV and a natural-language prompt. It is built around one
-short "skill" the agent loads at runtime — everything else (the runner,
-the corpus, the judge, the comparator) is scaffolding for engineering
-and measuring that skill.
+model produce a formatted
+[Great Tables](https://posit-dev.github.io/great-tables/) table from a
+CSV and a natural-language prompt. It is built around one short "skill"
+the agent loads at runtime — everything else (the runner, the judge,
+the comparator) is scaffolding for engineering and measuring that
+skill.
 
-## What you'll find in these docs
+## Explore the docs
 
-- [Setup](setup.qmd) — install, `.env`, sample data.
-- [Skills](skills.qmd) — the four skill variants and when to use each.
-- [Harness](harness.qmd) — architecture, sandboxing, the run model.
-- [Runner](runner.qmd) — CLI reference.
-- [Methodology](methodology.qmd) — how the skill was engineered.
-- [Reproduce](reproduce.qmd) — run your own evaluation end-to-end.
+::: {.grid}
+::: {.g-col-12 .g-col-md-6}
+### Getting started
+
+- [**Setup**](setup.qmd) — install, `.env`, sample data.
+- [**Skills**](skills.qmd) — the four skill variants and when to use each.
+- [**Reproduce**](reproduce.qmd) — run your own evaluation end-to-end.
+:::
+
+::: {.g-col-12 .g-col-md-6}
+### Reference
+
+- [**Runner**](runner.qmd) — CLI reference for `run.py`.
+- [**Harness**](harness.qmd) — architecture, sandboxing, sidecar Chrome.
+- [**Methodology**](methodology.qmd) — how the skill was engineered.
+:::
+:::
 
 ::: {.callout-tip}
 ## Contribute back

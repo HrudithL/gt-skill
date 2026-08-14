@@ -1,6 +1,8 @@
 project:
   type: website
   output-dir: _site
+  resources:
+    - "assets/**"
 
 website:
   title: "gtskill"
@@ -8,10 +10,17 @@ website:
     A lightweight harness that pairs the Claude Agent SDK with a
     Great Tables skill to turn a CSV + prompt into a formatted table.
   repo-url: https://github.com/HrudithL/gt-skill
-  repo-actions: [edit, issue]
+  # No repo-actions -- keeps "Edit this page" / "Report an issue" off
   page-navigation: true
+  back-to-top-navigation: true
+  reader-mode: false
+
+  search:
+    location: navbar
+    type: overlay
 
   navbar:
+    pinned: true
     left:
       - href: index.qmd
         text: Overview
@@ -28,35 +37,33 @@ website:
       - href: reproduce.qmd
         text: Reproduce
     right:
+      - icon: star-fill
+        href: https://github.com/HrudithL/gt-skill/stargazers
+        aria-label: "GitHub stars"
+      - icon: diagram-2
+        href: https://github.com/HrudithL/gt-skill/network/members
+        aria-label: "GitHub forks"
       - icon: github
         href: https://github.com/HrudithL/gt-skill
-
-  sidebar:
-    style: docked
-    search: true
-    contents:
-      - index.qmd
-      - setup.qmd
-      - section: "Concepts"
-        contents:
-          - skills.qmd
-          - harness.qmd
-      - section: "Reference"
-        contents:
-          - runner.qmd
-      - section: "Deeper"
-        contents:
-          - methodology.qmd
-          - reproduce.qmd
+        aria-label: "GitHub"
 
 format:
   html:
     theme:
-      light: [cosmo]
-      dark: [cosmo, theme-dark.scss]
-    css: styles.css
+      light: [cosmo, custom.scss]
+      dark: [cosmo, custom.scss, theme-dark.scss]
     toc: true
+    toc-location: right
+    toc-depth: 3
     code-copy: true
     code-overflow: wrap
     anchor-sections: true
     smooth-scroll: true
+    link-external-newwindow: true
+    link-external-icon: false
+    fontsize: 1.02rem
+    linestretch: 1.65
+    grid:
+      body-width: 820px
+      sidebar-width: 0px
+      margin-width: 260px
