@@ -95,14 +95,6 @@ Token usage and per-invocation cost for the same run:
 
 :::
 
-::: {.callout-note}
-## Historical wording in these renders
-The frozen PNGs above were rendered before the `attempts → samples`
-rename landed. The `_plots.py` in git says "samples"; a re-render off
-the current code will use the new caption. Same data, different
-labels.
-:::
-
 ## The judge
 
 `runner.judge` runs a **grounded LLM judge** for the dimensions the
