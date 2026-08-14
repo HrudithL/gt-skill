@@ -1,49 +1,177 @@
 # gtskill
 
-[\![Docs](https://img.shields.io/badge/docs-quarto-2a78d6)](https://hrudithl.github.io/gt-skill/)
+A tiny, lightweight harness that uses the [Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/) plus a one-paragraph [Great Tables](https://posit-dev.github.io/great-tables/) skill to turn a CSV + a natural-language prompt into a formatted table.
 
-A tiny, testable evaluation harness for a
-[Great Tables](https://posit-dev.github.io/great-tables/) skill that
-runs on the [Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/).
-Given a CSV and a natural-language prompt, the harness mounts exactly
-one skill into an ephemeral `.claude/` directory, launches an agent
-with a bounded tool set, and captures the rendered table plus the full
-conversation trace.
-
-## Quickstart
+## Setup
 
 ```bash
-git clone https://github.com/HrudithL/gt-skill && cd gt-skill
-python -m venv .venv && source .venv/bin/activate
-pip install claude-agent-sdk great_tables pandas python-dotenv anyio pillow anthropic plotnine
+python -m venv .venv
+source .venv/bin/activate
+pip install claude-agent-sdk great_tables pandas python-dotenv anyio pillow
+# for the ground-truth judge (runner/judge.py):
+pip install anthropic
+# for the web UI backend:
+pip install starlette uvicorn sse-starlette websockets
+# for regenerating the eval-results/ plots (metrics_plots package):
+pip install plotnine
+# also need the Claude Code CLI on PATH:
 npm install -g @anthropic-ai/claude-code
-echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env
-
-python scripts/fetch_data.py                                # provision data/*.csv
-python run.py --skill prose --prompt sp500_monthly_performance
 ```
 
-## What next
+Create a `.env` with your key:
 
-The full documentation lives under [`docs/`](docs/) and renders to a
-Quarto website:
+```
+ANTHROPIC_API_KEY=sk-ant-...
+# Optional (usually chosen with --model instead): a concrete model id override
+GTSKILL_AGENT_MODEL=claude-haiku-4-5
+```
 
-- **[Setup](docs/setup.qmd)** — prerequisites, install, API key, sample data.
-- **[Skills](docs/skills.qmd)** — the four skill variants and when to pick each.
-- **[Harness](docs/harness.qmd)** — architecture, sandboxing, sidecar Chrome.
-- **[Runner](docs/runner.qmd)** — CLI reference for every `run.py` flag.
-- **[Methodology](docs/methodology.qmd)** — how the skill was engineered.
-- **[Reproduce](docs/reproduce.qmd)** — end-to-end reproduction guide.
+## Usage
 
-Published site: **<https://hrudithl.github.io/gt-skill/>** (once Pages
-is enabled).
+One flag-driven runner drives every flow (the web app calls the same core):
 
-## Contributing
+```bash
+# one corpus prompt under the prose skill
+python run.py --skill prose --prompt sp500_monthly_performance
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR. It
-describes the branch tree, the review loop, the model-tier rules that
-govern how work lands, and the hard prohibitions.
+# convergence: scripts skill, 3 repeats (baseline auto-on), Haiku
+python run.py --skill scripts --prompt sp500_monthly_performance --repeat 3
 
-## License
+# sweep every easy prompt under the creator skill
+python run.py --skill creator --difficulty easy
 
-See [LICENSE](LICENSE).
+# random per-difficulty sample: 2 easy + 2 medium + 2 hard (6 prompts total)
+python run.py --skill prose --random 2
+
+# an ad-hoc prompt against a chosen data file
+python run.py --skill prose --prompt-text "Top 10 cars by MSRP" --data data/gtcars.csv
+
+# full evaluation: same random sample across all 4 skills, populates eval-results/
+# (see the "Skill evaluation" section below — check the cost table first)
+python run.py --evaluate --random 2 --repeat 3
+```
+
+Flags: `--skill {prose,scripts,creator,house}`; `--prompt NAME` (repeatable) /
+`--difficulty {easy,medium,hard,all}` / `--random N` (N prompts per difficulty,
+unseeded) / `--prompt-text TEXT --data PATH`; `--repeat N`;
+`--model {haiku,sonnet,opus}`; `--baseline` / `--no-baseline` (default auto —
+the no-skill control runs iff `--repeat > 1`); `--evaluate` (see below).
+
+Each run writes one tree under `runs/<ts>_<skill>_<slug>/`:
+
+- `run.json` — the RunSpec + resolved config + status + timings
+- `summary.json` — aggregate pass/fail + tokens/cost across all prompts
+- `prompts/<name>/{baseline,repeat_1…N}/` — each with `table.py`, `table.png`,
+  `transcript.json`, the data snapshot, and the mounted `.claude/`
+- `prompts/<name>/{convergence.json,contact_sheet.png}` — only when `--repeat > 1`
+
+The CSV stays where it is — the agent reads it from a symlink in the run dir and
+is **never** asked to copy it elsewhere.
+
+## Skill evaluation
+
+`--evaluate` runs the same prompt set across all four skills, populates a
+runtime `eval-results/` tree, and regenerates plots via the `metrics_plots`
+package. Everything else about the runner is unchanged — this is opt-in.
+
+```bash
+# smallest sanction: 2 prompts per difficulty, 3 repeats, all 4 skills
+python run.py --evaluate --random 2 --repeat 3
+
+# maxed-out evaluation: 5 per difficulty, 5 repeats
+python run.py --evaluate --random 5 --repeat 5
+
+# explicit prompt selection also works — must cover all three difficulties
+# with 2-5 prompts each
+python run.py --evaluate --difficulty all --repeat 3
+```
+
+Constraints (validated before any API spend — the run aborts if any fail):
+
+- `--skill` must be **omitted** (`--evaluate` always runs all 4 skills).
+- `--repeat` must be `>= 3` (bare-minimum consistency signal).
+- Prompt selection: `--random N` with `2 <= N <= 5`, **or** an explicit
+  `--prompt` / `--difficulty` combination yielding 2–5 prompts per difficulty
+  across easy/medium/hard.
+- `--prompt-text` / `--data` (ad-hoc prompts) are not allowed — evaluation
+  needs corpus prompts because ground truth is what the score is measured
+  against.
+
+### ⚠️ Cost warning
+
+Every `--evaluate` run is **4 skills × prompts-per-difficulty × 3 difficulties
+× (repeats + 1 baseline)** API invocations. That scales fast. The table below
+uses the observed mean per-invocation cost (~$0.13 with-skill, ~$0.08
+baseline) from an actual 96-invocation snapshot on `haiku` — swap in `sonnet`
+or `opus` via `--model` and the per-invocation cost climbs roughly with the
+model's own token price.
+
+| prompts / difficulty | `--repeat` | total invocations | est. cost (haiku) |
+| ---: | ---: | ---: | ---: |
+| 2 | 3 | 96 | **~$12** |
+| 2 | 5 | 144 | **~$18** |
+| 3 | 3 | 144 | **~$17** |
+| 3 | 5 | 216 | **~$26** |
+| 5 | 3 | 240 | **~$28** |
+| 5 | 5 | 360 | **~$44** |
+
+Formula: `invocations = 4 × prompts_per_difficulty × 3 × (repeat + 1)`, and
+`cost ≈ 4 × prompts_per_difficulty × 3 × (repeat × $0.13 + $0.08)`.
+
+If you are running this to demo the skill, prefer the low-left corner of the
+table. `--random 2 --repeat 3` is enough to see the shape of every plot.
+
+### What ends up in `eval-results/`
+
+`--evaluate` first wipes `eval-results/`, then for each skill copies its
+per-prompt outputs (`table.py`, `table.png`, `transcript.json` per variant)
+into `eval-results/<skill>/samples/<prompt>/`. Once all four skills finish,
+`metrics_plots.render_all` writes `eval-results/<skill>/metrics.json` and
+`eval-results/<skill>/plots/*.png` for each skill.
+
+Plot layout is adaptive: when every difficulty has ≤3 prompts, the plots
+condense into one `usage.png` + `comparator_score.png` pair per skill. When
+any difficulty exceeds 3 (e.g. `--random 4` or `--random 5`), each skill's
+plots split into one pair **per difficulty**
+(`usage_easy.png` / `usage_medium.png` / `usage_hard.png`, likewise for
+`comparator_score`).
+
+`eval-results/` is gitignored — a fresh `--evaluate` overwrites it every time,
+and the intent is that it's a runtime output, not something checked in.
+
+### `eval-results-demo/` (checked in, static)
+
+A frozen snapshot of a real `--evaluate --random 2 --repeat 3` run lives at
+`eval-results-demo/`. It's the same shape a fresh runtime `eval-results/`
+would have (four skill folders, each with `plots/`, `samples/`,
+`metrics.json`) so a fresh clone has something to look at without spending
+API budget first. Regenerate the demo's own plots (against the cached
+`metrics.json`, no API calls needed):
+
+```python
+from pathlib import Path
+from metrics_plots import render_all
+render_all(Path("eval-results-demo"))
+```
+
+## Web UI
+
+The same runner is also available through a browser-based control plane:
+
+```bash
+uvicorn web.server:app --port 8000
+```
+
+Then open `http://localhost:8000`. It calls the same `runner` core as `run.py`,
+so a run launched from the browser behaves identically to one launched from
+the CLI.
+
+## How it works
+
+- Three self-contained skills live under `.claude/skills/great-tables` (prose),
+  `.claude/skills/great-tables-ci` (scripts), and `.claude-skill-creator`
+  (creator); the runner mounts exactly one per run into an ephemeral `.claude/`.
+- `runner/engine.py` calls `claude_agent_sdk.query` with the one mounted skill
+  plus `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`. The agent loads the
+  skill, reads the data, writes `table.py`, runs it, and the script renders
+  `table.png` via `gt.gtsave("table.png")` (attached to a sidecar Chrome over CDP).

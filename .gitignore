@@ -7,7 +7,6 @@ data/
 runs/
 test-runs/
 eval-results/
-eval-results-demo/
 docs/_site/
 docs/_freeze/
 docs/.quarto/
