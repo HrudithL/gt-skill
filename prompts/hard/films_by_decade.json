@@ -1,0 +1,4 @@
+{
+  "prompt": "For each decade from the 1950s through the 2010s in the films dataset, show total film count, dominant country of origin, average runtime, and the longest film of the decade with its title and runtime.",
+  "data": "data/films.csv"
+}

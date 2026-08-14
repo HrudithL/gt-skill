@@ -1,0 +1,4 @@
+{
+  "prompt": "Show me the 10 hottest days in the New York air quality dataset with their ozone and wind readings — the peak of summer.",
+  "data": "data/airquality.csv"
+}

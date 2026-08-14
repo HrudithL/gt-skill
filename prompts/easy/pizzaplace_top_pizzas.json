@@ -1,0 +1,4 @@
+{
+  "prompt": "Show me the ten best-selling pizzas of 2015 by total revenue, along with how many were ordered.",
+  "data": "data/pizzaplace.csv"
+}

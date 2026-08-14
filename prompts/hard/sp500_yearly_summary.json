@@ -1,0 +1,4 @@
+{
+  "prompt": "Show S&P 500 yearly performance from 2000 through 2014 — for each year, show the opening price, closing price, overall year percent change, average daily volume, and the best and worst single-day return within that year.",
+  "data": "data/sp500.csv"
+}

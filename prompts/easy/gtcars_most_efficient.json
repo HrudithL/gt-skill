@@ -1,0 +1,4 @@
+{
+  "prompt": "Show me the 10 most fuel-efficient GT cars by combined city and highway MPG, along with their horsepower and country of origin.",
+  "data": "data/gtcars.csv"
+}

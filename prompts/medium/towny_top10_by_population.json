@@ -1,0 +1,4 @@
+{
+  "prompt": "Show me the 10 largest Ontario municipalities in 2021 by population, with how their population density changed from 2011 to 2021 and their overall population growth rate over that decade.",
+  "data": "data/towny.csv"
+}

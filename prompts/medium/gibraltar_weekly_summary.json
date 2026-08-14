@@ -1,0 +1,4 @@
+{
+  "prompt": "Summarize daily weather in Gibraltar for the week of May 8 through May 14, 2023 — for each day, show the average temperature, average humidity, peak wind speed, and the dominant weather condition.",
+  "data": "data/gibraltar.csv"
+}

@@ -1,0 +1,4 @@
+{
+  "prompt": "Split Ontario municipalities into five quintiles by 2021 population density; for each quintile, show total 1996 population, total 2021 population, the population growth percentage over the 25-year span, and how many municipalities fall into that quintile.",
+  "data": "data/towny.csv"
+}

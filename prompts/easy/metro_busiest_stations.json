@@ -1,0 +1,4 @@
+{
+  "prompt": "Show me the 10 busiest Paris Metro stations by annual passenger count, with which line(s) they serve.",
+  "data": "data/metro.csv"
+}

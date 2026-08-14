@@ -1,0 +1,4 @@
+{
+  "prompt": "For each country of origin in the gtcars dataset, compare its cars — the average and highest horsepower, the average and highest MSRP, and how many specific cars come from that country.",
+  "data": "data/gtcars.csv"
+}
