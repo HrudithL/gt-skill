@@ -163,15 +163,16 @@ Per-prompt means: `gtcars_top10_by_country` 94.0%, `islands_sizes` 94.4%,
 as wide a margin now that the `normalize_id` fix has landed — see "RESOLVED" above).
 
 Two individual repeats scored far below their siblings, each from a stub-related
-mistake: `gtcars_hp_price/repeat_3` (60.2% vs. 98.8% siblings) created a stub using
+mistake: `gtcars_hp_price/repeat_3` (61.4% vs. 96.5%/100.0% siblings, which have
+since diverged from each other too) created a stub using
 `rowname_col="mfr"`, but `mfr` alone is non-unique in gtcars (multiple cars share
 the same manufacturer), so the stub rows didn't match the ground truth's composite
-`mfr`+`model` identifiers. `airquality_monthly_summary/repeat_1` (56.3% vs. ~96%
-siblings, which also added an unwanted column-group spanner the prompt never asked
-for) forgot `rowname_col=` in the `GT(...)` constructor entirely, so no stub was
-created. Both are places `gt_consistency.py`'s own worked pattern is unambiguous and
-the sibling repeats on the same prompt got it right — haiku-tier sampling variance,
-not a skill or checker gap.
+`mfr`+`model` identifiers. `airquality_monthly_summary/repeat_1` (57.5% vs.
+97.8%/96.7% siblings, which also added an unwanted column-group spanner the prompt
+never asked for) forgot `rowname_col=` in the `GT(...)` constructor entirely, so no
+stub was created. Both are places `gt_consistency.py`'s own worked pattern is
+unambiguous and the sibling repeats on the same prompt got it right — haiku-tier
+sampling variance, not a skill or checker gap.
 
 ## Round 5 (2026-08-13) — verification sweep, no new code changes
 
