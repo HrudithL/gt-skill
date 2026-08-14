@@ -1,7 +1,81 @@
 /*-- scss:defaults --*/
-// gtskill dark theme — small overrides on top of cosmo.
-$primary: #b4c6d1;
-$body-bg: #14161a;
-$body-color: #d0d3d7;
-$link-color: #8fb3c7;
-$code-block-bg: #1c1f24;
+
+// gtskill dark theme — polished palette layered on custom.scss.
+
+$primary: #7ea3ff;
+$body-bg: #0f1220;
+$body-color: #d7dae5;
+$link-color: $primary;
+$link-hover-color: #a5c1ff;
+
+// Code
+$code-bg: #191d33;
+$code-color: #e2e5ee;
+$code-block-bg: #14172b;
+
+/*-- scss:rules --*/
+
+body {
+  color: $body-color;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: #eef0fa;
+}
+
+h1 {
+  border-bottom-color: #2a2f4a;
+}
+
+h3 {
+  color: #c9cee0;
+}
+
+p.subtitle {
+  color: #9a9fb8;
+}
+
+// Inline code contrast on dark bg.
+code:not(pre code) {
+  color: #ff9a9a;
+  background: $code-bg;
+}
+
+pre {
+  border-color: #262b45;
+  background: $code-block-bg;
+}
+
+pre code {
+  color: $code-color;
+}
+
+thead th {
+  border-bottom-color: #333858;
+  color: #eef0fa;
+}
+
+.navbar {
+  background: rgba(15, 18, 32, 0.92) !important;
+  border-bottom-color: #262b45;
+  backdrop-filter: saturate(180%) blur(10px);
+}
+
+.navbar .nav-link {
+  color: #c1c5da;
+}
+
+blockquote {
+  color: #a8adc4;
+  background: rgba(126, 163, 255, 0.06);
+  border-left-color: $primary;
+}
+
+.sidebar-title,
+#TOC .sidebar-title {
+  color: #eef0fa;
+}
+
+.callout-title {
+  color: #eef0fa;
+}

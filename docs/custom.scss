@@ -1,0 +1,222 @@
+/*-- scss:defaults --*/
+
+// gtskill light theme — modern typography + palette on top of cosmo.
+
+// Fonts: Inter for body/UI, JetBrains Mono for code.
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+$font-family-sans-serif: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+$font-family-monospace: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
+$headings-font-family: "Inter", $font-family-sans-serif;
+
+// Palette — a subdued academic-report look, not corporate SaaS.
+$primary: #3b5cb0;         // deep indigo, used for links and accents
+$body-bg: #fbfbfd;         // near-white, warmer than pure #fff
+$body-color: #1e2233;      // dark ink, softer than pure black
+$link-color: $primary;
+$link-hover-color: #2a4a9e;
+
+// Code
+$code-bg: #f2f4f8;
+$code-color: #2e2f36;
+$code-block-bg: #f6f7fb;
+
+// Tighter borders
+$border-radius: 6px;
+
+// Content width — 720-820px hits the sweet spot for prose.
+$content-padding-top: 3rem;
+
+/*-- scss:rules --*/
+
+body {
+  font-feature-settings: "ss01", "cv11";
+  letter-spacing: -0.005em;
+  line-height: 1.7;
+}
+
+// Headings — tighter tracking, more contrast in weight.
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #12162a;
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin-top: 1rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e5e7f0;
+}
+
+h2 {
+  font-size: 1.65rem;
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+}
+
+h3 {
+  font-size: 1.25rem;
+  margin-top: 2rem;
+  color: #2a2f45;
+}
+
+// Subtitle right under the H1 — softer and italic.
+p.subtitle {
+  color: #5a6180;
+  font-size: 1.15rem;
+  font-style: italic;
+  margin-top: -0.75rem;
+  margin-bottom: 2rem;
+}
+
+// Body copy paragraphs.
+p {
+  margin-bottom: 1.15rem;
+}
+
+// Links — bold, colored, no underline until hover.
+a {
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+a:hover {
+  border-bottom-color: currentColor;
+}
+
+// Inline code — sit on top of body, don't fight it.
+code:not(pre code) {
+  font-size: 0.92em;
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+  color: #b23a4a;
+  background: $code-bg;
+  font-weight: 500;
+}
+
+// Code blocks.
+pre {
+  font-size: 0.92rem;
+  padding: 1.15rem 1.25rem;
+  border-radius: $border-radius;
+  border: 1px solid #e6e8f0;
+  background: $code-block-bg;
+  line-height: 1.55;
+}
+
+pre code {
+  color: #2e2f36;
+  background: transparent;
+  padding: 0;
+  border: none;
+}
+
+// Tables — cleaner grid, better spacing.
+table {
+  font-size: 0.95rem;
+  margin: 1.75rem 0;
+}
+
+thead th {
+  border-bottom: 2px solid #d9dde8;
+  padding-bottom: 0.65rem;
+  padding-top: 0.65rem;
+  color: #2a2f45;
+  font-weight: 600;
+}
+
+td {
+  padding: 0.6rem 0.85rem;
+}
+
+// Callouts — cleaner, less "notification".
+.callout {
+  border-radius: $border-radius;
+  border-left-width: 4px;
+  margin-block: 1.75rem;
+}
+
+.callout-title {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+// Navbar — sticky, thin border, more breathing room.
+.navbar {
+  border-bottom: 1px solid #e6e8f0;
+  padding: 0.5rem 0;
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: saturate(180%) blur(10px);
+}
+
+.navbar-brand,
+.navbar-title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: 1.15rem;
+}
+
+.navbar .nav-link {
+  font-weight: 500;
+  padding: 0.5rem 0.9rem;
+  color: #3a3f55;
+}
+
+.navbar .nav-link:hover,
+.navbar .nav-link.active {
+  color: $primary;
+}
+
+// Blockquotes.
+blockquote {
+  border-left: 3px solid $primary;
+  padding: 0.35rem 1.25rem;
+  margin: 1.5rem 0;
+  color: #4a5070;
+  font-style: italic;
+  background: rgba(59, 92, 176, 0.04);
+  border-radius: 0 $border-radius $border-radius 0;
+}
+
+// TOC (right-side).
+#TOC {
+  font-size: 0.9rem;
+}
+
+.sidebar-title,
+#TOC .sidebar-title {
+  font-weight: 700;
+  color: #12162a;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+}
+
+// Panel tabsets — cleaner tabs.
+.panel-tabset .nav-tabs .nav-link {
+  font-weight: 500;
+  border-radius: 6px 6px 0 0;
+  padding: 0.55rem 1rem;
+}
+
+// Images — subtle rounded corners, don't take full width unless intended.
+img {
+  border-radius: $border-radius;
+  max-width: 100%;
+}
+
+// Hero / index page shields row.
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1.5rem 0 2.5rem 0;
+}
+
+.hero-badges img {
+  border-radius: 4px;
+}
