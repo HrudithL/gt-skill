@@ -1,56 +1,72 @@
-import numpy as np
 import pandas as pd
+import numpy as np
 from great_tables import GT, style, loc
 
 # Step 1: Load and clean data
 df = pd.read_csv("gtcars.csv")
 
-# Select and organize columns: manufacturer + model for stub, hp and msrp as measures
-df = df[["mfr", "model", "hp", "msrp"]].copy()
-df["car_name"] = df["mfr"] + " " + df["model"]
-df = df[["car_name", "hp", "msrp"]].rename(columns={"car_name": "Car"})
+# Create a car identifier by combining manufacturer and model
+df["car"] = df["mfr"] + " " + df["model"]
 
-# Step 2 & 3: Calculate domain for msrp heatmap (Blues palette, ordered magnitude)
-cols = ["msrp"]
-lo = float(np.nanmin(df[cols].to_numpy()))
-hi = float(np.nanmax(df[cols].to_numpy()))
+# Select and organize columns for the table
+display_df = df[["car", "hp", "msrp"]].copy()
+display_df = display_df.reset_index(drop=True)
 
-# Step 4 & 5 & 6: Build the table
+# Step 2: Organize columns
+# hp stays as integer, msrp as float
+display_df["hp"] = display_df["hp"].astype(int)
+display_df["msrp"] = display_df["msrp"].astype(float)
+
+# Step 3: Compute domain for msrp (the colored measure)
+msrp_cols = ["msrp"]
+msrp_lo = float(np.nanmin(display_df[msrp_cols].to_numpy()))
+msrp_hi = float(np.nanmax(display_df[msrp_cols].to_numpy()))
+
+# Build the table
 gt = (
-    GT(df, rowname_col="Car")
-    # Step 5(e): Format columns by semantic type
+    GT(display_df, rowname_col="car")
+    # Format columns
     .fmt_number(columns="hp", decimals=0, use_seps=True)
     .fmt_currency(columns="msrp", decimals=0, use_seps=True)
-    # Step 5(a): Cell borders - hairlines between rows
+    .sub_missing(columns=["hp", "msrp"], missing_text="—")
+    # Big Color: msrp gradient (Blues for neutral magnitude)
+    # hp stays plain (redundancy: both rough proxies for "impressive car")
+    .data_color(
+        columns="msrp",
+        palette="Blues",
+        domain=[msrp_lo, msrp_hi],
+        truncate=False,
+        na_color="#808080",
+    )
+    # Step 4: Heading band (navy, white text)
+    .tab_options(
+        heading_background_color="#08306B",
+        heading_align="center",
+        column_labels_background_color="#08306B",
+        column_labels_border_bottom_color="#CCCCCC",
+        column_labels_border_bottom_width="2px",
+    )
+    # Column-label text: white (explicit pin)
+    .tab_style(
+        style=style.text(color="white"),
+        locations=loc.column_labels(),
+    )
+    # Step 5: Small Color polish
+    # (a) Cell borders / hairlines
     .tab_options(
         table_body_hlines_style="solid",
         table_body_hlines_color="#E8E8E8",
         table_body_hlines_width="1px",
-        column_labels_border_bottom_color="#CCCCCC",
-        column_labels_border_bottom_width="2px",
-        row_striping_background_color="#F6F6F6",
     )
-    # Step 5(c): Row striping (apply by default)
+    # (c) Row striping (body has colored + plain columns, so stripes apply)
     .opt_row_striping()
-    # Step 5(d): Stub tint
+    .tab_options(row_striping_background_color="#F6F6F6")
+    # (d) Stub tint
     .tab_style(
         style=style.fill(color="#EAF0F6"),
         locations=loc.stub(),
     )
-    # Step 3: Big Color - msrp heatmap (Blues, ordered magnitude, ≥5 rows)
-    .data_color(
-        columns="msrp",
-        palette="Blues",
-        domain=[lo, hi],
-        truncate=False,
-        na_color="#808080",
-    )
-    # Step 4: Heading band - fixed navy with white text (auto-contrasted)
-    .tab_options(
-        column_labels_background_color="#08306B",
-        column_labels_font_weight="bold",
-    )
-    # Global constants: Frame border on all four sides
+    # Frame
     .tab_options(
         table_border_top_style="solid",
         table_border_top_color="#CCCCCC",
@@ -66,7 +82,6 @@ gt = (
         table_border_right_width="1px",
     )
     # Compact layout padding
-    .cols_width(cases={"hp": "100px", "msrp": "120px"})
     .tab_options(
         heading_padding="6px",
         column_labels_padding="6px",
@@ -75,15 +90,21 @@ gt = (
         data_row_padding_horizontal="8px",
         source_notes_padding="6px",
     )
+    # Column widths
+    .cols_width(cases={"car": "200px", "hp": "100px", "msrp": "120px"})
     # Step 6: Titles & annotations
     .tab_header(
         title="GT Cars: Horsepower and Price",
-        subtitle="A collection of luxury and performance vehicles",
+        subtitle="A collection of performance and luxury vehicles",
     )
-    # Two separate footer notes (analytical caption + source)
-    .tab_source_note(source_note="Price is colored to show relative market value across vehicles; horsepower is shown for reference.")
-    .tab_source_note(source_note="Source: GT Cars dataset")
+    .tab_source_note(
+        source_note="Price represents manufacturer's suggested retail price (MSRP); horsepower is the primary power output specification."
+    )
+    .tab_source_note(
+        source_note="Source: gtcars.csv"
+    )
 )
 
-# Render with margin
+# Step 7: Render
 gt.gtsave("table.png", expand=15)
+print("Table rendered to table.png")

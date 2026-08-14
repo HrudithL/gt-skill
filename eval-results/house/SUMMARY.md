@@ -191,3 +191,101 @@ performance` also runs into the known month-label-format ambiguity (see top-leve
 pattern and the other 2 of 3 repeats on the same prompt did it right — haiku-tier
 sampling variance on a small sample, not a skill or comparator gap. (A doc fix for
 this exact `set_index()`-vs-`rowname_col=` confusion has since landed, PR #107.)
+
+## Round 5 (2026-08-13) — verification sweep, no new code changes
+
+A second, independent 6-prompt sweep (`runs/sweep/20260813_161436_house_6prompts`)
+against the exact same commit round 4's numbers above were computed from — checking
+whether round 4's results (and its one catastrophic single-repeat outlier) hold up
+under a fresh random draw. No code changed between round 4 and this round.
+
+| Metric | This round | Round 4 |
+|---|---|---|
+| Mean score | 83.5% | 83.3% |
+| Mean repeat spread | **8.9pp** | 16.4pp |
+| Mean cost | $0.133 | $0.131 |
+
+**Note:** round 4 and round 5 are not scored on an identical basis — 12 of
+round 4's 18 invocations had all judge-tier checks marked N/A, vs. 0 of 18
+this round; see the top-level [`SUMMARY.md`](../SUMMARY.md) for the full
+disclosure and a confound-free, mechanical-only recomputation.
+
+Mean score is flat (+0.2pp, within noise for an 18-invocation haiku sample). Mean
+repeat spread improved substantially, driven almost entirely by
+`towny_growth_trends` no longer producing a catastrophic outlier (see below).
+
+Per-prompt means: `gtcars_hp_price` 97.4%, `gtcars_top10_by_country` 95.1%,
+`islands_sizes` 85.4%, `sp500_monthly_performance` 77.7%, `towny_growth_trends`
+73.4%, `airquality_monthly_summary` 72.2%.
+
+**`towny_growth_trends`'s catastrophic outlier does not recur, but the fix is
+narrower than it first looks, and the specific colored-measure check this table
+was designed to exercise is actually worse this round, not better.** Round 4's
+`repeat_1` scored 39.5%, and re-reading its actual stored report shows the
+dominant cause was a *different*, already-separately-fixed bug: it built
+`GT(gt_data.set_index('Town'))` instead of `rowname_col="Town"`, so no stub
+existed at all, zeroing the three strictly stub-gated checks — row/entity
+selection identity, computed/derived value correctness, and stub existence
+(22 of the 52 total points lost, ~42%, a **minority** of the loss). Column
+set shown vs. hidden, striping, and header branding were **not** stub
+cascades: the report attributes them directly to separate candidate
+omissions (e.g. "header background: expected #08306B, got None"), and
+reading the candidate's actual `table.py` confirms it has no
+`opt_row_striping` call and no `#08306B` anywhere in the script — these are
+independent misses the candidate also made, not a consequence of the
+missing stub. (PR #107 fixed the `set_index()`-vs-`rowname_col=` confusion
+itself.)
+
+This round's three fresh repeats score `[71.1%, 70.6%, 78.4%]` — clustered, no
+catastrophic outlier. Reading all three `table.py` files confirms all three now
+build the stub with `rowname_col=` (not `.set_index()`), so that specific,
+previously-primary bug is confirmed fixed. But on the "Colored-measure selection"
+check itself — 11 canonical colored measures: 6 `density_*` (sequential) + 5
+`pop_change_*_pct` (diverging) — coverage regressed, it did not improve:
+
+| | repeat_1 | repeat_2 | repeat_3 |
+|---|---|---|---|
+| Round 4 | 0/11 (FAIL) | **11/11 (PASS)** | 5/11 (FAIL) |
+| Round 5 | 0/11 (FAIL) | 0/11 (FAIL) | 6/11 (FAIL) |
+
+Round 4 had one repeat (`repeat_2`) earn full credit on this check. Round 5's best
+repeat (`repeat_3`, 6/11) still fails it outright, and — critically — **all 6 of
+its covered measures are the `density_*` columns; none of the 5 canonical
+`pop_change_*_pct` measures are covered.** Its own "Computed/derived value
+correctness" sub-score confirms this directly: 5/10, listing all five
+`pop_change_1996_2001_pct`..`pop_change_2016_2021_pct` measures as unmatched.
+`repeat_3` does color both a sequential and a diverging group visually
+(`Greens` and `RdYlGn`, per its report), but it is coloring the wrong second
+group — density-derived percent-change columns of its own invention, not the
+ground truth's `pop_change_*_pct` measures — so it does **not** match the ground
+truth's two-colored-measure design, despite superficially looking like it does.
+`repeat_1` and `repeat_2` cover zero canonical colored measures each, having
+heatmapped only their own density-derived change columns instead.
+
+Across all 3 round-5 repeats, **zero** of the 5 canonical `pop_change_*_pct`
+measures were covered by any repeat, versus round 4's one full-credit repeat. So
+on this specific mechanical check — the one this prompt was designed to exercise
+most directly — round 5 is worse than round 4, not merely "milder" or
+"incomplete." The `rowname_col=` stub bug is fixed; the measure-coverage
+regression is a separate, unresolved gap this sweep surfaces fresh.
+
+**A second, honest limitation this round: `islands_sizes` also regressed.**
+Round 4's `islands_sizes` scored `[91.0%, 92.1%, 98.9%]` (94.0% mean, 7.9pp
+spread); this round it scores `[94.4%, 69.7%, 92.1%]` (85.4% mean, 24.7pp
+spread) — `repeat_2`'s 69.7% vs. ~92–94% siblings makes this `house`'s
+**largest** single-prompt mean-change this round (−8.6pp), not
+`towny_growth_trends`'s, which is actually near the bottom of the six
+prompts and essentially flat (+0.9pp) despite the narrative attention it
+gets above. By mean-change this round vs. round 4: `islands_sizes` −8.6pp
+(largest), `gtcars_top10_by_country` +5.8pp, `gtcars_hp_price` +2.2pp,
+`sp500_monthly_performance` +1.9pp, `towny_growth_trends` +0.9pp,
+`airquality_monthly_summary` −0.6pp (smallest). Not investigated further
+here — out of scope for a verification pass that focused on the **three**
+round-4 outlier prompts (`house/towny_growth_trends`,
+`scripts/gtcars_hp_price`, `scripts/airquality_monthly_summary`) — the
+last of which recurred this round under a different cause rather than
+newly appearing (see top-level `SUMMARY.md`).
+
+Execution: 24/24 successful (no crashes), consistent with `prose` and `scripts`
+this round — see the top-level `SUMMARY.md` for the caveat on why this isn't
+claimed as a rigorously-proven improvement over any pre-fix baseline.

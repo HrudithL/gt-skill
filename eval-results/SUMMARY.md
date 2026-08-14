@@ -971,3 +971,233 @@ output. That gap is now closed (see "RESOLVED" above): the stored
 `eval-results/**` files reflect the fully-fixed (post round-5)
 `check_caption_not_generic` scores as of 2026-08-13's full regenerate,
 not the PRE-#116 `check_caption_keywords` scores.
+
+## Data refresh (2026-08-13, round 5 — verification sweep, no new code changes)
+
+**This round changed no code.** It is a second, independently-sampled
+6-prompt sweep (`--repeat 3 --model haiku`) against the exact same commit
+round 4's numbers above were computed from (`cb8cd04`, part of `main` via
+PR #119) — run to check whether round 4's own results hold up under a
+fresh random draw, and specifically whether its three catastrophic
+single-repeat outliers (`house/towny_growth_trends/repeat_1` at 39.5%,
+`scripts/airquality_monthly_summary/repeat_1` at 57.5%, and
+`scripts/gtcars_hp_price/repeat_3` at 61.4%, all vs. 85%+ siblings) were
+genuine one-off sampling variance, as round 4's own text already
+concluded, or symptoms of a residual doc gap that a second sample would
+re-expose. Sweep dirs: `runs/sweep/20260813_161436_house_6prompts`,
+`runs/sweep/20260813_161439_prose_6prompts`,
+`runs/sweep/20260813_161442_scripts_6prompts`.
+
+| Skill | Mean score | vs. round-4 baseline | Mean spread | vs. round-4 baseline spread |
+|---|---|---|---|---|
+| `house` | 83.5% | +0.2pp (83.3%) | 8.9pp | 16.4pp |
+| `prose` | 87.9% | +3.2pp (84.7%) | 9.9pp | 8.1pp |
+| `scripts` | 87.7% | +1.7pp (86.0%) | 19.2pp | 16.4pp |
+
+**Important confound — round 4 and round 5 are not scored on an identical
+basis.** Round 4 has a separate, unrelated technical issue: for 4 of the 6
+prompts per skill (`airquality_monthly_summary`, `gtcars_hp_price`,
+`sp500_monthly_performance`, `towny_growth_trends`), all 3 non-baseline
+repeats (12 of 18 invocations per skill, in every one of the three skills)
+have **every** judge-tier check marked N/A, with the reason "judge
+unavailable: ground-truth PNG is older than its source .py." Round 5 has
+0 of 18 such invocations in any skill — full judge scoring is available
+throughout. This means round-4 percentages for those 12 invocations per
+skill were computed on a smaller total-point denominator (mechanical
+checks only) than round 5's, so the same nominal "slot" isn't strictly
+comparable across rounds: e.g. `house/towny_growth_trends/repeat_1` scored
+34/86 in round 4 but 59/83 in round 5 — different denominators as well as
+different numerators. **Practical effect: the headline mean-score deltas
+above (+0.2/+3.2/+1.7pp) mix a genuine sampling comparison with a
+scoring-surface change, and should be read as directionally informative,
+not precisely comparable.** A cleaner, confound-free comparison — stripping
+all judge-tier points from both the numerator and denominator on both
+sides, mechanical checks only — gives: `house` 83.97% → 84.10% (nearly
+flat), `prose` 84.89% → 89.27% (+4.4pp), `scripts` 86.81% → 88.82%
+(+2.0pp). Notably, these mechanical-only deltas for `prose` and `scripts`
+are *larger* than the headline full-basis deltas (+3.2pp and +1.7pp,
+respectively) — so if this confound has a direction, it means the
+headline prose/scripts improvements are **understated**, not overstated,
+and the positive-improvement conclusion below still holds. But the
+"fresh re-sample, same checks" framing this section previously implied
+needs this correction: round 4 and round 5 were not, in fact, scored on
+identical checks for two-thirds of each skill's prompts.
+
+All figures independently recomputed from this round's actual committed
+`metrics.json` files (18 non-baseline invocations per skill; per-prompt
+spread = max − min across the 3 repeats, then averaged across the 6
+prompts) and cross-checked against the round-4 baseline recomputed the
+same way from commit `cb8cd04`. The mean-score deltas land within the
+kind of run-to-run noise a 3-repeat haiku sample produces on an unchanged
+codebase (with the judge-availability confound above also in play) — none
+of the three moved enough to read as a real effect one way or the other.
+**Consistency (mean spread) is the more mixed part of
+the picture: it improved substantially for `house` (16.4pp → 8.9pp) but
+got WORSE for `scripts` (16.4pp → 19.2pp) and `prose` (8.1pp → 9.9pp)** —
+this is not an unambiguous win, and is explained below by, respectively, a
+recurring single-repeat outlier (`scripts`) and one wide-spread prompt
+(`prose`), not a systemic regression.
+
+**Execution reliability: all 3 skills' fresh sweeps completed 24/24
+successful executions** (6 prompts × 4 variants each, baseline + 3
+repeats; zero `is_error` crashes in any `metrics.json`). This is reported
+as a plain fact, not a proven improvement — no clean, comparable pre-fix
+execution-success measurement exists for this exact sweep shape (an
+earlier attempt at this same verification sweep was corrupted by an
+unrelated concurrent-session issue and was discarded, not used as a
+baseline here).
+
+### Confirmed: `scripts/gtcars_hp_price`'s composite-stub bug does not recur
+
+Round 4's `scripts/gtcars_hp_price/repeat_3` scored 61.4% vs. 96.5%/100%
+siblings because it built the stub with the bare, non-unique `mfr` column
+(`rowname_col="mfr"`) instead of the documented `mfr` + `model` composite
+— PR #112 added gtcars' own worked example to `data.md` for exactly this
+case. This round's three fresh `gtcars_hp_price` repeats score
+[100.0%, 98.9%, 96.7%] — tightly clustered, no outlier — and reading all
+three candidates' `table.py` directly confirms why: every one builds
+`df["car"] = df["mfr"] + " " + df["model"]` (or the equivalent) and passes
+that as the stub, and all three score a clean 10/10 on "Row/entity
+selection identity." This is a clean, unambiguous confirmation — no
+caveats.
+
+### Confirmed, with a caveat: `house/towny_growth_trends`'s catastrophic outlier does not recur — its dominant cause (a missing stub) is fixed, but the colored-measure-coverage check it also exposed actually regressed this round, not improved
+
+Round 4's `house/towny_growth_trends/repeat_1` scored 39.5% vs. 86.7% and
+91.2% siblings. Re-reading that round's actual stored report
+(`git show cb8cd04:eval-results/house/samples/towny_growth_trends/repeat_1/report.txt`)
+shows its score was dominated by a **different** bug than under-coloring:
+the candidate built `GT(gt_data.set_index('Town'))` instead of passing
+`rowname_col="Town"`, so no stub column existed at all — a failure mode
+that directly zeroes out "Row/entity selection identity" (0/10),
+"Computed/derived value correctness" (0/10), and "Stub existence" (0/2).
+But those three strictly stub-gated checks total only 22 of the 52 points
+lost (~42%) — a **minority** of the point loss, not "most" of it, as an
+earlier draft of this section claimed. The remaining ~58% (30 points) came
+from separate, independent misses the candidate also made: "Colored-measure
+selection" (0/6), "Column set shown vs. hidden" (0/4, driven mostly by
+column renaming unrelated to the stub), "Column-group spanners existence"
+(0/2) and the dividers half of "Frame + hairlines + dividers" (gated on
+spanners, −2), "Striping gate correctness" (0/5), "Header branding" (0/5),
+"Signed-percent force_sign correctness" (0/2), and "`fmt_*` per column
+semantic type" (0/4). Striping and header branding in particular are
+**not** stub cascades: the report attributes them directly to candidate
+omissions (e.g. "header background: expected #08306B, got None"), and
+reading the candidate's actual `table.py` confirms it has no
+`opt_row_striping` call and no `#08306B` anywhere in the script — these
+are independent misses, not a consequence of the missing stub. That exact
+`set_index()`-vs-`rowname_col=` confusion was already a known,
+separately-tracked bug, fixed by PR #107 — not something PR #113 (the
+under-coloring fix) touches.
+
+This round's three fresh `towny_growth_trends` repeats score
+[71.1%, 70.6%, 78.4%] — clustered, no catastrophic outlier — and all
+three now build the stub with `rowname_col=` correctly (confirmed by
+reading each `table.py`), so that specific, previously-dominant bug is
+confirmed fixed. But on "Colored-measure selection" itself (11 canonical
+colored measures: 6 `density_*` sequential + 5 `pop_change_*_pct`
+diverging, per `CANONICAL_MEASURES["colored"]` in
+`prompts/hard/ground_truth/towny_growth_trends.py`), coverage got worse,
+not better:
+
+| | repeat_1 | repeat_2 | repeat_3 |
+|---|---|---|---|
+| Round 4 | 0/11 (FAIL) | **11/11 (PASS)** | 5/11 (FAIL) |
+| Round 5 | 0/11 (FAIL) | 0/11 (FAIL) | 6/11 (FAIL) |
+
+Round 4 had one repeat (`repeat_2`) earn full credit here; round 5's best
+repeat (`repeat_3`, 6/11) still fails the check outright, and its 6
+covered measures are all `density_*` columns — its "Computed/derived
+value correctness" sub-score (5/10) lists all five `pop_change_*_pct`
+measures as unmatched. `repeat_3` does visually heatmap two groups
+(`Greens` and `RdYlGn`, per its report), but the second group is a
+density-derived percent-change column of its own invention, not the
+ground truth's `pop_change_*_pct` measures — so, despite appearances, it
+does **not** match the ground truth's two-colored-measure design.
+`repeat_1` and `repeat_2` cover zero canonical colored measures each.
+Across all 3 round-5 repeats, **zero** of the 5 canonical
+`pop_change_*_pct` measures were covered by any repeat, vs. round 4's one
+full-credit repeat. So: the catastrophic-outlier shape is gone and the
+`set_index()` stub bug is confirmed fixed, but on the specific mechanical
+check this prompt was designed to exercise, round 5 is a regression from
+round 4, not an improvement.
+
+### A recurring outlier, worse and for a different reason: `scripts/airquality_monthly_summary/repeat_2` (21.1%) — traced to the model skipping the skill invocation entirely, not a doc or comparator gap
+
+This round's `scripts/airquality_monthly_summary` repeats score
+[91.8%, 21.1%, 96.9%] — but `airquality_monthly_summary` was *already* an
+outlier-prone prompt in round 4: its `repeat_1` scored 57.5% vs.
+97.8%/96.7% siblings that round (see `scripts/SUMMARY.md`'s own round-4
+section), because the candidate forgot `rowname_col=` entirely. So
+`repeat_2`'s 21.1% this round is not a brand-new failure mode — it's the
+*same prompt failing again*, for a different reason (a near-total
+skill-pipeline skip, below, vs. round 4's narrower missing-stub bug) and
+at a worse magnitude. Its `report.txt` confirms a near-total,
+comprehensive miss, not a narrow mistake: no stub column, no colored
+measures, no frame, no hairlines, no header branding, no caption —
+19/90 (21.1%), failing nearly every mechanical check across the board.
+
+Reading `table.py` confirms it: the script is 35 lines of bare
+`pandas`/`great_tables` code — `import pandas as pd; from great_tables
+import GT` — with none of the skill's helper imports anywhere in it. (Note:
+all three repeats, including the successful 91.8% and 96.9% siblings, import
+zero `gt_consistency.py` helpers, so import count is not a discriminator.)
+This tool-call-count comparison is a committed, self-contained fact (see
+`eval-results/scripts/samples/airquality_monthly_summary/repeat_2/README.md`),
+not dependent on the gitignored transcript it was originally read from:
+**the model never invoked the `Skill` tool at all** in this run — its
+tool-call sequence is just `Read` (the CSV) → `Write` (`table.py`) →
+`Bash` (run it) → `Read` (view the PNG), 4 calls total in 5 turns. Its two
+siblings on the same prompt (`repeat_1`, 14 tool calls; `repeat_3`, 18
+tool calls) both open with a `Skill` call before doing anything else,
+then read several reference files before writing code — the normal
+pattern. The committed `metrics.json` shows the verifiable signal: `repeat_2`
+consumed only 5 turns and 109K cache-read tokens, versus `repeat_1` (16 turns,
+576K tokens) and `repeat_3` (20 turns, 711K tokens) — a stark reduction in work
+volume consistent with skipping the Skill invocation and reference reading
+entirely. This is a comprehensive, one-off miss (the model electing not to
+invoke an available skill on one specific run, not a narrow mistake within an
+invoked skill), consistent with this project's own prior findings elsewhere in
+this file about haiku-tier sampling variance on a 3-repeat sample — not a new
+doc or comparator gap.
+
+This is also the main driver of `scripts`' worse mean spread this round
+(19.2pp vs. round 4's 16.4pp): `airquality_monthly_summary`'s own spread
+is 75.8pp (max 96.9%, min 21.1%), by far the widest single-prompt spread
+in this sweep. `prose`'s worse mean spread (9.9pp vs. 8.1pp) has a
+different, unrelated driver: `towny_growth_trends` spread 28.9pp
+(`[92.8%, 88.7%, 63.9%]`) — not investigated further here, out of scope
+for this verification pass, which focused on the round-4-outlier prompts
+and the recurring one above.
+
+### Overall picture
+
+Of round 4's three catastrophic single-repeat outliers, two do not
+recur in this fresh sample (`scripts/gtcars_hp_price` cleanly; `house/
+towny_growth_trends` with the caveat above that its dominant cause was a
+different, already-fixed bug than the one this task set out to check —
+and, on that actual check, colored-measure coverage regressed rather than
+improved). The third, `scripts/airquality_monthly_summary`, fails again
+this round (`repeat_2` at 21.1%) — a recurrence, not a new failure mode,
+though for a different underlying reason (near-total skill-pipeline skip)
+than round 4's cause (missing `rowname_col=`). Mean scores are flat-to-up
+for all three skills, within noise. Consistency improved substantially for
+`house`, but got worse for `scripts` (driven by the `airquality_monthly_summary`
+recurrence above) and mildly worse for `prose` — a genuinely mixed result,
+not a clean across-the-board win, and exactly the kind of run-to-run
+variance a 3-repeat haiku sample on an unchanged codebase is expected to
+produce.
+
+**One more honest limitation not yet called out above:** `house`'s
+`islands_sizes` also regressed this round — from round 4's 94.0% mean
+(7.9pp spread) to this round's 85.4% mean (24.7pp spread), driven by
+`repeat_2` scoring 69.7% against ~92–94% siblings. By per-prompt mean
+change, this −8.6pp movement is actually **`house`'s largest single-prompt
+movement this round** — larger than `gtcars_top10_by_country` (+5.8pp,
+second-largest), `gtcars_hp_price` (+2.2pp), `sp500_monthly_performance`
+(+1.9pp), `towny_growth_trends` (+0.9pp, second-smallest, essentially flat
+despite the narrative attention it gets above for its outlier-shape
+disappearance), and `airquality_monthly_summary` (−0.6pp, smallest). It is
+not investigated further here — out of scope for a verification pass that
+focused on the round-4 outlier prompts and the recurring `scripts` one.
+See each skill's own `SUMMARY.md` for the full per-prompt breakdown.

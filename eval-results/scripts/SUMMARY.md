@@ -173,3 +173,68 @@ never asked for) forgot `rowname_col=` in the `GT(...)` constructor entirely, so
 stub was created. Both are places `gt_consistency.py`'s own worked pattern is
 unambiguous and the sibling repeats on the same prompt got it right — haiku-tier
 sampling variance, not a skill or checker gap.
+
+## Round 5 (2026-08-13) — verification sweep, no new code changes
+
+A second, independent 6-prompt sweep (`runs/sweep/20260813_161442_scripts_6prompts`)
+against the exact same commit round 4's numbers above were computed from — checking
+whether round 4's results (and its `gtcars_hp_price` outlier) hold up under a fresh
+random draw. No code changed between round 4 and this round.
+
+| Metric | This round | Round 4 |
+|---|---|---|
+| Mean score | 87.7% | 86.0% |
+| Mean repeat spread | 19.2pp | **16.4pp** (worse) |
+| Mean cost | $0.188 | $0.189 |
+
+**Note:** round 4 and round 5 are not scored on an identical basis — 12 of
+round 4's 18 invocations had all judge-tier checks marked N/A, vs. 0 of 18
+this round; see the top-level [`SUMMARY.md`](../SUMMARY.md) for the full
+disclosure and a confound-free, mechanical-only recomputation.
+
+Mean score is up slightly (+1.7pp), within noise. Mean repeat spread is worse than
+round 4, driven entirely by one outlier (below) — a recurrence of this same prompt's
+round-4 failure under a different repeat and a different cause, not a general
+regression.
+
+Per-prompt means: `gtcars_hp_price` 98.5%, `islands_sizes` 98.1%,
+`gtcars_top10_by_country` 94.1%, `towny_growth_trends` 86.5%,
+`sp500_monthly_performance` 79.0%, `airquality_monthly_summary` 69.9%.
+
+**`gtcars_hp_price`'s composite-stub outlier does not recur, cleanly.** Round 4's
+`repeat_3` scored 61.4% vs. 96.5%/100% siblings because it used the bare, non-unique
+`mfr` column as the stub instead of the `mfr` + `model` composite — the exact
+gtcars example PR #112 added to `data.md`. This round's three `gtcars_hp_price`
+repeats score `[100.0%, 98.9%, 96.7%]` — tightly clustered. Reading all three
+`table.py` files confirms all three build `df["car"] = df["mfr"] + " " +
+df["model"]` and pass that as `rowname_col`, scoring 10/10 on row identity across
+the board. No caveats on this one.
+
+**A recurrence, not a new outlier: `airquality_monthly_summary/repeat_2` scored
+21.1%** vs. 91.8%/96.9% siblings — this round's widest single-prompt spread
+(75.8pp) and the reason this skill's mean spread got worse, not better, this
+round. This is the same prompt that was also a round-4 outlier (`repeat_1` at
+57.5%, see "Round 4" above), so this is a recurrence of the same prompt failing
+across both rounds, not a first appearance — but the underlying cause is
+different each time: round 4's was a missing `rowname_col=` (no stub created),
+while this round's is a near-total skill-pipeline skip (below). Its `report.txt`
+shows a comprehensive, near-total failure (no stub, no colored measures, no frame,
+no hairlines, no header branding, no caption — 19/90). Reading its `table.py`
+confirms this is not a narrow, specific mistake: the script is 35 lines of bare
+`pandas`/`great_tables` code. (Note: all three repeats import zero `gt_consistency.py`
+helpers, so import count is not a discriminator.) This tool-call-count comparison
+is committed as a self-contained fact (see
+[`samples/airquality_monthly_summary/repeat_2/README.md`](samples/airquality_monthly_summary/repeat_2/README.md)),
+not dependent on the gitignored transcript it was originally read from: **the
+model never invoked the `Skill` tool in this run** — its full tool sequence is
+`Read` (CSV) → `Write` (`table.py`) → `Bash` (run) → `Read` (view PNG), 4 calls
+in 5 turns, versus `repeat_1` (14 calls, opening with `Skill`) and `repeat_3`
+(18 calls, also opening with `Skill`). The committed `metrics.json` shows the
+real signal: `repeat_2` consumed only 5 turns and 109K cache-read tokens, versus
+`repeat_1` (16 turns, 576K tokens) and `repeat_3` (20 turns, 711K tokens). This
+reads as inherent haiku-tier sampling variance in whether the model elects to
+invoke an available skill at all on a given run, not a doc or comparator gap.
+
+Execution: 24/24 successful (no crashes) — see the top-level `SUMMARY.md` for the
+caveat on why this isn't claimed as a rigorously-proven improvement over any pre-fix
+baseline.

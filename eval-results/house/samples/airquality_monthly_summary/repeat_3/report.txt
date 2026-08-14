@@ -1,8 +1,8 @@
-Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/runs/sweep/20260813_080322_house_6prompts/prompts/airquality_monthly_summary/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py
+Ground-truth comparison: /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-verification-sweep/runs/sweep/20260813_161436_house_6prompts/prompts/airquality_monthly_summary/repeat_3/table.py vs /Users/hrudithl/Documents/posit-dev/gtskill/.claude/worktrees/eval-verification-sweep/prompts/medium/ground_truth/airquality_monthly_summary.py
 
-TOTAL: 64/88 (72.7%)
-  Data-compliance:        27/47
-  Formatting-compliance:  37/41
+TOTAL: 68/95 (71.6%)
+  Data-compliance:        28/49
+  Formatting-compliance:  40/46
 
 [PASS] [MECHANICAL] Row/entity selection identity: 10/10 -- candidate's row set exactly matches the ground truth's
 [FAIL] [MECHANICAL] Computed/derived value correctness: 0/10 -- 0/3 canonical measures have a value-matching candidate column; unmatched: ['avg_temp', 'avg_ozone', 'avg_wind']
@@ -11,12 +11,12 @@ TOTAL: 64/88 (72.7%)
 [PASS] [MECHANICAL] Explicit prompt-instruction compliance: 5/5 -- 1/1 required instructions satisfied
 [FAIL] [MECHANICAL] Column set shown vs. hidden: 0/4 -- visible-column overlap 0.00 (candidate-only=['Month', 'Ozone', 'Temp', 'Wind'], missing=['avg_ozone', 'avg_temp', 'avg_wind', 'month'])
 [PASS] [MECHANICAL] Grouping existence: 3/3 -- candidate grouping_present=False, truth=False
-[N/A] [JUDGE] Grouping-choice quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py)
+[N/A] [JUDGE] Grouping-choice quality: 0/0 -- The REQUIRED_INSTRUCTIONS metadata contains only a 'row_count' key, with no 'grouping' key, but neither the ground truth nor candidate uses row grouping—both present a flat, ungrouped list of months. Since no grouping is used in either table, this dimension is not applicable for discretionary assessment.
 [PASS] [MECHANICAL] Column-group spanners existence: 2/2 -- candidate spanner_present=False, truth=False
 [PASS] [MECHANICAL] Stub existence: 2/2 -- candidate stub_present=True, truth=True
-[N/A] [MECHANICAL] No same-family hue collision across 2 measures: 0/0 -- fewer than 2 distinct colored measures; no collision possible
+[FAIL] [MECHANICAL] No same-family hue collision across 2 measures: 0/1 -- colored-measure palettes: ['Greens', 'Greens', 'Reds']; colliding pair(s) sharing a hue family: [('Greens', 'Greens')]
 [N/A] [MECHANICAL] Summary-row existence + correct aggregation values: 0/0 -- ground truth has no grand-summary row
-[N/A] [JUDGE] Column-label concept-correctness: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py)
+[PASS] [JUDGE] Column-label concept-correctness: 1/1 -- judge score 5/5 -- All column labels correctly name their concepts: 'Month' identifies the time period, 'Ozone (ppb)' clearly names ozone levels with units, 'Wind Speed (mph)' names wind speed with units, and 'Temperature (°F)' names temperature with units. Each label is unambiguous and matches the underlying concepts.
 [PASS] [MECHANICAL] Domain computation (symmetric / full-range / data-driven): 8/8 -- 3/3 colored measures have a shape-appropriate domain
 [PASS] [MECHANICAL] Frame + hairlines + dividers: 6/6 -- frame=OK; hairlines=OK; dividers=OK
 [PASS] [MECHANICAL] Striping gate correctness: 5/5 -- n_rows=5, body is 100% color-covered -> striping optional (islands_sizes-style case), actual=True
@@ -26,11 +26,11 @@ TOTAL: 64/88 (72.7%)
 [PASS] [MECHANICAL] Stripe color (neutral grey): 2/2 -- expected #F6F6F6, got '#F6F6F6'
 [N/A] [MECHANICAL] Hero-uncolored measures stay plain (not bold): 0/0 -- no hero_uncolored measure value-matched a candidate column
 [N/A] [MECHANICAL] Signed-percent force_sign correctness: 0/0 -- ground truth declares no percent-semantic columns
-[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 5 word(s) beyond the title/subtitle (overlap 29%): 'Averages computed from daily measurements during the summer season.'
+[PASS] [MECHANICAL] Caption is substantive: 3/3 -- caption adds 3 word(s) beyond the title/subtitle (overlap 57%): 'All values represent monthly averages from the air quality dataset.'
 [PASS] [MECHANICAL] Color mechanics (na_color, truncate, autocolor_text): 4/4 -- na_color correct 3/3, truncate=False correct 3/3, autocolor_text=True correct 3/3
 [N/A] [MECHANICAL] Summary-row formatting matches body: 0/0 -- ground truth has no grand-summary row to check
 [FAIL] [MECHANICAL] fmt_* per column semantic type: 0/4 -- 0/3 columns formatted per their semantic type; not covered (missing, hidden, or wrong format): ['avg_temp', 'avg_wind', 'avg_ozone']
 [PASS] [MECHANICAL] Render mechanics (zoom/expand fit-order rule): 2/2 -- zoom=2.0 >= default 2.0
 [N/A] [MECHANICAL] Summary-row visual distinction from body: 0/0 -- ground truth has no grand-summary row to check
-[N/A] [JUDGE] Title quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py)
-[N/A] [JUDGE] Column order quality: 0/0 -- judge unavailable: ground-truth PNG is older than its source .py (/Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.png predates /Users/hrudithl/Documents/posit-dev/gtskill/prompts/medium/ground_truth/airquality_monthly_summary.py)
+[FAIL] [JUDGE] Title quality: 2/3 -- judge score 4/5 -- The candidate's title 'Air Quality Monthly Summary' is clear and accurate, but it is slightly less specific than the ground truth's 'Monthly Air Quality in New York, 1973,' which provides geographic and temporal context. The candidate captures the core framing (monthly air quality data) but omits the location and year details that ground the data in reality.
+[FAIL] [JUDGE] Column order quality: 1/2 -- judge score 3/5 -- The candidate reorders columns to Month → Ozone → Wind Speed → Temperature, compared to the ground truth's Month → Ozone → Temperature → Wind Speed. The grouping of the two colored measures (Ozone and Temperature) is split by Wind Speed (the hero uncolored measure), disrupting the logical flow where temperature and ozone—both subject to color conditioning—would naturally stay adjacent. This reshuffling is not arbitrary but does slightly obscure the analytical structure.

@@ -1,57 +1,71 @@
 import pandas as pd
 from great_tables import GT, md
 from house_table import (
-    PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap
+    PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap,
+    humanize_labels
 )
 
 # Read the data
 df = pd.read_csv("gtcars.csv")
 
-# Select the relevant columns: manufacturer + model as stub, hp and price
+# Create composite car identifier (mfr + model) and sort
 df["car"] = df["mfr"] + " " + df["model"]
-display_df = df[["car", "hp", "msrp"]].copy()
-display_df = display_df.rename(columns={"hp": "horsepower", "msrp": "price"})
+df = df.sort_values("hp", ascending=False).reset_index(drop=True)
 
-# Create the GT table
-gt = (
-    GT(display_df, rowname_col="car")
-    .tab_header(
-        title="GT Cars: Horsepower and Price",
-        subtitle="Performance specifications and pricing"
-    )
-    .fmt_integer(columns="horsepower")
-    .fmt_currency(columns="price", decimals=0)
-    .cols_width(
-        cases={
-            "car": "200px",
-            "horsepower": "120px",
-            "price": "120px",
-        }
-    )
-    .tab_options(
-        heading_padding="6px",
-        column_labels_padding="6px",
-        column_labels_padding_horizontal="8px",
-        data_row_padding="5px",
-        data_row_padding_horizontal="8px",
-        source_notes_padding="6px",
-    )
+# Select and rename columns for the table
+display_df = df[["car", "hp", "msrp"]].copy()
+display_df.columns = ["car", "horsepower", "price"]
+
+# Build the table
+gt = GT(display_df, rowname_col="car")
+gt = gt.tab_header(
+    title="GT Cars by Horsepower and Price",
+    subtitle=md("High-performance vehicles ranked by horsepower with MSRP"),
 )
 
-# Apply Big Color: price is the hero measure (neutral sequential Blues)
-gt = heatmap(gt, "price", kind="sequential", hue="neutral")
+# Format columns
+gt = gt.fmt_integer(columns="horsepower")
+gt = gt.fmt_currency(columns="price", decimals=0)
 
-# Apply branding
+# Humanize labels (skip the car column which is already the stub)
+gt = humanize_labels(gt, display_df, overrides={"horsepower": "Horsepower", "price": "Price"})
+
+# Apply styling
 gt = band(gt, hue="navy")
 gt = stripe(gt)
 gt = stub_tint(gt, hue="navy")
 
-# Add source notes and formatting
-gt = (
-    gt.tab_source_note(source_note="Price is the MSRP in USD.")
-    .tab_source_note(source_note="Source: provided dataset.")
+# Add heatmap for horsepower (the primary measure from the topic)
+gt = heatmap(gt, "horsepower", kind="sequential", hue="neutral")
+
+# Set column widths
+gt = gt.cols_width(
+    cases={
+        "car": "200px",
+        "horsepower": "120px",
+        "price": "140px",
+    }
 )
 
+# Set padding
+gt = gt.tab_options(
+    heading_padding="6px",
+    column_labels_padding="6px",
+    column_labels_padding_horizontal="8px",
+    data_row_padding="5px",
+    data_row_padding_horizontal="8px",
+    source_notes_padding="6px",
+)
+
+# Add source notes
+gt = gt.tab_source_note(
+    source_note="Horsepower is the primary sorting measure; price is shown for reference."
+)
+gt = gt.tab_source_note(
+    source_note="Source: gtcars.csv dataset."
+)
+
+# Apply final styling
 gt = hairlines(gt)
 gt = frame(gt)
-finalize(gt)
+finalize(gt, path="table.png")

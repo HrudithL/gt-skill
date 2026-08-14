@@ -1,71 +1,81 @@
 import pandas as pd
 import numpy as np
-from great_tables import GT, loc, style
+from great_tables import GT, md, style, loc
 from house_table import PALETTE, frame, hairlines, finalize, band, stripe, stub_tint, heatmap
 
-# Read the data
-df = pd.read_csv("airquality.csv")
+df = pd.read_csv('airquality.csv')
 
-# Group by month and calculate means
-monthly = df.groupby("Month").agg({
-    "Ozone": "mean",
-    "Wind": "mean",
-    "Temp": "mean",
-}).reset_index()
+# Calculate monthly averages
+monthly = df.groupby('Month')[['Temp', 'Wind', 'Ozone']].mean().round(2)
 
-# Map month numbers to names for clarity
-month_names = {5: "May", 6: "June", 7: "July", 8: "August", 9: "September"}
-monthly["Month_Name"] = monthly["Month"].map(month_names)
-monthly = monthly[["Month_Name", "Ozone", "Wind", "Temp"]]
-monthly.rename(columns={"Month_Name": "Month"}, inplace=True)
+# Map month numbers to names
+month_names = {5: 'May', 6: 'June', 7: 'July', 8: 'August', 9: 'September'}
+monthly['month_label'] = monthly.index.map(month_names)
 
-# Round to 1 decimal
-monthly = monthly.round(1)
+# Reorder columns: month first, then measures
+monthly = monthly[['month_label', 'Temp', 'Wind', 'Ozone']]
+monthly = monthly.reset_index(drop=True)
 
-# Create the GT table
+# Create GT table
 gt = (
-    GT(monthly, rowname_col="Month")
+    GT(monthly, rowname_col='month_label')
     .tab_header(
-        title="Air Quality Metrics by Month",
-        subtitle="Average temperature, wind speed, and ozone levels"
+        title='Air Quality Monthly Summary',
+        subtitle=md('Average temperature, wind speed, and ozone levels by month'),
     )
-    .fmt_number(columns="Ozone", decimals=1)
-    .fmt_number(columns="Wind", decimals=1)
-    .fmt_number(columns="Temp", decimals=1)
-    .cols_width(cases={
-        "Month": "100px",
-        "Ozone": "120px",
-        "Wind": "120px",
-        "Temp": "120px",
-    })
-    .tab_options(
-        heading_padding="6px",
-        column_labels_padding="6px",
-        column_labels_padding_horizontal="8px",
-        data_row_padding="5px",
-        data_row_padding_horizontal="8px",
-        source_notes_padding="6px",
-    )
+    .tab_stubhead(label='Month')
+    .fmt_number(columns=['Temp', 'Wind', 'Ozone'], decimals=2)
 )
 
-# Apply the sequential heatmap to Ozone (the primary measure of interest)
-gt = heatmap(gt, "Ozone", kind="sequential", hue="neutral")
+# Humanize labels
+gt = gt.cols_label(
+    month_label='Month',
+    Temp='Temperature (°F)',
+    Wind='Wind Speed (mph)',
+    Ozone='Ozone (ppb)',
+)
 
-# Wind and Temp stay plain text
-gt = band(gt, hue="navy")
+# Set column widths and padding
+gt = gt.cols_width(
+    cases={
+        'month_label': '100px',
+        'Temp': '140px',
+        'Wind': '140px',
+        'Ozone': '140px',
+    }
+)
+gt = gt.tab_options(
+    heading_padding='6px',
+    column_labels_padding='6px',
+    column_labels_padding_horizontal='8px',
+    data_row_padding='5px',
+    data_row_padding_horizontal='8px',
+    source_notes_padding='6px',
+)
+
+# Apply heatmaps: temperature and ozone are the main measures
+# Temperature: sequential (neutral/Blues, higher is more interesting)
+# Ozone: sequential (positive/Greens, higher pollution is notable)
+# Wind stays plain text
+gt = heatmap(gt, 'Temp', kind='sequential', hue='neutral')
+gt = heatmap(gt, 'Ozone', kind='sequential', hue='positive')
+
+# Branding: band, stripe, stub tint
+gt = band(gt, hue='navy')
 gt = stripe(gt)
-gt = stub_tint(gt, hue="navy")
+gt = stub_tint(gt, hue='navy')
 
-# Add source notes
+# Source notes
 gt = (
     gt.tab_source_note(
-        source_note="Ozone levels are shown in parts per billion (ppb); Wind speed in miles per hour; Temperature in Fahrenheit."
+        source_note='Wind speed is displayed as plain text. Temperature and Ozone levels are color-coded by magnitude.'
     )
-    .tab_source_note(
-        source_note="Source: airquality.csv dataset."
-    )
+    .tab_source_note(source_note='Source: New York air quality data, May–September 1973.')
 )
 
+# Frame and hairlines
 gt = hairlines(gt)
 gt = frame(gt)
-finalize(gt, path="table.png")
+
+# Finalize and save
+finalize(gt, path='table.png')

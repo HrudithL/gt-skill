@@ -162,3 +162,70 @@ dataset), producing row-identity mismatches the comparator can't reconcile (e.g.
 Lamborghini "aventador" mismatching the ground truth's "ferrari laferrari" once names
 don't line up); the other two repeats on the same prompt built the composite stub
 correctly. Sampling variance on a small repeat count, not a mechanical bug.
+
+## Round 5 (2026-08-13) — verification sweep, no new code changes
+
+A second, independent 6-prompt sweep (`runs/sweep/20260813_161439_prose_6prompts`)
+against the exact same commit round 4's numbers above were computed from — checking
+whether round 4's results hold up under a fresh random draw. No code changed between
+round 4 and this round.
+
+| Metric | This round | Round 4 |
+|---|---|---|
+| Mean score | 87.9% | 84.7% |
+| Mean repeat spread | 9.9pp | **8.1pp** (worse) |
+| Mean cost | $0.164 | $0.190 |
+
+**Note:** round 4 and round 5 are not scored on an identical basis — 12 of
+round 4's 18 invocations had all judge-tier checks marked N/A, vs. 0 of 18
+this round; see the top-level [`SUMMARY.md`](../SUMMARY.md) for the full
+disclosure and a confound-free, mechanical-only recomputation.
+
+Mean score is up (+3.2pp) and mean cost is down, both within the range a fresh
+18-invocation haiku sample can move by chance. Mean repeat spread is mildly worse
+than round 4, not better — this round does not show the same clean consistency win
+`house` shows below.
+
+Per-prompt means: `islands_sizes` 95.9%, `gtcars_hp_price` 95.6%,
+`airquality_monthly_summary` 94.5%, `gtcars_top10_by_country` 90.4%,
+`towny_growth_trends` 81.8%, `sp500_monthly_performance` 69.1% (still the hardest).
+
+`towny_growth_trends` has this round's widest spread (28.9pp: `[92.8%, 88.7%,
+63.9%]`). Reading the reports: all three repeats have an identical, minor row-set
+mismatch (`missing=['barrie']`, `extra=['cockburn island']`, 9/10 on row identity
+for all three — not the driver of the spread, and worth describing precisely
+rather than as a close call: this is not two towns near-tied at the rank-15
+cutoff. Cockburn Island has **zero** defined inter-census window changes —
+all five `pop_change_*_pct` values are NaN, confirmed directly against
+`data/towny.csv` — which is exactly why the ground truth's `dropna` filter on
+the change columns excludes it outright, not a borderline #15/#16 swap.
+Separately (a different metric entirely, not one of the five window
+changes), Cockburn Island's whole-period `total_growth_pct`
+(`(population_2021 - population_1996) / population_1996`, i.e. 2 → 16) is a
+"+700%" small-denominator artifact, which would have ranked it #1 had the
+`dropna` filter judged rows on that metric alone instead of requiring all
+five windows to be defined (see
+`prompts/hard/ground_truth/towny_growth_trends.py`'s own comment on this). So
+the candidates' inclusion of Cockburn Island in place of Barrie is a
+filter-exclusion miss on a town whose window changes are entirely undefined
+and whose separate whole-period figure is a statistical artifact — not a
+close cutoff tie — still just 1 point, but the mechanism is different from
+what a "swapped at the cutoff" description implies).
+`repeat_3`'s drop to 63.9% is **not** attributable to any single check — comparing
+its report line-by-line against `repeat_1`'s (92.8%) shows the 28-point gap is
+spread across roughly 13 different checks, each losing 1-4 points. The single
+largest contributor is "Frame + hairlines + dividers" (6/6 → 2/6, −4pp: `repeat_3`
+is missing the frame entirely and its dividers are gated off by a missing
+column-group spanner), followed by "Colored-measure selection" (6/6 → 3/6, −3pp:
+`repeat_3` applies `data_color(..., palette="Blues")`, a sequential palette, to the
+inter-census percent-change columns, which are signed values the ground truth
+colors with a diverging fill), "Computed/derived value correctness" (−3pp) and
+`fmt_*` per column semantic type (−3pp), with several more checks (column set
+shown/hidden, column-group spanners, stub tint, signed-percent `force_sign`,
+column order quality, and others) each losing 1-2pp. So "Colored-measure selection"
+accounts for only about 3 of the 28 points (~11%) — `repeat_3` is a broad,
+multi-check style miss, not a single specific mistake.
+
+Execution: 24/24 successful (no crashes) — see the top-level `SUMMARY.md` for the
+caveat on why this isn't claimed as a rigorously-proven improvement over any pre-fix
+baseline.
