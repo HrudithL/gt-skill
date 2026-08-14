@@ -34,6 +34,8 @@ website:
         text: Runner
       - href: methodology.qmd
         text: Methodology
+      - href: results.qmd
+        text: Results
       - href: reproduce.qmd
         text: Reproduce
     # navbar-right is populated at runtime by docs/_includes/github-widgets.html
