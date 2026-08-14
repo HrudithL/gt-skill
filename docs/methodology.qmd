@@ -58,6 +58,51 @@ The plots are what the `attempts → samples` rename in
 each sample is one full agent invocation, not one of several tries at
 the same question.
 
+### Results at a glance
+
+The four skills side by side on the same corpus, from a full sweep at
+`--repeat 3` with the auto-baseline. The **box** is the spread of the
+skill's evaluation score across the three samples on that prompt; the
+**dot** is the unassisted baseline for the same prompt.
+
+::: {.panel-tabset}
+
+## Prose
+
+![](assets/plots/prose/comparator_score.png){fig-alt="Evaluation score box plot for the prose skill on every corpus prompt, showing three samples per prompt and a baseline dot."}
+
+Token usage and per-invocation cost for the same run:
+
+![](assets/plots/prose/usage.png){fig-alt="Grouped bar chart of mean total tokens per prompt for the prose skill vs. baseline, with USD cost labeled at each bar's tip."}
+
+## Scripts
+
+![](assets/plots/scripts/comparator_score.png){fig-alt="Evaluation score box plot for the scripted skill."}
+
+![](assets/plots/scripts/usage.png){fig-alt="Token / cost bar chart for the scripted skill."}
+
+## House
+
+![](assets/plots/house/comparator_score.png){fig-alt="Evaluation score box plot for the house skill."}
+
+![](assets/plots/house/usage.png){fig-alt="Token / cost bar chart for the house skill."}
+
+## Creator
+
+![](assets/plots/creator/comparator_score.png){fig-alt="Evaluation score box plot for the creator candidate skill."}
+
+![](assets/plots/creator/usage.png){fig-alt="Token / cost bar chart for the creator candidate skill."}
+
+:::
+
+::: {.callout-note}
+## Historical wording in these renders
+The frozen PNGs above were rendered before the `attempts → samples`
+rename landed. The `_plots.py` in git says "samples"; a re-render off
+the current code will use the new caption. Same data, different
+labels.
+:::
+
 ## The judge
 
 `runner.judge` runs a **grounded LLM judge** for the dimensions the
