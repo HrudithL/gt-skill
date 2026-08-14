@@ -71,6 +71,14 @@ def publish(source_root: Path, publish_root: Path) -> dict:
     else:
         skipped.append("SUMMARY.md")
 
+    src_results = source_root / "RESULTS.md"
+    if src_results.is_file():
+        publish_root.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src_results, publish_root / "RESULTS.md")
+        written.append(str(publish_root / "RESULTS.md"))
+    else:
+        skipped.append("RESULTS.md")
+
     return {
         "source_root": str(source_root),
         "publish_root": str(publish_root),
