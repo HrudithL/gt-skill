@@ -129,6 +129,9 @@ def render_skill(root: Path, skill: str) -> dict:
             written[f"usage_{difficulty}.png"] = plots.plot_usage(
                 metrics, prompt_ids, labels, plots_dir / f"usage_{difficulty}.png"
             )
+            written[f"tokens_and_cost_{difficulty}.png"] = plots.plot_tokens_and_cost(
+                metrics, prompt_ids, labels, plots_dir / f"tokens_and_cost_{difficulty}.png"
+            )
             written[f"evaluation_score_{difficulty}.png"] = plots.plot_comparator_score(
                 metrics, prompt_ids, labels, plots_dir / f"evaluation_score_{difficulty}.png"
             )
@@ -138,6 +141,9 @@ def render_skill(root: Path, skill: str) -> dict:
         if prompt_ids:
             written["usage.png"] = plots.plot_usage(
                 metrics, prompt_ids, labels, plots_dir / "usage.png"
+            )
+            written["tokens_and_cost.png"] = plots.plot_tokens_and_cost(
+                metrics, prompt_ids, labels, plots_dir / "tokens_and_cost.png"
             )
             written["evaluation_score.png"] = plots.plot_comparator_score(
                 metrics, prompt_ids, labels, plots_dir / "evaluation_score.png"

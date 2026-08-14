@@ -92,6 +92,14 @@ def _skill_label(repeats: list[str]) -> str:
     return f"with skill ({n} run{'s' if n != 1 else ''})"
 
 
+def _avg_skill_label(repeats: list[str]) -> str:
+    """Legend label for plots whose bars are the mean across runs. Makes it
+    explicit that a single bar collapses N per-prompt runs into one number
+    (as opposed to the accuracy boxplot, where every run is drawn)."""
+    n = len(repeats)
+    return f"with skill (avg of {n} run{'s' if n != 1 else ''})"
+
+
 def _adaptive_decimals(vals: list[float], min_decimals: int, max_decimals: int = 6) -> int:
     """Enough decimal places that adjacent TICKS stay visually distinct — a
     fixed ``.0f`` degenerates to identical-looking ticks (every tick reading
@@ -153,13 +161,14 @@ def plot_usage(
     prompt_labels: dict[str, str],
     out_path: Path,
 ) -> bool:
-    """Grouped bar chart: bar height = mean total tokens per prompt (skill
-    vs. baseline), each bar's USD cost printed at its tip.
+    """Grouped bar chart: bar height = mean USD cost per invocation, with
+    the cost printed above each bar. No token axis — this plot is now
+    cost-focused; :func:`plot_tokens_and_cost` shows both together.
 
     Returns whether a chart was actually written (False if there was no
     data at all)."""
     repeats = _repeat_variants(metrics)
-    skill_label = _skill_label(repeats)
+    skill_label = _avg_skill_label(repeats)
     prompts = metrics["prompts"]
     rows = []
     order = []
@@ -176,33 +185,18 @@ def plot_usage(
             if variants.get(r) and variants[r].get("cost_tokens")
         ]
         if skill_ct:
-            rows.append(
-                {
-                    "prompt": label,
-                    "group": skill_label,
-                    "tokens_k": np.mean(
-                        [
-                            c["input_tokens"] + c["output_tokens"] + c["cache_creation_tokens"]
-                            for c in skill_ct
-                        ]
-                    )
-                    / 1000.0,
-                    "cost": np.mean([c["cost_usd"] for c in skill_ct]),
-                }
-            )
+            rows.append({
+                "prompt": label,
+                "group": skill_label,
+                "cost": float(np.mean([c["cost_usd"] for c in skill_ct])),
+            })
         b = variants.get("baseline", {}).get("cost_tokens") if variants.get("baseline") else None
         if b:
-            rows.append(
-                {
-                    "prompt": label,
-                    "group": BASELINE_LABEL,
-                    "tokens_k": (
-                        b["input_tokens"] + b["output_tokens"] + b["cache_creation_tokens"]
-                    )
-                    / 1000.0,
-                    "cost": b["cost_usd"],
-                }
-            )
+            rows.append({
+                "prompt": label,
+                "group": BASELINE_LABEL,
+                "cost": float(b["cost_usd"]),
+            })
 
     if not rows:
         return False
@@ -210,11 +204,11 @@ def plot_usage(
     df["prompt"] = pd.Categorical(df["prompt"], categories=order, ordered=True)
     df["cost_label"] = df["cost"].map(lambda c: f"${c:.2f}")
 
-    upper = max(df["tokens_k"].max() * 1.22, 1.0)
+    upper = max(df["cost"].max() * 1.22, 0.02)
     dodge = position_dodge(width=0.75, preserve="single")
 
     plot = (
-        ggplot(df, aes(x="prompt", y="tokens_k", fill="group"))
+        ggplot(df, aes(x="prompt", y="cost", fill="group"))
         + geom_col(position=dodge, width=0.68)
         + geom_text(
             aes(label="cost_label", group="group"),
@@ -225,15 +219,93 @@ def plot_usage(
         )
         + scale_fill_manual(values={skill_label: SKILL_COLOR, BASELINE_LABEL: BASELINE_COLOR})
         + scale_x_discrete(limits=order)
-        + scale_y_continuous(labels=_token_tick_labels, limits=(0, upper))
+        + scale_y_continuous(labels=lambda vs: [f"${v:.2f}" for v in vs], limits=(0, upper))
         + labs(
-            title="Token usage per prompt, with cost per invocation",
-            subtitle="Bar height is the total tokens spent; the label above each bar is what "
-            "that invocation cost.",
+            title="Cost per invocation, per prompt",
             x="",
-            y="Total tokens (input + output + cache-creation)",
+            y="Cost per invocation (USD)",
         )
         + base_theme()
+    )
+    _save(plot, out_path)
+    return True
+
+
+def plot_tokens_and_cost(
+    metrics: dict,
+    prompt_ids: list[str],
+    prompt_labels: dict[str, str],
+    out_path: Path,
+) -> bool:
+    """Two-facet grouped bar chart on one canvas: top facet shows cost per
+    invocation (with USD labels), bottom facet shows tokens per invocation
+    (with K labels). Same prompts on the x-axis so cost + tokens line up
+    vertically per prompt and per variant. Provided as an experimental
+    combined view alongside :func:`plot_usage` (cost-only) — pick whichever
+    reads more clearly.
+
+    Returns whether a chart was actually written."""
+    from plotnine import facet_wrap
+
+    repeats = _repeat_variants(metrics)
+    skill_label = _avg_skill_label(repeats)
+    prompts = metrics["prompts"]
+    rows = []
+    order = []
+    for pid in prompt_ids:
+        entry = prompts.get(pid)
+        if not entry:
+            continue
+        label = prompt_labels[pid]
+        order.append(label)
+        variants = entry.get("variants", {})
+        skill_ct = [
+            variants[r]["cost_tokens"]
+            for r in repeats
+            if variants.get(r) and variants[r].get("cost_tokens")
+        ]
+        if skill_ct:
+            mean_cost = float(np.mean([c["cost_usd"] for c in skill_ct]))
+            mean_tokens_k = float(np.mean([
+                c["input_tokens"] + c["output_tokens"] + c["cache_creation_tokens"]
+                for c in skill_ct
+            ]) / 1000.0)
+            rows.append({"prompt": label, "group": skill_label,
+                          "facet": "Cost per invocation (USD)", "value": mean_cost,
+                          "value_label": f"${mean_cost:.2f}"})
+            rows.append({"prompt": label, "group": skill_label,
+                          "facet": "Tokens per invocation (thousands)", "value": mean_tokens_k,
+                          "value_label": f"{mean_tokens_k:.0f}K"})
+        b = variants.get("baseline", {}).get("cost_tokens") if variants.get("baseline") else None
+        if b:
+            b_tokens_k = (b["input_tokens"] + b["output_tokens"] + b["cache_creation_tokens"]) / 1000.0
+            rows.append({"prompt": label, "group": BASELINE_LABEL,
+                          "facet": "Cost per invocation (USD)", "value": float(b["cost_usd"]),
+                          "value_label": f"${b['cost_usd']:.2f}"})
+            rows.append({"prompt": label, "group": BASELINE_LABEL,
+                          "facet": "Tokens per invocation (thousands)", "value": b_tokens_k,
+                          "value_label": f"{b_tokens_k:.0f}K"})
+
+    if not rows:
+        return False
+    df = pd.DataFrame(rows)
+    df["prompt"] = pd.Categorical(df["prompt"], categories=order, ordered=True)
+    # Fixed facet order (cost on top, tokens on bottom).
+    facet_order = ["Cost per invocation (USD)", "Tokens per invocation (thousands)"]
+    df["facet"] = pd.Categorical(df["facet"], categories=facet_order, ordered=True)
+
+    dodge = position_dodge(width=0.75, preserve="single")
+    plot = (
+        ggplot(df, aes(x="prompt", y="value", fill="group"))
+        + geom_col(position=dodge, width=0.68)
+        + geom_text(aes(label="value_label", group="group"),
+                    position=dodge, va="bottom", size=7.5, color=INK_SECONDARY)
+        + facet_wrap("~ facet", nrow=2, scales="free_y")
+        + scale_fill_manual(values={skill_label: SKILL_COLOR, BASELINE_LABEL: BASELINE_COLOR})
+        + scale_x_discrete(limits=order)
+        + labs(title="Cost and tokens per invocation, per prompt", x="", y="")
+        + base_theme()
+        + theme(figure_size=(10, 7))
     )
     _save(plot, out_path)
     return True
