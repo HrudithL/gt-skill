@@ -92,6 +92,14 @@ def _skill_label(repeats: list[str]) -> str:
     return f"with skill ({n} run{'s' if n != 1 else ''})"
 
 
+def _avg_skill_label(repeats: list[str]) -> str:
+    """Legend label for plots whose bars are the mean across runs. Makes it
+    explicit that a single bar collapses N per-prompt runs into one number
+    (as opposed to the accuracy boxplot, where every run is drawn)."""
+    n = len(repeats)
+    return f"with skill (avg of {n} run{'s' if n != 1 else ''})"
+
+
 def _adaptive_decimals(vals: list[float], min_decimals: int, max_decimals: int = 6) -> int:
     """Enough decimal places that adjacent TICKS stay visually distinct — a
     fixed ``.0f`` degenerates to identical-looking ticks (every tick reading
@@ -160,7 +168,7 @@ def plot_usage(
     Returns whether a chart was actually written (False if there was no
     data at all)."""
     repeats = _repeat_variants(metrics)
-    skill_label = _skill_label(repeats)
+    skill_label = _avg_skill_label(repeats)
     prompts = metrics["prompts"]
     rows = []
     order = []
@@ -240,7 +248,7 @@ def plot_tokens_and_cost(
     from plotnine import facet_wrap
 
     repeats = _repeat_variants(metrics)
-    skill_label = _skill_label(repeats)
+    skill_label = _avg_skill_label(repeats)
     prompts = metrics["prompts"]
     rows = []
     order = []
