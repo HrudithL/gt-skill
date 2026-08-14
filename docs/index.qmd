@@ -30,6 +30,7 @@ skill.
 - [**Runner**](runner.qmd) — CLI reference for `run.py`.
 - [**Harness**](harness.qmd) — architecture, sandboxing, sidecar Chrome.
 - [**Methodology**](methodology.qmd) — how the skill was engineered.
+- [**Results**](results.qmd) — how the four skills scored on the corpus.
 :::
 :::
 

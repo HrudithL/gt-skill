@@ -171,6 +171,4 @@ def render_all(root: Path) -> list[dict]:
         out.append(render_skill(root, skill))
     from . import summary
     summary.write_summary(root)
-    from . import results
-    results.write_results(root)
     return out

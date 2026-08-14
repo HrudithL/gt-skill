@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from .publish import publish
 from .render import render_all, render_skill
-from .results import write_results
 from .summary import write_summary
 
-__all__ = ["publish", "render_all", "render_skill", "write_results", "write_summary"]
+__all__ = ["publish", "render_all", "render_skill", "write_summary"]
