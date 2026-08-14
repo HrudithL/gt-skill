@@ -1,0 +1,15 @@
+---
+title: "Methodology"
+---
+
+<!-- Filled by slice 8 (feat/polish-docs-content-skills-and-methodology). -->
+
+## How the skill was engineered
+
+## The evaluation loop
+
+## The judge
+
+## The comparator
+
+## Convergence

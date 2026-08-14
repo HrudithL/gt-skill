@@ -1,0 +1,17 @@
+---
+title: "Harness architecture"
+---
+
+<!-- Filled by slice 7 (feat/polish-docs-content-harness-and-runner). -->
+
+## The run model
+
+## RunSpec
+
+## Orchestrate
+
+## Engine
+
+## Sandboxing and per-run isolation
+
+## Sidecar Chrome and CDP rendering
