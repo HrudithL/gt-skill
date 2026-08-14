@@ -67,7 +67,7 @@ SKILL_CI_DIR = ROOT / ".claude" / "skills" / SKILL_CI_NAME
 # the "creator" variant mounts it verbatim as the great-tables skill for A/B
 # evaluation against the promoted one in SKILL_DIR. Selected via the "creator"
 # skill choice, which runner.orchestrate drives like any other.
-CREATOR_SKILL_SRC = ROOT / ".claude-skill-creator"
+CREATOR_SKILL_SRC = ROOT / ".claude" / "skills" / "great-tables-creator"
 
 # A thinner, non-flowchart skill: one heavily-commented reference script
 # (house_table.py) demonstrating every generic table-formatting feature,
