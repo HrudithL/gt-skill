@@ -89,7 +89,7 @@ def _repeat_variants(metrics: dict) -> list[str]:
 
 def _skill_label(repeats: list[str]) -> str:
     n = len(repeats)
-    return f"with skill ({n} attempt{'s' if n != 1 else ''})"
+    return f"with skill ({n} run{'s' if n != 1 else ''})"
 
 
 def _adaptive_decimals(vals: list[float], min_decimals: int, max_decimals: int = 6) -> int:
@@ -245,17 +245,15 @@ def plot_comparator_score(
     prompt_labels: dict[str, str],
     out_path: Path,
 ) -> bool:
-    """Box plot of evaluation score across the skill's repeats per prompt
-    (box HEIGHT already IS the consistency metric — no separate chart
-    needed), with the baseline score as a point. Subtitle states the
-    computed mean lift over baseline.
+    """Box plot of accuracy across the skill's runs per prompt, with the
+    baseline score as a point. No subtitle, no caption — the plot title and
+    the legend already say what the chart shows.
 
     Returns whether a chart was actually written."""
     repeats = _repeat_variants(metrics)
     skill_label = _skill_label(repeats)
     box_rows = []
     point_rows = []
-    lifts = []
     order = []
     for pid in prompt_ids:
         entry = metrics["prompts"].get(pid)
@@ -277,8 +275,6 @@ def plot_comparator_score(
         baseline_pct = b["pct"] if b and b["pct"] is not None else None
         if baseline_pct is not None:
             point_rows.append({"prompt": label, "pct": baseline_pct, "group": BASELINE_LABEL})
-        if pcts and baseline_pct is not None:
-            lifts.append(float(np.mean(pcts)) - baseline_pct)
 
     if not box_rows:
         return False
@@ -288,37 +284,6 @@ def plot_comparator_score(
     point_df = pd.DataFrame(point_rows)
     if not point_df.empty:
         point_df["prompt"] = pd.Categorical(point_df["prompt"], categories=order, ordered=True)
-
-    if lifts:
-        mean_lift = float(np.mean(lifts))
-        rounded = round(abs(mean_lift))
-        prompt_word = "prompt" if len(prompt_ids) == 1 else "prompts"
-        coverage = (
-            f"across all {len(prompt_ids)} {prompt_word}"
-            if len(lifts) == len(prompt_ids)
-            else f"across the {len(lifts)} of {len(prompt_ids)} {prompt_word} with both a "
-            "baseline and at least one scored attempt"
-        )
-        if rounded == 0:
-            lift_line = (
-                f"The skill's mean score matches the unassisted baseline, on average {coverage}."
-            )
-        else:
-            direction = "above" if mean_lift >= 0 else "below"
-            point_word = "point" if rounded == 1 else "points"
-            lift_line = (
-                f"The skill's mean score is {rounded:.0f} {point_word} {direction} the "
-                f"unassisted baseline, on average {coverage}."
-            )
-    else:
-        lift_line = "Evaluation score per prompt, with the skill vs. without."
-
-    n = len(repeats)
-    caption = (
-        f"Box = spread of the skill's score across {n} attempt{'s' if n != 1 else ''} "
-        "on the same prompt — shorter is more consistent. "
-        "Dot = a single unassisted baseline attempt."
-    )
 
     plot = (
         ggplot(box_df, aes(x="prompt", y="pct"))
@@ -330,11 +295,9 @@ def plot_comparator_score(
         + scale_x_discrete(limits=order)
         + ylim(0, 100)
         + labs(
-            title="Evaluation score: repeated attempts with the skill vs. without",
-            subtitle=lift_line,
-            caption=caption,
+            title="Accuracy: repeated runs with the skill vs. without",
             x="",
-            y="Evaluation score (%)",
+            y="Accuracy (%)",
         )
         + base_theme()
     )
