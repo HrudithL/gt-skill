@@ -139,19 +139,32 @@ plots split into one pair **per difficulty**
 `eval-results/` is gitignored — a fresh `--evaluate` overwrites it every time,
 and the intent is that it's a runtime output, not something checked in.
 
-### `eval-results-demo/` (checked in, static)
+### `published-metrics/` (checked in, static — ~550 KB)
 
-A frozen snapshot of a real `--evaluate --random 2 --repeat 3` run lives at
-`eval-results-demo/`. It's the same shape a fresh runtime `eval-results/`
-would have (four skill folders, each with `plots/`, `samples/`,
-`metrics.json`) so a fresh clone has something to look at without spending
-API budget first. Regenerate the demo's own plots (against the cached
-`metrics.json`, no API calls needed):
+A `--evaluate` run also refreshes `published-metrics/` — a lightweight
+snapshot that ships with the repo. It contains only the two deterministic
+plot PNGs per skill and the overall ranking `SUMMARY.md`, no per-sample
+`table.py` / `table.png` / `transcript.json`. The heavy per-sample
+artifacts stay under the gitignored runtime `eval-results/`.
+
+```
+published-metrics/
+  SUMMARY.md                          # per-skill ranking, one table + at-a-glance + leaders
+  creator/{usage,comparator_score}.png
+  house/{usage,comparator_score}.png
+  prose/{usage,comparator_score}.png
+  scripts/{usage,comparator_score}.png
+```
+
+A fresh clone can browse `published-metrics/` immediately to see how each
+skill fared on the last committed evaluation. To refresh from your own
+run, either run `python run.py --evaluate --random 2 --repeat 3` (which
+auto-publishes) or call the API directly:
 
 ```python
 from pathlib import Path
-from metrics_plots import render_all
-render_all(Path("eval-results-demo"))
+from metrics_plots import publish
+publish(Path("eval-results"), Path("published-metrics"))
 ```
 
 ## Web UI

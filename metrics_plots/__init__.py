@@ -20,7 +20,8 @@ just re-draws plots from the cached metrics.
 
 from __future__ import annotations
 
+from .publish import publish
 from .render import render_all, render_skill
 from .summary import write_summary
 
-__all__ = ["render_all", "render_skill", "write_summary"]
+__all__ = ["publish", "render_all", "render_skill", "write_summary"]

@@ -18,12 +18,9 @@ REPO = Path(__file__).resolve().parent.parent
 DEMO = REPO / "eval-results-demo"
 
 
-pytestmark = pytest.mark.skipif(
-    not DEMO.is_dir(), reason="eval-results-demo/ not present in this checkout"
-)
-
-
 def test_render_skill_produces_condensed_plots_against_demo(tmp_path):
+    if not DEMO.is_dir():
+        pytest.skip("eval-results-demo/ not present in this checkout")
     from metrics_plots import render_skill
 
     dst = tmp_path / "tree"

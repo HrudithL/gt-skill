@@ -91,7 +91,7 @@ def load_cost_tokens(vdir: Path) -> dict[str, Any] | None:
     """Read the harness's own final ``result`` message from ``transcript.json``
     (same shape ``eval-results-demo/_lib.py`` used) — returns ``None`` if
     the transcript is missing, which is how a cached (transcript-less)
-    demo sample signals "use the fallback.""""
+    demo sample signals a fallback is needed."""
     transcript_path = vdir / "transcript.json"
     if not transcript_path.is_file():
         return None

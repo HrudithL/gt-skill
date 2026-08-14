@@ -185,7 +185,8 @@ def main() -> int:
                         help="Force the no-skill baseline on/off (default: auto — on iff repeat>1).")
     parser.add_argument("--evaluate", action="store_true",
                         help="Full skill evaluation: run the same prompt set across all "
-                             f"{len(SKILL_LABELS)} skills, populate eval-results/, and regenerate plots. "
+                             f"{len(SKILL_LABELS)} skills, populate eval-results/, regenerate plots, "
+                             "and refresh the checked-in published-metrics/ tree. "
                              f"Requires --repeat >= {_EVAL_MIN_REPEAT} and "
                              f"{_EVAL_MIN_PER_DIFFICULTY}-{_EVAL_MAX_PER_DIFFICULTY} prompts per difficulty.")
     args = parser.parse_args()
@@ -381,6 +382,16 @@ async def _run_evaluation(prompts: list[PromptRef], args: argparse.Namespace) ->
                   f"plots={list(r['plots'].keys())}")
     except Exception as e:  # noqa: BLE001
         print(f"error: metrics_plots.render_all failed: {e}", file=sys.stderr)
+        overall_ok = False
+
+    print(f"\n{'#' * 60}\n# publishing to published-metrics/\n{'#' * 60}")
+    try:
+        pub = metrics_plots.publish(eval_root, ROOT / "published-metrics")
+        print(f"  wrote {len(pub['written'])} files to {pub['publish_root']}")
+        if pub["skipped"]:
+            print(f"  skipped: {', '.join(pub['skipped'])}")
+    except Exception as e:  # noqa: BLE001
+        print(f"error: metrics_plots.publish failed: {e}", file=sys.stderr)
         overall_ok = False
 
     return 0 if overall_ok else 1
