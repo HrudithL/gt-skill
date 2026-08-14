@@ -1089,10 +1089,10 @@ colored measures, no frame, no hairlines, no header branding, no caption
 
 Reading `table.py` confirms it: the script is 35 lines of bare
 `pandas`/`great_tables` code — `import pandas as pd; from great_tables
-import GT` — with none of the skill's helper imports
-(`gt_consistency.py`, which the sandbox had already made available in the
-same directory) anywhere in it. This tool-call-count comparison is a
-committed, self-contained fact (see
+import GT` — with none of the skill's helper imports anywhere in it. (Note:
+all three repeats, including the successful 91.8% and 96.9% siblings, import
+zero `gt_consistency.py` helpers, so import count is not a discriminator.)
+This tool-call-count comparison is a committed, self-contained fact (see
 `eval-results/scripts/samples/airquality_monthly_summary/repeat_2/README.md`),
 not dependent on the gitignored transcript it was originally read from:
 **the model never invoked the `Skill` tool at all** in this run — its
@@ -1101,13 +1101,15 @@ tool-call sequence is just `Read` (the CSV) → `Write` (`table.py`) →
 siblings on the same prompt (`repeat_1`, 14 tool calls; `repeat_3`, 18
 tool calls) both open with a `Skill` call before doing anything else,
 then read several reference files before writing code — the normal
-pattern. This is a comprehensive, one-off miss (the model electing not to
-invoke an available skill on one specific run, not a narrow mistake
-within an invoked skill), consistent with this project's own prior
-findings elsewhere in this file about haiku-tier sampling variance on a
-3-repeat sample — not a new doc or comparator gap, since the skill
-materials were present and correctly used by both siblings on the
-identical prompt.
+pattern. The committed `metrics.json` shows the verifiable signal: `repeat_2`
+consumed only 5 turns and 109K cache-read tokens, versus `repeat_1` (16 turns,
+576K tokens) and `repeat_3` (20 turns, 711K tokens) — a stark reduction in work
+volume consistent with skipping the Skill invocation and reference reading
+entirely. This is a comprehensive, one-off miss (the model electing not to
+invoke an available skill on one specific run, not a narrow mistake within an
+invoked skill), consistent with this project's own prior findings elsewhere in
+this file about haiku-tier sampling variance on a 3-repeat sample — not a new
+doc or comparator gap.
 
 This is also the main driver of `scripts`' worse mean spread this round
 (19.2pp vs. round 4's 16.4pp): `airquality_monthly_summary`'s own spread
@@ -1135,7 +1137,7 @@ codebase is expected to produce.
 **One more honest limitation not yet called out above:** `house`'s
 `islands_sizes` also regressed this round — from round 4's 94.0% mean
 (7.9pp spread) to this round's 85.4% mean (24.7pp spread), driven by
-`repeat_2` scoring 69.7% against ~94–96% siblings. This is `house`'s
+`repeat_2` scoring 69.7% against ~92–94% siblings. This is `house`'s
 second-largest single-prompt movement this round, after
 `towny_growth_trends` above, and (like that prompt) is not investigated
 further here — out of scope for a verification pass that focused on the
