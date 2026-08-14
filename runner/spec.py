@@ -92,7 +92,7 @@ class RunSpec:
     skill: str  # "prose" | "scripts" | "creator" | "house" (UI label)
     prompts: list[PromptRef] = field(default_factory=list)
     repeats: int = 1  # per prompt
-    model: str = DEFAULT_MODEL  # "haiku" | "sonnet" | "opus"
+    model: str = DEFAULT_MODEL  # shortcut label (haiku/sonnet/opus) or raw Claude id
     # None = auto: baseline runs iff repeats > 1. The user can force it on (even
     # at repeats == 1) or off. See 07-frontend-runner.md §4.1 / §11-Q1.
     baseline: bool | None = None
@@ -105,8 +105,14 @@ class RunSpec:
         return SKILL_TO_VARIANT[self.skill]
 
     def model_id(self) -> str:
-        """Concrete model id for the selected model label."""
-        return MODELS[self.model]
+        """Concrete model id for the selected model.
+
+        Shortcut labels in ``MODELS`` (haiku/sonnet/opus) resolve to their
+        pinned Claude ids; any other string is passed through verbatim so
+        callers can target arbitrary Claude models (e.g. a specific dated
+        release like ``claude-haiku-4-5``) without editing this file.
+        """
+        return MODELS.get(self.model, self.model)
 
     def baseline_enabled(self) -> bool:
         """Resolve the auto baseline toggle: on iff repeats>1, unless overridden."""
@@ -128,10 +134,11 @@ class RunSpec:
             raise ValueError(
                 f"skill must be one of {SKILL_LABELS}, got {self.skill!r}"
             )
-        if self.model not in MODELS:
-            raise ValueError(
-                f"model must be one of {MODEL_LABELS}, got {self.model!r}"
-            )
+        # Model is either a shortcut label in MODELS or an arbitrary
+        # Claude model id passed through verbatim. Only the empty string
+        # is rejected -- the SDK will surface a clearer error for a bad id.
+        if not self.model:
+            raise ValueError("model must be a non-empty string")
         if self.repeats < 1:
             raise ValueError(f"repeats must be >= 1, got {self.repeats}")
         if not self.prompts:

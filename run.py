@@ -131,8 +131,10 @@ def main() -> int:
                         help="Data CSV for --prompt-text (e.g. data/gtcars.csv).")
     parser.add_argument("--repeat", type=int, default=1,
                         help="With-skill invocations per prompt (default: 1).")
-    parser.add_argument("--model", choices=MODEL_LABELS, default=DEFAULT_MODEL,
-                        help=f"Model label (default: {DEFAULT_MODEL}).")
+    parser.add_argument("--model", default=DEFAULT_MODEL,
+                        help=(f"Model label ({', '.join(MODEL_LABELS)}) OR any "
+                              f"concrete Claude model id (e.g. claude-haiku-4-5). "
+                              f"Default: {DEFAULT_MODEL}."))
     parser.add_argument("--baseline", action=argparse.BooleanOptionalAction, default=None,
                         help="Force the no-skill baseline on/off (default: auto — on iff repeat>1).")
     args = parser.parse_args()

@@ -1,0 +1,156 @@
+---
+title: "Reproduce"
+---
+
+This chapter walks through reproducing every flavor of run the harness
+supports: a single prompt, a convergence study, a full sweep, and
+inspecting the results. All commands assume you have already followed
+[Setup](setup.qmd).
+
+## End-to-end reproduction
+
+The shortest path from clone to rendered plots:
+
+```bash
+git clone https://github.com/HrudithL/gt-skill && cd gt-skill
+python -m venv .venv && source .venv/bin/activate
+pip install claude-agent-sdk great_tables pandas python-dotenv anyio pillow anthropic plotnine
+npm install -g @anthropic-ai/claude-code
+echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env
+
+python scripts/fetch_data.py               # provision data/*.csv
+python run.py --skill scripts --difficulty easy --repeat 3
+```
+
+That last command triggers a full easy-difficulty sweep under the
+scripted skill, with three with-skill samples per prompt plus a
+baseline. It produces one run tree that has everything downstream
+tools need to render the [comparator plots](methodology.qmd#the-comparator).
+
+## A single prompt
+
+Fastest thing you can do to verify the install works and to eyeball
+what one output looks like.
+
+```bash
+python run.py --skill prose --prompt sp500_monthly_performance
+```
+
+Output:
+
+```
+runs/single/<ts>_prose_sp500_monthly_performance/
+  run.json
+  summary.json
+  prompts/
+    sp500_monthly_performance/
+      repeat_1/
+        table.py
+        table.png
+        transcript.json
+        data/sp500.csv -> ../../../../data/sp500.csv
+        .claude/skills/great-tables/
+```
+
+Open `table.png` — that's the table the skill produced. Read
+`transcript.json` to see what the agent did to get there.
+
+## A convergence run
+
+Convergence tells you how consistent the skill is across samples on
+the *same* prompt. Any variant supports it; just add `--repeat N`.
+
+```bash
+python run.py --skill scripts --prompt sp500_monthly_performance --repeat 3
+```
+
+Output adds `convergence.json` + `contact_sheet.png` at the prompt
+level, plus one `baseline/` directory (baseline is auto-enabled when
+`--repeat > 1`):
+
+```
+runs/convergence/<ts>_scripts_sp500_monthly_performance/
+  prompts/sp500_monthly_performance/
+    baseline/
+    repeat_1/  repeat_2/  repeat_3/
+    convergence.json
+    contact_sheet.png
+```
+
+`convergence.json` is the machine-readable report; `contact_sheet.png`
+composites the three rendered tables side by side so you can eyeball
+whether the parser's agreement fraction actually corresponds to visual
+similarity.
+
+## A full sweep
+
+The sweep is the workhorse for measuring a skill against the corpus.
+
+```bash
+python run.py --skill scripts --difficulty easy --repeat 3
+```
+
+Output tree:
+
+```
+runs/sweep/<ts>_scripts_multi/
+  run.json                                   # RunSpec + resolved config
+  summary.json                               # aggregate pass/fail + tokens/cost
+  prompts/
+    <prompt-1>/  <prompt-2>/  <prompt-3>/... # one dir per easy corpus prompt
+      baseline/  repeat_1/  repeat_2/  repeat_3/
+      convergence.json
+      contact_sheet.png
+```
+
+Swap `--difficulty easy` for `--difficulty all` to sweep every corpus
+prompt. Swap `--model haiku` for `sonnet` or `opus` (or any raw
+`claude-*` id) to trade cost for quality.
+
+Per-invocation cost estimate: `--repeat 3` + auto-baseline = 4 agent
+invocations per prompt + up to 4 judge calls per prompt. Multiply by
+the number of prompts in the difficulty bucket, then by your model's
+per-invocation cost. `run.py` prints the total invocation count up
+front (`invocations: 24`) so you can spot-check before running.
+
+## Inspecting results
+
+Every run leaves everything on disk. Key files:
+
+- **`run.json`** — the `RunSpec`, the resolved config, per-step
+  timings, and the run status. Machine-readable.
+- **`summary.json`** — aggregate pass/fail, total tokens, total cost.
+  Machine-readable.
+- **`prompts/<name>/{baseline,repeat_N}/table.png`** — the rendered
+  tables. Look at these.
+- **`prompts/<name>/{baseline,repeat_N}/transcript.json`** — the SDK
+  conversation. Useful for understanding *why* the model made a
+  choice.
+- **`prompts/<name>/{baseline,repeat_N}/report.txt`** — the
+  comparator score, if the prompt has a ground truth. See
+  [Methodology / The comparator](methodology.qmd#the-comparator).
+- **`prompts/<name>/contact_sheet.png`** — for convergence runs, all
+  N samples side by side.
+
+To render the per-skill plots (`comparator_score.png`, `usage.png`)
+from a completed sweep, use `eval-results/_plots.py` — it consumes a
+sweep's `runs/sweep/<...>` and writes plots into `eval-results-demo/`.
+That script is tracked; the surrounding `eval-results/` and
+`eval-results-demo/` directories are gitignored per the [production
+polish plan](https://github.com/HrudithL/gt-skill/pull/122) so raw
+artifacts stay local to your machine.
+
+## Cost sanity checks
+
+The runner will not silently spend money. Two guardrails:
+
+1. `RunSpec.invocation_count()` is printed at the top of every run,
+   before any Chrome launch or API call, so a mistyped
+   `--repeat 30` fails obvious.
+2. Bad data paths / missing API keys / empty prompt selections fail
+   with exit code `2` **before** the sidecar starts. You cannot get
+   billed for a run that was never going to complete.
+
+If a run does start and needs to be killed, `Ctrl-C` is safe — the
+sidecar teardown removes the profile directory, and every completed
+invocation's transcript is already flushed to disk.

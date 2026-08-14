@@ -1,0 +1,178 @@
+---
+title: "Runner CLI reference"
+---
+
+The harness has exactly one entry point: `run.py`. Every flow — a
+single prompt, a convergence study, a full corpus sweep, an ad-hoc
+prompt against a chosen CSV — is one `run.py` invocation with different
+flags.
+
+## Command shape
+
+```bash
+python run.py --skill {prose,scripts,creator,house} \
+              [--prompt NAME]... | [--difficulty {easy,medium,hard,all}] | \
+              [--prompt-text TEXT --data PATH] \
+              [--repeat N] \
+              [--model LABEL_OR_ID] \
+              [--baseline | --no-baseline]
+```
+
+`run.py` builds a `RunSpec`, validates it, and hands it to
+`runner.orchestrate.run_spec()`. See the [harness chapter](harness.qmd)
+for what happens after that.
+
+## Flags
+
+### `--skill {prose,scripts,creator,house}` &nbsp; *(default: `prose`)*
+
+Which of the four self-contained skills to mount into the run's
+ephemeral `.claude/` directory. See the [skills chapter](skills.qmd)
+for what each variant does.
+
+```bash
+python run.py --skill prose   --prompt sp500_monthly_performance
+python run.py --skill scripts --prompt sp500_monthly_performance
+python run.py --skill house   --prompt sp500_monthly_performance
+python run.py --skill creator --prompt sp500_monthly_performance
+```
+
+### `--prompt NAME` &nbsp; *(repeatable)*
+
+Name of a corpus prompt (file stem under `prompts/{easy,medium,hard}/`).
+Repeat to run several corpus prompts in one invocation.
+
+```bash
+python run.py --skill prose --prompt sp500_monthly_performance \
+                            --prompt gtcars_top10_by_country
+```
+
+### `--difficulty {easy,medium,hard,all}`
+
+Add every corpus prompt at the chosen difficulty. Combines with
+`--prompt`: the union is de-duplicated by name, so listing a prompt
+that is also included by `--difficulty` runs it once.
+
+```bash
+python run.py --skill creator --difficulty easy
+python run.py --skill scripts --difficulty all
+```
+
+### `--prompt-text TEXT --data PATH`
+
+An ad-hoc prompt outside the corpus. Both flags are required together.
+`PATH` is a CSV file, either absolute or repo-relative (e.g.
+`data/gtcars.csv`). It is validated up front — a bad path fails before
+any Chrome launch or API spend.
+
+```bash
+python run.py --skill prose \
+              --prompt-text "Top 10 cars by MSRP with country of origin" \
+              --data data/gtcars.csv
+```
+
+### `--repeat N` &nbsp; *(default: `1`)*
+
+Number of with-skill invocations per prompt. `--repeat N` with `N > 1`
+auto-enables the baseline (see below), producing a convergence report
+with a lift-adjusted score.
+
+```bash
+python run.py --skill scripts --prompt islands_sizes --repeat 3
+```
+
+### `--model LABEL_OR_ID` &nbsp; *(default: `haiku`)*
+
+Either a shortcut label (`haiku`, `sonnet`, `opus`) or any raw Claude
+model id string. Shortcut labels resolve through `runner.spec.MODELS`
+to their pinned concrete ids. Any other string is passed through to
+the SDK verbatim, so you can target a specific dated release without
+editing the source.
+
+```bash
+python run.py --skill prose --prompt islands_sizes --model haiku
+python run.py --skill prose --prompt islands_sizes --model claude-haiku-4-5
+python run.py --skill prose --prompt islands_sizes --model claude-sonnet-5
+```
+
+### `--baseline` / `--no-baseline` &nbsp; *(default: auto)*
+
+Force the no-skill baseline invocation on or off. **Auto** is
+`--baseline` iff `--repeat > 1`, because a convergence study needs the
+control to compute lift. Use `--baseline` explicitly to force it at
+`--repeat 1`, or `--no-baseline` to suppress it during convergence
+work.
+
+```bash
+python run.py --skill scripts --prompt islands_sizes             # baseline off
+python run.py --skill scripts --prompt islands_sizes --repeat 3  # baseline on
+python run.py --skill scripts --prompt islands_sizes --baseline  # forced on
+```
+
+## Examples
+
+### Single prompt, one shot
+
+```bash
+python run.py --skill prose --prompt sp500_monthly_performance
+```
+
+Writes `runs/single/<ts>_prose_sp500_monthly_performance/` with one
+`repeat_1/` subdir, one transcript, one `table.py`, one `table.png`.
+
+### Convergence study
+
+```bash
+python run.py --skill scripts --prompt sp500_monthly_performance --repeat 3
+```
+
+Writes `runs/convergence/<ts>_scripts_sp500_monthly_performance/` with
+`baseline/`, `repeat_1/`, `repeat_2/`, `repeat_3/`, plus
+`convergence.json` and `contact_sheet.png` at the prompt level.
+
+### Full-difficulty sweep
+
+```bash
+python run.py --skill creator --difficulty easy
+```
+
+Writes `runs/sweep/<ts>_creator_multi/` with one prompt subdirectory
+per easy corpus prompt.
+
+### Ad-hoc prompt
+
+```bash
+python run.py --skill prose \
+              --prompt-text "Show me top 5 movies by rating with poster URLs" \
+              --data data/films.csv
+```
+
+## Exit codes
+
+- `0` — every invocation succeeded and produced a valid rendered
+  table.
+- `1` — at least one invocation failed, or a run-level (infrastructure)
+  error occurred. A sidecar-startup or finalization failure returns
+  `1` even if the aggregate has no per-prompt failures, so `exit 0`
+  always means "the artifacts on disk are trustworthy."
+- `2` — usage error (bad flag combination, missing data file,
+  `ANTHROPIC_API_KEY` not set).
+
+## Environment variables
+
+| Variable | Purpose |
+|---|---|
+| `ANTHROPIC_API_KEY` | **Required.** Passed to the Claude Agent SDK. Read from `.env` at repo root by `run.py`. |
+| `GTSKILL_AGENT_MODEL` | The concrete model id the agent uses, threaded by `orchestrate`. Set from `--model` — normally you don't set this by hand. |
+| `GTSKILL_CHROME_WS` | The sidecar Chrome's CDP websocket URL. Threaded automatically to the agent's subprocess by `orchestrate`. |
+| `GTSKILL_JUDGE_MODEL` | Override the model the LLM-as-judge uses (see `runner/judge.py`). Default: `claude-sonnet-5`. Distinct from `--model`, which affects only the *writer* — the judge is deliberately kept independent. |
+
+## What `run.py` does *not* do
+
+- No `--output` flag. The run directory is derived from the `RunSpec`
+  and the timestamp; you get one canonical path per run.
+- No `--dry-run`. Validation happens up front; there is nothing else
+  to preview.
+- No provider selection. The Agent SDK is Anthropic-only. If Anthropic
+  ever ships an id the shortcut labels don't cover, use `--model`
+  with the raw id.

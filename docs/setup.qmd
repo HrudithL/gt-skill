@@ -1,0 +1,109 @@
+---
+title: "Setup"
+---
+
+This is the shortest path from a fresh clone to a rendered table.
+
+## Prerequisites
+
+- **Python 3.10+**. `great_tables` and the harness both require it.
+- **Node.js 20+** — the Claude Agent SDK depends on the Claude Code CLI,
+  which is a Node package.
+- **An Anthropic API key** with credits — the harness calls the API
+  once per prompt per repeat, plus once per judge invocation. Cost
+  scales with `--model` (see [runner reference](runner.qmd#-model-label_or_id--defaults-haiku)).
+- **macOS or Linux.** The sidecar-Chrome/CDP path in
+  [`runner/sidecar.py`](https://github.com/HrudithL/gt-skill/blob/main/runner/sidecar.py)
+  is exercised on macOS; Linux is expected to work with a
+  distribution-provided Chromium.
+
+## Install
+
+```bash
+git clone https://github.com/HrudithL/gt-skill
+cd gt-skill
+
+# 1) Python environment
+python -m venv .venv
+source .venv/bin/activate
+pip install claude-agent-sdk great_tables pandas python-dotenv anyio pillow
+pip install anthropic     # for the ground-truth judge (runner/judge.py)
+pip install plotnine      # for regenerating the eval-results plots
+
+# 2) Claude Code CLI (the SDK shells out to it)
+npm install -g @anthropic-ai/claude-code
+```
+
+::: {.callout-note}
+## No extras for the UI
+The old browser-based control plane is gone. The Quarto site you're
+reading right now is the only "UI" — everything else runs from the
+CLI. If your workflow was `uvicorn web.server:app`, use `python
+run.py --flags` instead. See the [runner reference](runner.qmd) for
+every flag.
+:::
+
+## API key
+
+Create a `.env` at the repo root:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+`run.py` reads it via `python-dotenv` before doing anything else. If
+the variable is missing the runner exits with code `2` and a clear
+error — no half-run partial artifacts.
+
+Optional overrides (usually you don't set these by hand):
+
+```
+GTSKILL_JUDGE_MODEL=claude-sonnet-5   # override the judge model
+GTSKILL_AGENT_MODEL=claude-haiku-4-5  # set from --model; setting here overrides
+```
+
+See the [environment variables table](runner.qmd#environment-variables)
+for the full list.
+
+## Sample data
+
+`data/` is gitignored so a fresh clone has no CSVs. One command
+materializes every dataset the harness uses:
+
+```bash
+python scripts/fetch_data.py
+```
+
+The script reads pandas DataFrames from `great_tables.data` (the
+sample datasets the Great Tables package ships for its own examples)
+and writes one CSV per dataset into `data/`. It is idempotent —
+re-running is a no-op unless you pass `--force`. Use `--list` to see
+which datasets would be written without touching disk.
+
+```bash
+python scripts/fetch_data.py --list      # print dataset names, exit
+python scripts/fetch_data.py             # write missing CSVs
+python scripts/fetch_data.py --force     # overwrite existing CSVs
+```
+
+## Verifying the install
+
+The smallest possible end-to-end check:
+
+```bash
+python run.py --skill prose \
+              --prompt-text "Top 10 cars by MSRP with country of origin" \
+              --data data/gtcars.csv
+```
+
+Expected output:
+
+- A new directory under `runs/single/<timestamp>_prose_adhoc/`.
+- `runs/.../prompts/adhoc/repeat_1/table.png` — the rendered table.
+- Exit code `0`.
+
+If Chrome fails to launch (e.g. wrong architecture), the sidecar log
+in the run directory shows why. If the API call fails, the runner
+surfaces the SDK's error and exits `1` — no silent retry.
+
+Once that works, you're ready for the [reproduction guide](reproduce.qmd).

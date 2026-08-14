@@ -1,0 +1,191 @@
+---
+title: "Harness architecture"
+---
+
+`gtskill` is a thin orchestrator around the [Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/).
+Everything the harness does can be summarized in one sentence: **given a
+CSV and a natural-language prompt, mount exactly one skill into an
+ephemeral `.claude/` directory, launch an agent with a bounded tool set,
+and capture what it produces.**
+
+This chapter unpacks that sentence.
+
+## The run model
+
+Every invocation of the harness — from the CLI or from an evaluation
+sweep — resolves to a single **`RunSpec`**. Given a `RunSpec`, the
+`runner.orchestrate` module builds a **run directory** on disk, loops
+over the selected prompts and repeats, and hands each individual
+invocation to `runner.engine.run()`, which is the *only* place that
+touches the Agent SDK.
+
+```
+RunSpec  ──►  orchestrate.run_spec()  ──►  engine.run()  ──►  Claude Agent SDK
+                    │                          │
+                    │                          └─► one ephemeral .claude/
+                    │                              one transcript.json
+                    │                              one table.py + table.png
+                    │
+                    └─► one run directory on disk
+                        with per-prompt subdirs and aggregate summary
+```
+
+## `RunSpec`
+
+`runner.spec.RunSpec` is a dataclass. It is the *only* input the runner
+takes:
+
+```python
+@dataclass
+class RunSpec:
+    skill: str                    # "prose" | "scripts" | "creator" | "house"
+    prompts: list[PromptRef]      # each = (prompt text, data CSV path)
+    repeats: int = 1              # with-skill invocations per prompt
+    model: str = "haiku"          # shortcut label OR raw Claude model id
+    baseline: bool | None = None  # None = auto (on iff repeats > 1)
+```
+
+Everything in the harness that used to be a separate runner
+(`consistency_runner`, `test_runner`, `skill_creator_runner`) is now
+folded into this one shape. A **single** prompt is a `RunSpec` with one
+`PromptRef` and `repeats=1`. A **convergence** study is the same thing
+with `repeats=3` (or more). A **sweep** is a `RunSpec` with many
+`PromptRefs`. Nothing else changes.
+
+Every `RunSpec` is validated up front (via `RunSpec.validate()`) before
+any Chrome is launched or any API call is made, so bad paths and empty
+prompt lists fail cheaply.
+
+## Orchestrate
+
+`runner.orchestrate.run_spec()` is the single driver both the CLI (via
+`run.py`) and any programmatic caller go through. It owns the run
+directory, one shared sidecar Chrome for the whole run, and the
+per-prompt loop.
+
+### The run directory
+
+Every run writes exactly one tree under `runs/<type>/`, where `type` is
+one of `single`, `convergence`, or `sweep`:
+
+```
+runs/<type>/<timestamp>_<skill>_<slug>/
+  run.json               # RunSpec + resolved config + status + timings
+  summary.json           # aggregate pass/fail + tokens/cost across prompts
+  .chrome-profile/       # sidecar Chrome's isolated profile, removed on exit
+  prompts/
+    <prompt-name>/
+      convergence.json   # only when repeats > 1
+      contact_sheet.png  # only when repeats > 1
+      baseline/          # only when baseline is enabled
+        table.py
+        table.png
+        transcript.json
+        data/                # symlinked CSV — never copied
+        .claude/             # ephemeral, mounted skill root (empty for baseline)
+      repeat_1/ ... repeat_N/
+        (same layout as baseline/)
+```
+
+The CSV stays where it is: the agent reads from a **symlink** in the
+run dir. It is never asked to copy data around.
+
+### Per-prompt loop
+
+For each `PromptRef` in the spec, `orchestrate` runs `repeats`
+with-skill invocations and, if `baseline` is enabled, one baseline
+invocation with `variant="none"` — the agent sees no `.claude/` at all.
+`baseline` is `None`-by-default and resolves to `on` iff `repeats > 1`,
+so a convergence study automatically produces the no-skill control it
+needs to lift-adjust the with-skill scores.
+
+## Engine
+
+`runner.engine.run()` is the choke point. It:
+
+1. Builds `run_dir/.claude/` from scratch, mounting exactly one skill
+   (see below).
+2. Constructs `ClaudeAgentOptions` with a restricted tool set
+   (`Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`) and a permission
+   gate that logs Write/Edit calls but generally allows them within
+   the run directory.
+3. Calls `claude_agent_sdk.query()` with the prompt and the mounted
+   skill root, streaming the message trace to `transcript.json`.
+4. Executes the resulting `table.py` in a subprocess against the venv
+   Python — the script itself renders `table.png` via
+   `gt.gtsave("table.png")` attached to the sidecar Chrome (see
+   below).
+
+## Sandboxing and per-run isolation
+
+The harness enforces isolation on three axes.
+
+### One skill per run
+
+`_prepare_skill_root()` **rebuilds** `run_dir/.claude` on every
+invocation with `rmtree + recreate`, so there is no way for a previous
+run — with a different skill variant, or a stale baseline — to leak
+into the current one. Only the source skill for the selected variant is
+copied under `run_dir/.claude/skills/`. Baseline mounts *nothing* —
+`skills=[]` is passed to the SDK.
+
+### One run directory per invocation
+
+Every prompt invocation gets its own subdirectory. Writes are scoped
+there; the agent never touches the repo tree it was launched from.
+Data CSVs are symlinked in read-only from `data/` under the repo root.
+
+### One sidecar Chrome per run
+
+On macOS the Claude Code sandbox blocks the mach services Chrome
+touches during launch, so the agent's sandboxed Python cannot start
+Chrome itself. Instead, `orchestrate` launches **one** headless
+`nokap.Chrome` in the parent process at the start of the run and
+threads its CDP websocket URL to the agent via
+`GTSKILL_CHROME_WS`. `gt.gtsave()` picks that up from a venv `.pth`
+startup hook (installed by `_ensure_sidecar_hook()` on first use) and
+attaches, rather than trying to spawn Chrome from inside the sandbox.
+
+The sidecar's profile lives under `run_dir/.chrome-profile/` and is
+removed on teardown, so a run leaves no state on disk beyond the
+tracked artifacts.
+
+## Sidecar Chrome and CDP rendering
+
+The rendering path in one flow:
+
+```
+agent (sandbox)
+    │
+    │  writes table.py
+    │  runs table.py via Bash tool
+    ▼
+subprocess: python table.py
+    │
+    │  imports great_tables
+    │  imports _gtskill_sidecar (via .pth hook)
+    │  reads GTSKILL_CHROME_WS
+    │  attaches to sidecar over loopback CDP
+    ▼
+gt.gtsave("table.png")   ──► CDP screenshot ──► table.png on disk
+```
+
+The `.pth` hook (`gtskill_sidecar.py`) is installed once per venv per
+run into the venv's site-packages. It patches `great_tables`'s Chrome
+startup to attach to the already-running sidecar instead of launching
+a new one. Every run tears down its own hook copy so subsequent runs
+against a different sidecar can't cross-connect.
+
+## What the harness *doesn't* do
+
+- **It does not restart Chrome per prompt.** One sidecar covers a whole
+  run (many prompts, many repeats), so a sweep pays the Chrome
+  startup cost exactly once.
+- **It does not judge with the same model that wrote the table.** The
+  judge (`runner.judge`) runs a separate model (`sonnet` by default,
+  overridable via `GTSKILL_JUDGE_MODEL`) and never sees the writer's
+  transcript.
+- **It does not silently retry.** If the agent's script fails, the
+  transcript is preserved and the invocation is marked `fail` in
+  `summary.json`. The runner does not swallow errors to make its
+  reports look cleaner.

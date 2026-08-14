@@ -1,0 +1,30 @@
+---
+title: "gtskill"
+subtitle: "A tiny harness for Claude-Agent-SDK-driven Great Tables generation"
+---
+
+## What this is
+
+`gtskill` is a small, testable evaluation harness that lets a language
+model produce a formatted [Great Tables](https://posit-dev.github.io/great-tables/)
+table from a CSV and a natural-language prompt. It is built around one
+short "skill" the agent loads at runtime — everything else (the runner,
+the corpus, the judge, the comparator) is scaffolding for engineering
+and measuring that skill.
+
+## What you'll find in these docs
+
+- [Setup](setup.qmd) — install, `.env`, sample data.
+- [Skills](skills.qmd) — the four skill variants and when to use each.
+- [Harness](harness.qmd) — architecture, sandboxing, the run model.
+- [Runner](runner.qmd) — CLI reference.
+- [Methodology](methodology.qmd) — how the skill was engineered.
+- [Reproduce](reproduce.qmd) — run your own evaluation end-to-end.
+
+::: {.callout-tip}
+## Contribute back
+This is a work-in-progress research repository. Read
+[CONTRIBUTING.md](https://github.com/HrudithL/gt-skill/blob/main/CONTRIBUTING.md)
+before opening a PR — it describes the branch tree, the review loop,
+and the model-tier rules that govern how work lands.
+:::
