@@ -1,0 +1,44 @@
+name: Publish docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+  # Also run when the root polish branch itself lands on main.
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # required by peaceiris/actions-gh-pages to push to gh-pages
+
+concurrency:
+  group: docs-pages
+  cancel-in-progress: false
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Install Quarto
+        uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: 1.5.57
+
+      - name: Render docs/
+        run: quarto render docs/
+
+      - name: Deploy to gh-pages
+        if: github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/_site
+          # Keep any non-Quarto artifacts (e.g. CNAME) that already live on gh-pages.
+          keep_files: true
+          user_name: "github-actions[bot]"
+          user_email: "41898282+github-actions[bot]@users.noreply.github.com"
+          commit_message: "docs: publish ${{ github.sha }}"
