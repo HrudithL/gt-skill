@@ -213,32 +213,57 @@ Per-prompt means: `gtcars_hp_price` 97.4%, `gtcars_top10_by_country` 95.1%,
 `islands_sizes` 85.4%, `sp500_monthly_performance` 77.7%, `towny_growth_trends`
 73.4%, `airquality_monthly_summary` 72.2%.
 
-**`towny_growth_trends`'s catastrophic outlier does not recur, but for a more
-nuanced reason than "the under-coloring bug was fixed."** Round 4's `repeat_1`
-scored 39.5%, and re-reading its actual stored report shows the dominant cause was
-a *different*, already-separately-fixed bug: it built `GT(gt_data.set_index('Town'))`
-instead of `rowname_col="Town"`, so no stub existed at all, cascading zeros across
-row identity, value correctness, column-set matching, stub existence, striping, and
-header branding (PR #107 fixed this exact confusion). That same round-4 report also
-shows a genuine, secondary under-coloring problem in the same candidate: its one
-`heatmap()` call touched only `density_cols`, never the inter-census change
-columns — 0/6 on "Colored-measure selection," the pattern PR #113 targets.
+**`towny_growth_trends`'s catastrophic outlier does not recur, but the fix is
+narrower than it first looks, and the specific colored-measure check this table
+was designed to exercise is actually worse this round, not better.** Round 4's
+`repeat_1` scored 39.5%, and re-reading its actual stored report shows the
+dominant cause was a *different*, already-separately-fixed bug: it built
+`GT(gt_data.set_index('Town'))` instead of `rowname_col="Town"`, so no stub
+existed at all, cascading zeros across row identity, value correctness,
+column-set matching, stub existence, striping, and header branding (PR #107
+fixed this exact confusion).
 
 This round's three fresh repeats score `[71.1%, 70.6%, 78.4%]` — clustered, no
 catastrophic outlier. Reading all three `table.py` files confirms all three now
-build the stub with `rowname_col=` (not `.set_index()`) and all three call
-`heatmap()` at least once. But the under-coloring issue is only partially resolved,
-not eliminated: `repeat_1` and `repeat_2` each heatmap only the change/percent
-columns and leave `density_1996`..`density_2021` completely plain (the mirror image
-of round 4's miss); only `repeat_3` heatmaps both groups, matching the ground
-truth's two-colored-measure design (`density_*` sequential, `pop_change_*_pct`
-diverging). The comparator's own sub-scores show this directly: "Colored-measure
-selection" is 0/6 for `repeat_1`/`repeat_2` and 3/6 for `repeat_3`. So: the
-catastrophic-score shape is gone (no repeat is stacking a missing-stub failure on
-top of an under-coloring failure anymore), and the specific `set_index()` bug is
-confirmed absent in a fresh sample, but "leave one of the two designated colorable
-measures completely plain" still shows up in 2 of 3 repeats here — it just no
-longer compounds into a catastrophic score on its own.
+build the stub with `rowname_col=` (not `.set_index()`), so that specific,
+previously-primary bug is confirmed fixed. But on the "Colored-measure selection"
+check itself — 11 canonical colored measures: 6 `density_*` (sequential) + 5
+`pop_change_*_pct` (diverging) — coverage regressed, it did not improve:
+
+| | repeat_1 | repeat_2 | repeat_3 |
+|---|---|---|---|
+| Round 4 | 0/11 (FAIL) | **11/11 (PASS)** | 5/11 (FAIL) |
+| Round 5 | 0/11 (FAIL) | 0/11 (FAIL) | 6/11 (FAIL) |
+
+Round 4 had one repeat (`repeat_2`) earn full credit on this check. Round 5's best
+repeat (`repeat_3`, 6/11) still fails it outright, and — critically — **all 6 of
+its covered measures are the `density_*` columns; none of the 5 canonical
+`pop_change_*_pct` measures are covered.** Its own "Computed/derived value
+correctness" sub-score confirms this directly: 5/10, listing all five
+`pop_change_1996_2001_pct`..`pop_change_2016_2021_pct` measures as unmatched.
+`repeat_3` does color both a sequential and a diverging group visually
+(`Greens` and `RdYlGn`, per its report), but it is coloring the wrong second
+group — density-derived percent-change columns of its own invention, not the
+ground truth's `pop_change_*_pct` measures — so it does **not** match the ground
+truth's two-colored-measure design, despite superficially looking like it does.
+`repeat_1` and `repeat_2` cover zero canonical colored measures each, having
+heatmapped only their own density-derived change columns instead.
+
+Across all 3 round-5 repeats, **zero** of the 5 canonical `pop_change_*_pct`
+measures were covered by any repeat, versus round 4's one full-credit repeat. So
+on this specific mechanical check — the one this prompt was designed to exercise
+most directly — round 5 is worse than round 4, not merely "milder" or
+"incomplete." The `rowname_col=` stub bug is fixed; the measure-coverage
+regression is a separate, unresolved gap this sweep surfaces fresh.
+
+**A second, honest limitation this round: `islands_sizes` also regressed.**
+Round 4's `islands_sizes` scored `[91.0%, 92.1%, 98.9%]` (94.0% mean, 7.9pp
+spread); this round it scores `[94.4%, 69.7%, 92.1%]` (85.4% mean, 24.7pp
+spread) — `repeat_2`'s 69.7% vs. ~92–94% siblings is `house`'s second-largest
+single-prompt movement this round, after `towny_growth_trends` above. Not
+investigated further here — out of scope for a verification pass that focused
+on the two round-4 outlier prompts and the newly-appeared `scripts` one (see
+top-level `SUMMARY.md`).
 
 Execution: 24/24 successful (no crashes), consistent with `prose` and `scripts`
 this round — see the top-level `SUMMARY.md` for the caveat on why this isn't

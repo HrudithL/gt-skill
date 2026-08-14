@@ -173,7 +173,7 @@ round 4 and this round.
 | Metric | This round | Round 4 |
 |---|---|---|
 | Mean score | 87.9% | 84.7% |
-| Mean repeat spread | 9.9pp | **8.2pp** (worse) |
+| Mean repeat spread | 9.9pp | **8.1pp** (worse) |
 | Mean cost | $0.164 | $0.190 |
 
 Mean score is up (+3.2pp) and mean cost is down, both within the range a fresh

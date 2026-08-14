@@ -208,19 +208,19 @@ the board. No caveats on this one.
 reason this skill's mean spread got worse, not better, this round. Its `report.txt`
 shows a comprehensive, near-total failure (no stub, no colored measures, no frame,
 no hairlines, no header branding, no caption — 19/90). Reading its `table.py`
-confirms this is not a narrow, specific mistake: the script is 36 lines of bare
+confirms this is not a narrow, specific mistake: the script is 35 lines of bare
 `pandas`/`great_tables` code with none of `gt_consistency.py`'s helpers imported at
-all. Reading the run's own transcript
-(`runs/sweep/20260813_161442_scripts_6prompts/prompts/airquality_monthly_summary/
-repeat_2/transcript.json`) shows why: **the model never invoked the `Skill` tool in
-this run** — its full tool sequence is `Read` (CSV) → `Write` (`table.py`) → `Bash`
-(run) → `Read` (view PNG), 4 calls in 5 turns, versus `repeat_1` (14 calls) and
-`repeat_3` (18 calls), both of which open with a `Skill` call before writing any
-code. This reads as inherent haiku-tier sampling variance in whether the model
-elects to invoke an available skill at all on a given run, not a doc or comparator
-gap — the skill materials (including a copy of `gt_consistency.py` in the working
-directory) were present and used correctly by both siblings on the identical
-prompt.
+all. This tool-call-count comparison is committed as a self-contained fact (see
+[`samples/airquality_monthly_summary/repeat_2/README.md`](samples/airquality_monthly_summary/repeat_2/README.md)),
+not dependent on the gitignored transcript it was originally read from: **the
+model never invoked the `Skill` tool in this run** — its full tool sequence is
+`Read` (CSV) → `Write` (`table.py`) → `Bash` (run) → `Read` (view PNG), 4 calls
+in 5 turns, versus `repeat_1` (14 calls, opening with `Skill`) and `repeat_3`
+(18 calls, also opening with `Skill`). This reads as inherent haiku-tier
+sampling variance in whether the model elects to invoke an available skill at
+all on a given run, not a doc or comparator gap — the skill materials
+(including a copy of `gt_consistency.py` in the working directory) were present
+and used correctly by both siblings on the identical prompt.
 
 Execution: 24/24 successful (no crashes) — see the top-level `SUMMARY.md` for the
 caveat on why this isn't claimed as a rigorously-proven improvement over any pre-fix
