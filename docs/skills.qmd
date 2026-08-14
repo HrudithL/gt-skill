@@ -2,16 +2,114 @@
 title: "Skills"
 ---
 
-<!-- Filled by slice 8 (feat/polish-docs-content-skills-and-methodology). -->
+A **skill** is a self-contained bundle — one `SKILL.md`, optional
+`references/`, optional `scripts/` — that the agent loads at runtime.
+The harness ships four variants under `.claude/skills/`, plus a
+no-skill *baseline* that is used purely as a control for evaluation.
 
-## The four skills
+| Variant | Folder | Style | When to pick |
+|---|---|---|---|
+| `prose`   | `.claude/skills/great-tables/`         | Flowchart + full reference tree | Default. Highest polish. |
+| `scripts` | `.claude/skills/great-tables-ci/`      | Flowchart + a mechanical checker loop | When you want the model to self-check. |
+| `house`   | `.claude/skills/great-tables-house/`   | One worked script + short rules | Minimal cognitive load. |
+| `creator` | `.claude/skills/great-tables-creator/` | A/B candidate, mounted as `great-tables` | Evaluating alternative skill designs. |
+| *baseline* | *(no `.claude/` at all)*              | The model has no skill guidance | Control for lift measurement. |
+
+Every variant produces the same on-disk shape: one `table.py`, one
+`table.png`, one `transcript.json`. The runner's `--skill` flag picks
+which of the four gets mounted; see the
+[runner reference](runner.qmd#-skill-proseshcriptscreatorhouse--defaults-prose).
 
 ## `great-tables` (prose)
 
-## `great-tables-ci` (scripted / checker loop)
+The default. A **flowchart, not a menu**: for most decisions there is
+one deterministic rule (or one explicit, data-driven branch). The
+`SKILL.md` carries only the procedure and decision points; every pinned
+value — palette hex codes, band rules, API signatures, polish checklists
+— lives in a `references/` file that `references/REFERENCE.md` routes to.
+
+Loading pattern:
+
+1. Read `references/REFERENCE.md` before writing any Python.
+2. Follow the 7-step flowchart: understand data → organize columns →
+   Big Color (which measures earn fill) → heading band → Small-Color
+   checklist → titles/annotations → render + verify.
+3. Render with `gt.gtsave("table.png")` — the mandatory renderer.
+
+Pick this when you want the highest-polish output and don't mind the
+larger reference-tree footprint in-context.
+
+## `great-tables-ci` (scripts)
+
+Same flowchart as the prose skill, but ships a **checker loop** and two
+executable scripts under `scripts/`:
+
+- `gt_check.py` — inspects a generated `table.py` for common
+  correctness/style violations (hairline visibility, palette
+  consistency, formatter selection).
+- `gt_consistency.py` — a small library the agent's own script can
+  import to enforce house-style choices.
+
+The `references/` and `assets/` trees are symlinks back to the prose
+skill's copies (single source of truth); `_prepare_skill_root()` calls
+`copytree(symlinks=False)` so the ephemeral mount materializes the
+resolved files.
+
+Pick this when you want the model to self-check its output before
+declaring done.
 
 ## `great-tables-house` (thin house-style)
 
-## `great-tables-creator` (candidate skill)
+The **minimal path**. No flowchart, no archetype directory, no reference
+router. Instead:
 
-## How to pick one
+1. One worked script: `scripts/house_table.py`. Reads as both the
+   canonical example (run it directly to see the reference render) and
+   a helper module exposing `PALETTE`, `frame()`, `finalize()`,
+   `band()`, `stripe()`, `stub_tint()`, `heatmap()`, `status_chip()`,
+   `summary_row()`, `group_emphasis()`, `humanize_labels()`.
+2. One short rules file: `references/data.md` — answers three
+   questions the flowchart skills handle with dedicated steps (what
+   identifies a row, what a named-but-not-literal measure computes to,
+   how to tie-break unranked measures).
+
+Pick this when the request looks simple (a plain list, one or two
+numeric columns) but the house style still applies.
+
+## `great-tables-creator` (candidate)
+
+A **candidate skill** produced by the skill-creator workflow. Its
+frontmatter declares `name: great-tables`, so when the runner mounts
+it, the ephemeral `.claude/skills/great-tables/` looks identical to
+what the prose skill would produce — same skill name, same trigger
+conditions, different internals.
+
+This is what the harness uses to A/B a candidate skill design against
+the promoted prose skill. Run the same corpus under `--skill prose` and
+`--skill creator`, compare the two `summary.json` files (or the two
+`comparator_score.png` plots), decide whether the candidate wins.
+
+Pick this only when you're evaluating an alternative skill design. It
+is not intended for production table generation.
+
+## The baseline (no-skill control)
+
+`--baseline` (or `--repeat N` with `N > 1`, which auto-enables it) runs
+one invocation per prompt with `variant="none"`. The agent sees no
+`.claude/` at all — no skill, no `settings.local.json` — and is
+launched with `skills=[]`. It has full access to `great_tables` at
+runtime; what it lacks is any of the skill's guidance about *how* to
+use it.
+
+The baseline is the control that lets the harness compute **lift**: how
+much better the with-skill table scores than the same prompt run
+without it.
+
+## Picking a skill
+
+- **Just want a good table?** → `prose`.
+- **Want the model to self-check?** → `scripts`.
+- **Simplest request, want minimal context spend?** → `house`.
+- **A/B evaluating an alternative skill?** → `creator` vs. `prose`.
+- **Need to measure how much the skill actually helps?** →
+  `--repeat 3` (any variant); the auto-baseline gives you the control.
