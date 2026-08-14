@@ -156,7 +156,7 @@ gt = gt.tab_options(
 # standalone checker has no equivalent for and was never meant to). Testing
 # agreement against house/prose samples would fail on exactly that mismatch
 # without it being a real bug -- scope this to the skill that actually uses it.
-_REAL_SAMPLES = sorted(glob.glob(os.path.join(REPO_ROOT, "eval-results", "scripts", "samples", "*", "*", "table.py")))
+_REAL_SAMPLES = sorted(glob.glob(os.path.join(REPO_ROOT, "eval-results-demo", "scripts", "samples", "*", "*", "table.py")))
 
 
 @pytest.mark.parametrize("path", _REAL_SAMPLES, ids=[os.path.relpath(p, REPO_ROOT) for p in _REAL_SAMPLES])
