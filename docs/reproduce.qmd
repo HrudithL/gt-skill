@@ -1,0 +1,15 @@
+---
+title: "Reproduce"
+---
+
+<!-- Filled by slice 9 (feat/polish-docs-content-setup-and-reproduce). -->
+
+## End-to-end reproduction
+
+## A single prompt
+
+## A convergence run
+
+## A full sweep
+
+## Inspecting results

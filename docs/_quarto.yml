@@ -1,0 +1,62 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "gtskill"
+  description: >
+    A lightweight harness that pairs the Claude Agent SDK with a
+    Great Tables skill to turn a CSV + prompt into a formatted table.
+  repo-url: https://github.com/HrudithL/gt-skill
+  repo-actions: [edit, issue]
+  page-navigation: true
+
+  navbar:
+    left:
+      - href: index.qmd
+        text: Overview
+      - href: setup.qmd
+        text: Setup
+      - href: skills.qmd
+        text: Skills
+      - href: harness.qmd
+        text: Harness
+      - href: runner.qmd
+        text: Runner
+      - href: methodology.qmd
+        text: Methodology
+      - href: reproduce.qmd
+        text: Reproduce
+    right:
+      - icon: github
+        href: https://github.com/HrudithL/gt-skill
+
+  sidebar:
+    style: docked
+    search: true
+    contents:
+      - index.qmd
+      - setup.qmd
+      - section: "Concepts"
+        contents:
+          - skills.qmd
+          - harness.qmd
+      - section: "Reference"
+        contents:
+          - runner.qmd
+      - section: "Deeper"
+        contents:
+          - methodology.qmd
+          - reproduce.qmd
+
+format:
+  html:
+    theme:
+      light: [cosmo]
+      dark: [cosmo, theme-dark.scss]
+    css: styles.css
+    toc: true
+    code-copy: true
+    code-overflow: wrap
+    anchor-sections: true
+    smooth-scroll: true

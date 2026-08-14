@@ -1,0 +1,15 @@
+---
+title: "Setup"
+---
+
+<!-- Filled by slice 9 (feat/polish-docs-content-setup-and-reproduce). -->
+
+## Prerequisites
+
+## Install
+
+## API key
+
+## Sample data
+
+## Verifying the install
