@@ -187,8 +187,15 @@ random draw. No code changed between round 4 and this round.
 | Mean repeat spread | 19.2pp | **16.4pp** (worse) |
 | Mean cost | $0.188 | $0.189 |
 
+**Note:** round 4 and round 5 are not scored on an identical basis — 12 of
+round 4's 18 invocations had all judge-tier checks marked N/A, vs. 0 of 18
+this round; see the top-level [`SUMMARY.md`](../SUMMARY.md) for the full
+disclosure and a confound-free, mechanical-only recomputation.
+
 Mean score is up slightly (+1.7pp), within noise. Mean repeat spread is worse than
-round 4, driven entirely by one new outlier (below) — not a general regression.
+round 4, driven entirely by one outlier (below) — a recurrence of this same prompt's
+round-4 failure under a different repeat and a different cause, not a general
+regression.
 
 Per-prompt means: `gtcars_hp_price` 98.5%, `islands_sizes` 98.1%,
 `gtcars_top10_by_country` 94.1%, `towny_growth_trends` 86.5%,
@@ -203,9 +210,14 @@ repeats score `[100.0%, 98.9%, 96.7%]` — tightly clustered. Reading all three
 df["model"]` and pass that as `rowname_col`, scoring 10/10 on row identity across
 the board. No caveats on this one.
 
-**A new outlier: `airquality_monthly_summary/repeat_2` scored 21.1%** vs.
-91.8%/96.9% siblings — this round's widest single-prompt spread (75.8pp) and the
-reason this skill's mean spread got worse, not better, this round. Its `report.txt`
+**A recurrence, not a new outlier: `airquality_monthly_summary/repeat_2` scored
+21.1%** vs. 91.8%/96.9% siblings — this round's widest single-prompt spread
+(75.8pp) and the reason this skill's mean spread got worse, not better, this
+round. This is the same prompt that was also a round-4 outlier (`repeat_1` at
+57.5%, see "Round 4" above), so this is a recurrence of the same prompt failing
+across both rounds, not a first appearance — but the underlying cause is
+different each time: round 4's was a missing `rowname_col=` (no stub created),
+while this round's is a near-total skill-pipeline skip (below). Its `report.txt`
 shows a comprehensive, near-total failure (no stub, no colored measures, no frame,
 no hairlines, no header branding, no caption — 19/90). Reading its `table.py`
 confirms this is not a narrow, specific mistake: the script is 35 lines of bare

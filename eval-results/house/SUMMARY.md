@@ -205,6 +205,11 @@ under a fresh random draw. No code changed between round 4 and this round.
 | Mean repeat spread | **8.9pp** | 16.4pp |
 | Mean cost | $0.133 | $0.131 |
 
+**Note:** round 4 and round 5 are not scored on an identical basis — 12 of
+round 4's 18 invocations had all judge-tier checks marked N/A, vs. 0 of 18
+this round; see the top-level [`SUMMARY.md`](../SUMMARY.md) for the full
+disclosure and a confound-free, mechanical-only recomputation.
+
 Mean score is flat (+0.2pp, within noise for an 18-invocation haiku sample). Mean
 repeat spread improved substantially, driven almost entirely by
 `towny_growth_trends` no longer producing a catastrophic outlier (see below).
@@ -219,9 +224,17 @@ was designed to exercise is actually worse this round, not better.** Round 4's
 `repeat_1` scored 39.5%, and re-reading its actual stored report shows the
 dominant cause was a *different*, already-separately-fixed bug: it built
 `GT(gt_data.set_index('Town'))` instead of `rowname_col="Town"`, so no stub
-existed at all, cascading zeros across row identity, value correctness,
-column-set matching, stub existence, striping, and header branding (PR #107
-fixed this exact confusion).
+existed at all, zeroing the three strictly stub-gated checks — row/entity
+selection identity, computed/derived value correctness, and stub existence
+(22 of the 52 total points lost, ~42%, a **minority** of the loss). Column
+set shown vs. hidden, striping, and header branding were **not** stub
+cascades: the report attributes them directly to separate candidate
+omissions (e.g. "header background: expected #08306B, got None"), and
+reading the candidate's actual `table.py` confirms it has no
+`opt_row_striping` call and no `#08306B` anywhere in the script — these are
+independent misses the candidate also made, not a consequence of the
+missing stub. (PR #107 fixed the `set_index()`-vs-`rowname_col=` confusion
+itself.)
 
 This round's three fresh repeats score `[71.1%, 70.6%, 78.4%]` — clustered, no
 catastrophic outlier. Reading all three `table.py` files confirms all three now
@@ -259,11 +272,19 @@ regression is a separate, unresolved gap this sweep surfaces fresh.
 **A second, honest limitation this round: `islands_sizes` also regressed.**
 Round 4's `islands_sizes` scored `[91.0%, 92.1%, 98.9%]` (94.0% mean, 7.9pp
 spread); this round it scores `[94.4%, 69.7%, 92.1%]` (85.4% mean, 24.7pp
-spread) — `repeat_2`'s 69.7% vs. ~92–94% siblings is `house`'s second-largest
-single-prompt movement this round, after `towny_growth_trends` above. Not
-investigated further here — out of scope for a verification pass that focused
-on the two round-4 outlier prompts and the newly-appeared `scripts` one (see
-top-level `SUMMARY.md`).
+spread) — `repeat_2`'s 69.7% vs. ~92–94% siblings makes this `house`'s
+**largest** single-prompt mean-change this round (−8.6pp), not
+`towny_growth_trends`'s, which is actually near the bottom of the six
+prompts and essentially flat (+0.9pp) despite the narrative attention it
+gets above. By mean-change this round vs. round 4: `islands_sizes` −8.6pp
+(largest), `gtcars_top10_by_country` +5.8pp, `gtcars_hp_price` +2.2pp,
+`sp500_monthly_performance` +1.9pp, `towny_growth_trends` +0.9pp,
+`airquality_monthly_summary` −0.6pp (smallest). Not investigated further
+here — out of scope for a verification pass that focused on the **three**
+round-4 outlier prompts (`house/towny_growth_trends`,
+`scripts/gtcars_hp_price`, `scripts/airquality_monthly_summary`) — the
+last of which recurred this round under a different cause rather than
+newly appearing (see top-level `SUMMARY.md`).
 
 Execution: 24/24 successful (no crashes), consistent with `prose` and `scripts`
 this round — see the top-level `SUMMARY.md` for the caveat on why this isn't
