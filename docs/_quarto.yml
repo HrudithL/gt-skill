@@ -36,22 +36,16 @@ website:
         text: Methodology
       - href: reproduce.qmd
         text: Reproduce
-    right:
-      - icon: star-fill
-        href: https://github.com/HrudithL/gt-skill/stargazers
-        aria-label: "GitHub stars"
-      - icon: diagram-2
-        href: https://github.com/HrudithL/gt-skill/network/members
-        aria-label: "GitHub forks"
-      - icon: github
-        href: https://github.com/HrudithL/gt-skill
-        aria-label: "GitHub"
+    # navbar-right is populated at runtime by docs/_includes/github-widgets.html
+    # (live GitHub star + fork counts + a repo link, matching posit-dev/great-docs).
 
 format:
   html:
     theme:
       light: [cosmo, custom.scss]
       dark: [cosmo, custom.scss, theme-dark.scss]
+    include-after-body:
+      - _includes/github-widgets.html
     toc: true
     toc-location: right
     toc-depth: 3

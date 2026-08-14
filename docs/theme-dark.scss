@@ -79,3 +79,25 @@ blockquote {
 .callout-title {
   color: #eef0fa;
 }
+
+// GitHub navbar widgets (dark theme).
+.gh-widget {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: #2c3151;
+  color: #d7dae5;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: #3a4276;
+    color: #ffffff;
+  }
+}
+
+.gh-widget-count {
+  border-left-color: #2c3151;
+  color: #9ea4bd;
+}
+
+.gh-widget-icon-only .gh-widget-icon {
+  color: #d7dae5;
+}

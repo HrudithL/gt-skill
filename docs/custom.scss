@@ -209,14 +209,74 @@ img {
   max-width: 100%;
 }
 
-// Hero / index page shields row.
-.hero-badges {
+// GitHub star / fork / repo widgets injected into .quarto-navbar-tools by
+// docs/_includes/github-widgets.html. Same visual pattern posit-dev/great-docs
+// uses: pill-shaped container, tiny icon + label + live count.
+.quarto-navbar-tools {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 1.5rem 0 2.5rem 0;
+  gap: 0.4rem;
+  align-items: center;
 }
 
-.hero-badges img {
-  border-radius: 4px;
+.gh-widget {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.6rem;
+  height: 32px;
+  border: 1px solid #d5d9e5;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #2a2f45;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  line-height: 1;
+  white-space: nowrap;
+
+  &:hover {
+    background: #f6f7fb;
+    border-color: #b7bccf;
+    color: #12162a;
+    text-decoration: none;
+  }
+}
+
+.gh-widget-icon {
+  display: inline-flex;
+  align-items: center;
+  color: currentColor;
+}
+
+.gh-widget-label {
+  font-weight: 600;
+}
+
+.gh-widget-count {
+  padding-left: 0.4rem;
+  padding-right: 0.05rem;
+  border-left: 1px solid #e5e7f0;
+  color: #4a5070;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  min-width: 1.4ch;
+  text-align: right;
+
+  // Hide the divider when there is no count yet (pre-fetch icon-only state).
+  &:empty {
+    border-left: none;
+    padding-left: 0;
+    min-width: 0;
+  }
+}
+
+.gh-widget-icon-only {
+  padding: 0.35rem 0.55rem;
+  width: 32px;
+  justify-content: center;
+
+  .gh-widget-icon {
+    color: #2a2f45;
+  }
 }
