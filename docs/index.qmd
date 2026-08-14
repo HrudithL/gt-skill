@@ -1,17 +1,74 @@
 ---
 title: "gtskill"
-subtitle: "A tiny harness for Claude-Agent-SDK-driven Great Tables generation"
+subtitle: "Can an AI agent write publication-quality data tables — reliably, cheaply, repeatably?"
 ---
 
-## What this is
+`gtskill` is a small, testable evaluation harness that pairs the
+[Claude Agent SDK](https://pypi.org/project/claude-agent-sdk/) with a
+hand-tuned [Great Tables](https://posit-dev.github.io/great-tables/)
+*skill*, then measures — with a real evaluation loop — how much the
+skill actually helps.
 
-`gtskill` is a small, testable evaluation harness that lets a language
-model produce a formatted
-[Great Tables](https://posit-dev.github.io/great-tables/) table from a
-CSV and a natural-language prompt. It is built around one short "skill"
-the agent loads at runtime — everything else (the runner, the judge,
-the comparator) is scaffolding for engineering and measuring that
-skill.
+Give it a CSV and a natural-language prompt, and it produces a
+formatted table plus a full audit trail: the `table.py` the agent
+wrote, the rendered `table.png`, the transcript of the conversation,
+tokens spent, cost, and a comparator score against ground truth.
+
+## The headline result
+
+We evaluated four different skill designs against a **no-skill
+baseline** on the same 6-prompt corpus, at `--repeat 3` with the
+auto-baseline. The winner:
+
+| Skill | Accuracy (with skill) | Accuracy (no skill) | Lift | Cost / call |
+| :--- | ---: | ---: | ---: | ---: |
+| **`prose`**   | **87.9%** | 15.8% | **+72.1** | \$0.16 |
+| `scripts` | 87.7% | 19.0% | +68.7 | \$0.19 |
+| `house`   | 83.5% | 20.1% | +63.4 | \$0.13 |
+| `creator` | 21.7% | 24.9% | −3.2  | \$0.09 |
+
+The prose skill takes a bare-LLM baseline from **16% to 88% accuracy**
+— a **72-point lift** on the same prompts, same model, same data. For a
+fraction of a cent per invocation.
+
+![Accuracy: repeated with-skill samples vs. the unassisted baseline, across every corpus prompt.](assets/plots/prose/evaluation_score.png){fig-alt="Accuracy box plot for the prose skill on every corpus prompt, showing three runs per prompt and a baseline dot."}
+
+The full per-skill, per-prompt breakdown — including individual runs
+and per-prompt lift — is on the [Results](results.qmd) page.
+
+## Who this is for
+
+::: {.grid}
+::: {.g-col-12 .g-col-md-4}
+### 📊 Data scientists
+
+You have a dataset and want an AI-drafted table you can trust. Start
+with [Setup](setup.qmd) → run your first `--skill prose` against your
+own CSV → read the [Runner CLI](runner.qmd). The [prose skill](skills.qmd)
+gets you 88% accuracy out of the box, and the rendered `table.png` is
+publication-quality.
+:::
+
+::: {.g-col-12 .g-col-md-4}
+### 🧪 Skill authors
+
+You want to build your own agent skill and measure it honestly. Read
+[Methodology](methodology.qmd) for the loop, the comparator, the
+judge, and the convergence report. Then read [Reproduce](reproduce.qmd)
+to run it end-to-end against your own skill under
+`.claude/skills/great-tables-creator/`.
+:::
+
+::: {.g-col-12 .g-col-md-4}
+### ⚙️ Harness builders
+
+You want to see how a bounded, sandboxed, sidecar-Chrome-backed agent
+runner is put together. Read [Harness](harness.qmd) for the
+architecture, the per-run isolation, and the CDP rendering path.
+Everything the runner does is one `run.py` invocation with one
+[`RunSpec`](harness.qmd).
+:::
+:::
 
 ## Explore the docs
 
@@ -20,7 +77,7 @@ skill.
 ### Getting started
 
 - [**Setup**](setup.qmd) — install, `.env`, sample data.
-- [**Skills**](skills.qmd) — the four skill variants and when to use each.
+- [**Skills**](skills.qmd) — the four skill variants and when to pick each.
 - [**Reproduce**](reproduce.qmd) — run your own evaluation end-to-end.
 :::
 
@@ -33,6 +90,28 @@ skill.
 - [**Results**](results.qmd) — how the four skills scored on the corpus.
 :::
 :::
+
+## What the harness produces
+
+Every invocation writes one tree on disk:
+
+```
+runs/<type>/<timestamp>_<skill>_<slug>/
+  run.json          # the RunSpec + resolved config + status + timings
+  summary.json      # aggregate pass/fail + tokens/cost across prompts
+  prompts/<name>/{baseline,repeat_1…N}/
+    table.py         # the script the agent wrote
+    table.png        # the rendered table
+    transcript.json  # the SDK conversation
+    data/ ...        # symlinked CSV — never copied
+    .claude/ ...     # ephemeral, mounted skill root
+  prompts/<name>/{convergence.json,contact_sheet.png}   # only when --repeat > 1
+```
+
+Nothing is hidden. The `transcript.json` is the writer's whole
+conversation. The `report.txt` (when the prompt has ground truth) is
+the check-by-check comparator scoring. See [Reproduce](reproduce.qmd)
+for how to read it.
 
 ::: {.callout-tip}
 ## Contribute back
