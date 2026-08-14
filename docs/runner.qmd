@@ -1,0 +1,13 @@
+---
+title: "Runner CLI reference"
+---
+
+<!-- Filled by slice 7 (feat/polish-docs-content-harness-and-runner). -->
+
+## Command shape
+
+## Flags
+
+## Examples
+
+## Environment variables

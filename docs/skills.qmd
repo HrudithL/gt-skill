@@ -1,0 +1,17 @@
+---
+title: "Skills"
+---
+
+<!-- Filled by slice 8 (feat/polish-docs-content-skills-and-methodology). -->
+
+## The four skills
+
+## `great-tables` (prose)
+
+## `great-tables-ci` (scripted / checker loop)
+
+## `great-tables-house` (thin house-style)
+
+## `great-tables-creator` (candidate skill)
+
+## How to pick one
