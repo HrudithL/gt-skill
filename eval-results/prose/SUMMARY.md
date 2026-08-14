@@ -187,14 +187,34 @@ Per-prompt means: `islands_sizes` 95.9%, `gtcars_hp_price` 95.6%,
 
 `towny_growth_trends` has this round's widest spread (28.9pp: `[92.8%, 88.7%,
 63.9%]`). Reading the reports: all three repeats have an identical, minor row-set
-mismatch (one town swapped for another right at the rank-15 cutoff, 9/10 on row
-identity for all three — not the driver of the spread). The driver is
-"Colored-measure selection," which is 6/6 for `repeat_1`/`repeat_2` but only 3/6 for
-`repeat_3`; reading `repeat_3`'s `table.py` shows it applies `data_color(...,
-palette="Blues")` (a sequential palette) to the inter-census percent-change columns,
-which are signed values the ground truth colors with a diverging fill — a design
-choice (or a value-matching mismatch stemming from it) not fully root-caused here;
-flagged for a follow-up look rather than investigated to completion in this pass.
+mismatch (`missing=['barrie']`, `extra=['cockburn island']`, 9/10 on row identity
+for all three — not the driver of the spread, and worth describing precisely
+rather than as a close call: this is not two towns near-tied at the rank-15
+cutoff. Cockburn Island's only defined inter-census change is a "+700%" jump
+(population 2 → 16), which would rank it #1 by raw growth percentage, not a
+borderline #15/#16 swap — but the ground truth's own methodology deliberately
+excludes it via a `dropna` filter on the change columns, since four of its five
+window changes are undefined and the one defined figure is a small-denominator
+statistical artifact, not a real growth trend (see
+`prompts/hard/ground_truth/towny_growth_trends.py`'s own comment on this). So
+the candidates' inclusion of Cockburn Island in place of Barrie is a
+filter-exclusion miss on a statistical-artifact town the ground truth
+intentionally drops, not a close cutoff tie — still just 1 point, but the
+mechanism is different from what a "swapped at the cutoff" description implies).
+`repeat_3`'s drop to 63.9% is **not** attributable to any single check — comparing
+its report line-by-line against `repeat_1`'s (92.8%) shows the 28-point gap is
+spread across roughly 13 different checks, each losing 1-4 points. The single
+largest contributor is "Frame + hairlines + dividers" (6/6 → 2/6, −4pp: `repeat_3`
+is missing the frame entirely and its dividers are gated off by a missing
+column-group spanner), followed by "Colored-measure selection" (6/6 → 3/6, −3pp:
+`repeat_3` applies `data_color(..., palette="Blues")`, a sequential palette, to the
+inter-census percent-change columns, which are signed values the ground truth
+colors with a diverging fill), "Computed/derived value correctness" (−3pp) and
+`fmt_*` per column semantic type (−3pp), with several more checks (column set
+shown/hidden, column-group spanners, stub tint, signed-percent `force_sign`,
+column order quality, and others) each losing 1-2pp. So "Colored-measure selection"
+accounts for only about 3 of the 28 points (~11%) — `repeat_3` is a broad,
+multi-check style miss, not a single specific mistake.
 
 Execution: 24/24 successful (no crashes) — see the top-level `SUMMARY.md` for the
 caveat on why this isn't claimed as a rigorously-proven improvement over any pre-fix
