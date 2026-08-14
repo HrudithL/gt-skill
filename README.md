@@ -150,8 +150,9 @@ artifacts stay under the gitignored runtime `eval-results/`.
 ```
 published-metrics/
   SUMMARY.md                            # per-skill ranking: table + at-a-glance + leaders
-  creator/{usage,evaluation_score}.png
-  house/{usage,evaluation_score}.png
+  RESULTS.md                            # per-prompt per-run drill-down for every skill
+  creator/{usage,tokens_and_cost,evaluation_score}.png
+  house/{usage,tokens_and_cost,evaluation_score}.png
   prose/{usage,tokens_and_cost,evaluation_score}.png
   scripts/{usage,tokens_and_cost,evaluation_score}.png
 ```
@@ -160,8 +161,11 @@ Per skill, three plots ship: `usage.png` (cost per invocation, per prompt),
 `tokens_and_cost.png` (experimental combined view: cost on top, token count
 on bottom), and `evaluation_score.png` (accuracy, per prompt).
 
-See [`published-metrics/SUMMARY.md`](published-metrics/SUMMARY.md) for the
-last committed comparison of all four skills.
+- [`published-metrics/SUMMARY.md`](published-metrics/SUMMARY.md) — the
+  overall per-skill ranking (which skill is best on average, at what cost).
+- [`published-metrics/RESULTS.md`](published-metrics/RESULTS.md) — the
+  results page: every prompt, every individual run, per-prompt lift over
+  baseline. Drill down here to see quality on a specific prompt.
 
 #### Latest committed results
 
