@@ -19,7 +19,8 @@ design decision stays in SKILL.md and the files below.
 ## 0b. This is the CI-checked variant — it ships `scripts/`
 
 Open **`scripts.md`** for this variant's tooling: when/how to run
-**`python gt_check.py table.py`** against your produced `table.py`, how to
+**`python .claude/skills/great-tables-ci/scripts/gt_check.py table.py`**
+against your produced `table.py`, how to
 read its rule-id output and iterate to `PASS`, the required top-level **`gt`
 variable**, and the **`gt_consistency.py` helpers** (`heatmap` / `band` /
 `stripe` / `stub_tint`, plus `frame` / `finalize` and `PALETTE`). Mechanical

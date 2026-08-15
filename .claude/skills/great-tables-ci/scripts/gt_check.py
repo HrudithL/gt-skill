@@ -154,10 +154,11 @@ FAIL = "FAIL"
 INFO = "INFO"
 
 # --------------------------------------------------------------------------- #
-# Readable reference paths. Only ``gt_check.py`` is symlinked into the run cwd,
-# so a bare ``references/<file>`` does not exist there. Resolve the checker's
-# real location (``Path(__file__).resolve()`` follows the symlink into the
-# skill's ``scripts/``); the reference docs are its sibling ``../references/``.
+# Readable reference paths. ``gt_check.py`` is invoked from the run cwd via
+# its full path under ``.claude/skills/great-tables-ci/scripts/`` (no symlink
+# into the run cwd anymore), so a bare ``references/<file>`` would not
+# resolve. Resolve the checker's real location (``Path(__file__).resolve()``)
+# and use its sibling ``../references/`` as the printable reference root.
 # --------------------------------------------------------------------------- #
 _REFERENCES_DIR = Path(__file__).resolve().parent.parent / "references"
 

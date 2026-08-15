@@ -16,13 +16,16 @@ This variant adds two mechanical steps to the 7-step flowchart, detailed below:
 
 ### Invocation
 
+Run from the run directory (the one that holds `table.py`); the checker
+lives in the skill's `scripts/` dir:
+
 ```bash
-python gt_check.py table.py          # human report; exit 0 = PASS, 1 = FAIL
-python gt_check.py table.py --json    # also dump a machine-readable summary
+python .claude/skills/great-tables-ci/scripts/gt_check.py table.py          # human report; exit 0 = PASS, 1 = FAIL
+python .claude/skills/great-tables-ci/scripts/gt_check.py table.py --json    # also dump a machine-readable summary
 ```
 
-Run it from the directory that holds `table.py`. It is **never imported** by
-`table.py`; you run it, read the report, fix the flagged rules, and re-run.
+It is **never imported** by `table.py`; you run it, read the report, fix the
+flagged rules, and re-run.
 
 ### The `gt` top-level-variable convention (mandatory)
 
@@ -60,13 +63,13 @@ Run it from the directory that holds `table.py`. It is **never imported** by
 ### The iterate-until-PASS loop (required)
 
 ```
-write table.py  →  python gt_check.py table.py  →  FAIL?
-                        │                              │
-                        │ PASS                         ▼
-                        ▼                     open each referenced file,
-                 render + finish              fix that rule in table.py,
-                                              re-run gt_check.py
-                                                   (repeat until PASS)
+write table.py  →  python .claude/skills/great-tables-ci/scripts/gt_check.py table.py  →  FAIL?
+                        │                                                                  │
+                        │ PASS                                                             ▼
+                        ▼                                                        open each referenced file,
+                 render + finish                                                 fix that rule in table.py,
+                                                                                 re-run gt_check.py
+                                                                                     (repeat until PASS)
 ```
 
 Only render for real and finish **after** the checker prints `PASS`.
